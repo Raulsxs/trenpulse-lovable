@@ -1,0 +1,1 @@
+ALTER TABLE public.ai_user_context ADD COLUMN whatsapp_number text;

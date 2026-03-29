@@ -1,0 +1,721 @@
+import { useState, useEffect, useRef } from "react";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, RefreshCw, X } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import ScheduleModal from "@/components/content/ScheduleModal";
+import SlideBgOverlayRenderer from "@/components/content/SlideBgOverlayRenderer";
+import { getContentDimensions } from "@/lib/contentDimensions";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useNavigate } from "react-router-dom";
+
+interface ActionCardProps {
+  contentId: string;
+  contentType: "post" | "carousel" | "story" | "document" | "article" | "cron_config";
+  platform?: string;
+  previewImageUrl?: string;
+  headline?: string;
+  scheduledAt?: string;
+  messageId?: string;
+  onRegenerate?: () => void;
+  onReject?: () => void;
+  onAddMessage?: (content: string) => void;
+}
+
+const DAYS = [
+  { value: "1", label: "Seg" },
+  { value: "2", label: "Ter" },
+  { value: "3", label: "Qua" },
+  { value: "4", label: "Qui" },
+  { value: "5", label: "Sex" },
+  { value: "6", label: "Sab" },
+  { value: "0", label: "Dom" },
+];
+
+const HOURS = Array.from({ length: 17 }, (_, i) => i + 6);
+
+const PHASE_MESSAGES = [
+  "Criando o roteiro do conteúdo... ✍️",
+  "Gerando as imagens... 🎨",
+  "Compondo o visual final... ✨",
+  "Quase pronto... ⏳",
+];
+
+const PHASE_THRESHOLDS = [0, 30, 90, 150];
+
+export default function ActionCard({
+  contentId,
+  contentType,
+  platform,
+  previewImageUrl,
+  headline,
+  scheduledAt,
+  messageId,
+  onRegenerate,
+  onReject,
+  onAddMessage,
+}: ActionCardProps) {
+  const navigate = useNavigate();
+  const [resolvedPlatform, setResolvedPlatform] = useState(platform || "instagram");
+  const effectivePlatform = resolvedPlatform;
+  const [isApproving, setIsApproving] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [approved, setApproved] = useState(false);
+  const [isRejected, setIsRejected] = useState(false);
+  const [showRejectConfirm, setShowRejectConfirm] = useState(false);
+  const [isRegeneratingText, setIsRegeneratingText] = useState(false);
+  const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
+
+  // Slide data for client-side rendering (same component as studio)
+  const [slideData, setSlideData] = useState<any>(null);
+  const [brandSnapshot, setBrandSnapshot] = useState<any>(null);
+  const [composedImageUrls, setComposedImageUrls] = useState<string[] | null>(null);
+  const [isPolling, setIsPolling] = useState(false);
+  const [pollingTimedOut, setPollingTimedOut] = useState(false);
+  const [generationFailed, setGenerationFailed] = useState(false);
+  const [contentDeleted, setContentDeleted] = useState(false);
+  const [generationPhase, setGenerationPhase] = useState(0);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [containerWidth, setContainerWidth] = useState(360);
+
+  // Cron config state
+  const [cronDays, setCronDays] = useState<string[]>(["1", "3", "5"]);
+  const [cronHour, setCronHour] = useState("9");
+  const [isSavingCron, setIsSavingCron] = useState(false);
+  const [cronSaved, setCronSaved] = useState(false);
+
+  // Measure container width for scaling
+  useEffect(() => {
+    if (previewContainerRef.current) {
+      const w = previewContainerRef.current.offsetWidth;
+      if (w > 0) setContainerWidth(w);
+    }
+  }, []);
+
+  // ── Fetch slide data for client-side rendering (same as studio) ──
+  const bgLoadedRef = useRef(false);
+  useEffect(() => {
+    if (contentType === "cron_config" || !contentId || bgLoadedRef.current) return;
+
+    let cancelled = false;
+    let phaseTimers: ReturnType<typeof setTimeout>[] = [];
+    let timeoutTimer: ReturnType<typeof setTimeout> | null = null;
+
+    setIsPolling(true);
+    setPollingTimedOut(false);
+    setGenerationFailed(false);
+    setGenerationPhase(0);
+
+    // For ai_full_design or template_clean, a background_image_url is the final image.
+    // For other modes, the final image is in image_urls (composite with text overlay).
+    // Don't stop polling on just background_image_url when composite is still pending.
+    const hasRenderableImage = (slide: any, imageUrls?: string[]) => {
+      if (imageUrls?.[0]) return true; // composite ready
+      if (slide?.render_mode === "ai_full_design" || slide?.render_mode === "template_clean") {
+        return Boolean(slide?.background_image_url || slide?.image_url);
+      }
+      // For any mode: if slide has a direct image_url or background, it's renderable
+      return Boolean(slide?.image_url || slide?.background_image_url || slide?.previewImage);
+    };
+
+    // Track creation time to detect stale content that will never get images
+    let contentCreatedAt: Date | null = null;
+
+    // Check if slide data already exists
+    const checkExisting = async () => {
+      try {
+        const { data } = await supabase
+          .from("generated_contents")
+          .select("slides, brand_snapshot, platform, content_type, created_at, image_urls")
+          .eq("id", contentId)
+          .maybeSingle();
+
+        // Content was deleted — stop polling and show "removed" state
+        if (!cancelled && !data) {
+          setContentDeleted(true);
+          setIsPolling(false);
+          bgLoadedRef.current = true;
+          return true;
+        }
+
+        if (!cancelled && data?.slides?.[0]) {
+          const slide = data.slides[0] as any;
+
+          // Track when content was created
+          if (data.created_at && !contentCreatedAt) {
+            contentCreatedAt = new Date(data.created_at);
+          }
+
+          // Always update slideData with latest
+          setSlideData(slide);
+          setBrandSnapshot(data.brand_snapshot);
+          if (data.platform) setResolvedPlatform(data.platform);
+          const fetchedImageUrls = data.image_urls as string[] | null;
+          if (fetchedImageUrls?.length) setComposedImageUrls(fetchedImageUrls);
+
+          if (hasRenderableImage(slide, fetchedImageUrls || undefined)) {
+            setIsPolling(false);
+            bgLoadedRef.current = true;
+            return true;
+          }
+
+          // If content is old and still no image, stop polling
+          // template_clean doesn't need images — show immediately
+          if (slide.render_mode === "template_clean") {
+            setIsPolling(false);
+            bgLoadedRef.current = true;
+            return true;
+          }
+
+          if (contentCreatedAt) {
+            const ageMs = Date.now() - contentCreatedAt.getTime();
+            // 5 min timeout — inference.sh fallback to Lovable can take time
+            if (ageMs > 5 * 60 * 1000) {
+              console.log(`[ActionCard] Content ${contentId} is ${Math.round(ageMs/1000)}s old with no image, stopping poll`);
+              setIsPolling(false);
+              setGenerationFailed(true);
+              bgLoadedRef.current = true;
+              return true;
+            }
+          }
+        }
+      } catch {
+        /* ignore */
+      }
+      return false;
+    };
+
+    // Subscribe to Realtime updates for when background generation completes
+    const channel = supabase
+      .channel(`content-${contentId}`)
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'generated_contents',
+        filter: `id=eq.${contentId}`
+      }, async (payload) => {
+        if (cancelled) return;
+        const slides = (payload.new as any)?.slides;
+        const slide = slides?.[0];
+        if (slide) {
+          setSlideData(slide);
+          setBrandSnapshot((payload.new as any)?.brand_snapshot);
+          const newImageUrls = (payload.new as any)?.image_urls as string[] | null;
+          if (newImageUrls?.length) setComposedImageUrls(newImageUrls);
+          if (hasRenderableImage(slide, newImageUrls || undefined)) {
+            setIsPolling(false);
+            bgLoadedRef.current = true;
+          }
+        }
+      })
+      .subscribe();
+
+    // Check existing first, then poll every 5s as fallback for Realtime
+    checkExisting().then((found) => {
+      if (found || cancelled) {
+        supabase.removeChannel(channel);
+        return;
+      }
+    });
+
+    // Fallback polling every 3s in case Realtime misses the update
+    const pollInterval = setInterval(async () => {
+      if (cancelled) return;
+      const found = await checkExisting();
+      if (found) {
+        clearInterval(pollInterval);
+        supabase.removeChannel(channel);
+      }
+    }, 3000);
+
+    // Phase messages for progress feedback
+    phaseTimers = PHASE_THRESHOLDS.slice(1).map((sec, i) =>
+      setTimeout(() => { if (!cancelled) setGenerationPhase(i + 1); }, sec * 1000)
+    );
+
+    // 5 min timeout
+    timeoutTimer = setTimeout(() => {
+      if (!cancelled) {
+        setIsPolling(false);
+        setPollingTimedOut(true);
+        setGenerationFailed(true);
+      }
+    }, 300000);
+
+    return () => {
+      cancelled = true;
+      supabase.removeChannel(channel);
+      clearInterval(pollInterval);
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      phaseTimers.forEach(clearTimeout);
+    };
+  }, [contentId, contentType]);
+
+  // ── Cron config card ──
+  if (contentType === "cron_config") {
+    const handleSaveCron = async () => {
+      setIsSavingCron(true);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) throw new Error("Not authenticated");
+
+        await supabase.from("ai_cron_config").upsert({
+          user_id: session.user.id,
+          active: true,
+          days_of_week: cronDays.map(Number),
+          hour_utc: parseInt(cronHour),
+          qty_suggestions: cronDays.length,
+        }, { onConflict: "user_id" });
+
+        setCronSaved(true);
+        const dayLabels = cronDays.map(d => DAYS.find(dd => dd.value === d)?.label).join(", ");
+        toast.success(`✓ Vou te enviar sugestões toda ${dayLabels} às ${cronHour}h`);
+      } catch {
+        toast.error("Erro ao salvar configuração");
+      } finally {
+        setIsSavingCron(false);
+      }
+    };
+
+    return (
+      <Card className="mt-2 overflow-hidden border-border/50 bg-card">
+        <CardContent className="p-4 space-y-4">
+          <p className="text-sm font-medium text-foreground">⚙️ Configurar sugestões automáticas</p>
+
+          <div>
+            <p className="text-xs text-muted-foreground mb-2">Dias da semana</p>
+            <ToggleGroup type="multiple" value={cronDays} onValueChange={(v) => v.length && setCronDays(v)} className="flex-wrap justify-start">
+              {DAYS.map((d) => (
+                <ToggleGroupItem key={d.value} value={d.value} size="sm" className="text-xs px-3">
+                  {d.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+          </div>
+
+          <div>
+            <p className="text-xs text-muted-foreground mb-2">Horário</p>
+            <Select value={cronHour} onValueChange={setCronHour}>
+              <SelectTrigger className="w-24 h-8 text-xs">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {HOURS.map((h) => (
+                  <SelectItem key={h} value={String(h)} className="text-xs">
+                    {String(h).padStart(2, "0")}h
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <Button
+            size="sm"
+            onClick={handleSaveCron}
+            disabled={isSavingCron || cronSaved}
+            className="w-full text-xs"
+          >
+            {isSavingCron ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Save className="w-3 h-3 mr-1" />}
+            {cronSaved ? "Configuração salva ✓" : "Salvar configuração"}
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // ── Content card ──
+  // Aspect ratio uses exact pixel dimensions from getContentDimensions
+  // so the preview matches the actual generated image without cropping
+  const getAspectRatio = () => {
+    if (effectivePlatform === "linkedin") {
+      if (contentType === "post" || contentType === "article") return 1200 / 627;
+      return 1080 / 1350; // document/carousel
+    }
+    if (contentType === "story") return 1080 / 1920;
+    return 1080 / 1350; // Instagram post/carousel
+  };
+  const aspectRatio = getAspectRatio();
+
+  const handleApprove = async () => {
+    setIsApproving(true);
+    try {
+      await supabase
+        .from("generated_contents")
+        .update({ status: "approved" })
+        .eq("id", contentId);
+      setApproved(true);
+      toast.success("Conteúdo aprovado!");
+    } catch {
+      toast.error("Erro ao aprovar conteúdo");
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  const handleSchedule = async (date: Date) => {
+    setIsScheduling(true);
+    try {
+      await supabase
+        .from("generated_contents")
+        .update({ scheduled_at: date.toISOString(), status: "scheduled" })
+        .eq("id", contentId);
+      toast.success("Conteúdo agendado!");
+      setScheduleOpen(false);
+    } catch {
+      toast.error("Erro ao agendar");
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  const handleReject = async () => {
+    try {
+      // Fetch metadata to find related project/post IDs
+      const { data: gc, error: gcErr } = await supabase
+        .from("generated_contents")
+        .select("generation_metadata")
+        .eq("id", contentId)
+        .single();
+
+      if (gcErr) {
+        console.error("[ActionCard] fetch metadata error:", gcErr.message);
+      }
+
+      const postId = (gc?.generation_metadata as any)?.post_id;
+      const projectId = (gc?.generation_metadata as any)?.project_id;
+      const errors: string[] = [];
+
+      // Delete project first — cascades to posts → slides → visual_briefs,
+      // image_prompts, image_generations, slide_versions, quality_metrics
+      if (projectId) {
+        const { error } = await supabase.from("projects").delete().eq("id", projectId);
+        if (error) errors.push(`projects: ${error.message}`);
+      } else if (postId) {
+        // No project but has post — delete post (cascades slides + deps)
+        const { error } = await supabase.from("posts").delete().eq("id", postId);
+        if (error) errors.push(`posts: ${error.message}`);
+      }
+
+      // Delete the content itself — cascades content_metrics, sets null on brand_background_templates
+      const { error: gcDelErr } = await supabase
+        .from("generated_contents")
+        .delete()
+        .eq("id", contentId);
+      if (gcDelErr) errors.push(`generated_contents: ${gcDelErr.message}`);
+
+      // Delete chat message so content doesn't reappear on reload
+      if (messageId) {
+        await supabase.from("chat_messages").delete().eq("id", messageId);
+      } else {
+        const { data: chatMsgs } = await supabase
+          .from("chat_messages")
+          .select("id, metadata")
+          .eq("intent", "INICIAR_GERACAO")
+          .limit(100);
+        const toDelete = (chatMsgs || []).filter(
+          (m: any) => (m.metadata as any)?.action_result?.content_id === contentId
+        );
+        for (const m of toDelete) {
+          await supabase.from("chat_messages").delete().eq("id", m.id);
+        }
+      }
+
+      if (errors.length) {
+        console.error("[ActionCard] partial delete errors:", errors);
+        // If generated_contents itself failed to delete, fall back to status update
+        if (gcDelErr) {
+          await supabase.from("generated_contents").update({ status: "rejected" }).eq("id", contentId);
+          toast.error("Erro ao excluir completamente, conteúdo marcado como descartado");
+        }
+      }
+
+      setIsRejected(true);
+      setShowRejectConfirm(false);
+      onReject?.();
+      if (!gcDelErr) {
+        onAddMessage?.("Conteúdo excluído. Quer criar outro?");
+      }
+    } catch (err) {
+      console.error("[ActionCard] delete error:", err);
+      await supabase.from("generated_contents").update({ status: "rejected" }).eq("id", contentId);
+      setIsRejected(true);
+      setShowRejectConfirm(false);
+      toast.error("Erro ao excluir completamente, conteúdo marcado como descartado");
+    }
+  };
+
+  const handleRegenerateText = async () => {
+    setIsRegeneratingText(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      const resp = await supabase.functions.invoke("ai-chat", {
+        body: {
+          message: `Regenerar apenas o texto do conteúdo ${contentId}`,
+          intent_hint: "REGENERAR_TEXTO",
+          generationParams: { contentId, keepImage: true },
+        },
+      });
+
+      if (resp.error) throw resp.error;
+      toast.success("Texto atualizado! Recarregando preview...");
+      // Reset slide data to trigger re-fetch
+      setSlideData(null);
+    } catch (err: any) {
+      console.error("[ActionCard] regenerate text error:", err);
+      toast.error("Erro ao regenerar texto");
+    } finally {
+      setIsRegeneratingText(false);
+    }
+  };
+
+  const handleRegenerateImage = async () => {
+    setIsRegeneratingImage(true);
+    setSlideData(null);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Not authenticated");
+
+      await supabase.functions.invoke("ai-chat", {
+        body: {
+          message: `Regenerar apenas a imagem do conteúdo ${contentId}`,
+          intent_hint: "REGENERAR_IMAGEM",
+          generationParams: { contentId, keepText: true },
+        },
+      });
+      // Polling will pick up the new composite URL
+    } catch (err: any) {
+      console.error("[ActionCard] regenerate image error:", err);
+      toast.error("Erro ao regenerar imagem");
+    } finally {
+      setIsRegeneratingImage(false);
+    }
+  };
+
+  const typeLabels: Record<string, string> = {
+    carousel: "Carrossel",
+    story: "Story",
+    post: "Post",
+    document: "Documento",
+    article: "Artigo",
+  };
+  const typeLabel = typeLabels[contentType] || "Post";
+  const platformLabel = effectivePlatform === "linkedin" ? "LinkedIn" : "Instagram";
+
+  // Content was deleted (e.g. from another session or DB cleanup)
+  if (contentDeleted) {
+    return (
+      <Card className="mt-2 overflow-hidden border-border/50 bg-card">
+        <CardContent className="p-4 text-center">
+          <p className="text-xs text-muted-foreground">Conteúdo removido</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Fade out on rejection
+  if (isRejected) {
+    return (
+      <Card className="mt-2 overflow-hidden border-border/50 bg-card animate-fade-out opacity-0 transition-all duration-500">
+        <CardContent className="p-4 text-center">
+          <p className="text-xs text-muted-foreground">Conteúdo descartado</p>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  return (
+    <>
+      <Card className="mt-2 overflow-hidden border-border/50 bg-card">
+        {/* Client-side preview — SAME renderer as Studio for pixel-perfect match */}
+        <div className="p-3 pb-0" ref={previewContainerRef}>
+          <div
+            className="overflow-hidden rounded-lg bg-muted relative cursor-pointer hover:brightness-[0.97] transition-all"
+            onClick={() => navigate(`/content/${contentId}`)}
+            title="Clique para ver no Studio"
+          >
+            {((() => {
+              // Show image when ANY renderable source is available
+              if (composedImageUrls?.[0]) return true;
+              if (slideData?.render_mode === "ai_full_design" || slideData?.render_mode === "template_clean") {
+                return Boolean(slideData?.background_image_url || slideData?.image_url);
+              }
+              // For compose/illustration modes: check if slide has image_url (set by Phase 3)
+              return Boolean(slideData?.image_url || slideData?.background_image_url);
+            })() && !isRegeneratingImage) ? (() => {
+              const dims = getContentDimensions(effectivePlatform, contentType);
+              const scale = containerWidth / dims.width;
+              const renderImageUrl = slideData.background_image_url || slideData.image_url;
+              // Prioritize composed image (from auto-composition pipeline) over raw background
+              const composedUrl = composedImageUrls?.[0];
+              const isFullDesign = slideData.render_mode === "ai_full_design";
+              const showAsFinishedImage = isFullDesign || !!composedUrl;
+              const displayUrl = composedUrl || renderImageUrl;
+
+              return (
+                <div style={{ width: containerWidth, height: dims.height * scale, overflow: "hidden" }}>
+                  {showAsFinishedImage ? (
+                    <img
+                      src={displayUrl}
+                      alt=""
+                      style={{ width: containerWidth, height: dims.height * scale, objectFit: "cover" }}
+                    />
+                  ) : (
+                    <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: dims.width, height: dims.height }}>
+                      <SlideBgOverlayRenderer
+                        backgroundImageUrl={renderImageUrl}
+                        overlay={{
+                          headline: slideData.overlay?.headline || slideData.headline,
+                          body: slideData.overlay?.body || slideData.body,
+                          bullets: slideData.overlay?.bullets || slideData.bullets,
+                          footer: slideData.overlay?.footer,
+                        }}
+                        overlayStyle={slideData.overlay_style}
+                        overlayPositions={slideData.overlay_positions}
+                        dimensions={dims}
+                        role={slideData.role}
+                        slideIndex={0}
+                        totalSlides={1}
+                        brandSnapshot={brandSnapshot ? {
+                          palette: brandSnapshot.palette,
+                          fonts: brandSnapshot.fonts,
+                        } : null}
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })() : isPolling || isRegeneratingImage ? (
+              <div className="flex flex-col items-center justify-center gap-2 py-16">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground animate-pulse transition-all duration-300">
+                  {isRegeneratingImage ? "Gerando nova imagem... 🎨" : (PHASE_MESSAGES[generationPhase] || PHASE_MESSAGES[0])}
+                </span>
+              </div>
+            ) : pollingTimedOut || generationFailed ? (
+              <div className="flex flex-col items-center justify-center gap-3 p-4 py-12">
+                <span className="text-xs text-muted-foreground text-center leading-relaxed">
+                  {pollingTimedOut
+                    ? "A geração está demorando mais que o normal."
+                    : "A geração deste preview não foi concluída."}
+                  <br />Clique abaixo para acompanhar ou excluir o conteúdo.
+                </span>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="text-xs"
+                  onClick={(e) => { e.stopPropagation(); navigate(`/content/${contentId}`); }}
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Ver no Studio
+                </Button>
+              </div>
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-2 py-16">
+                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+                <span className="text-xs text-muted-foreground animate-pulse">Carregando preview...</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <CardContent className="p-3">
+          <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{platformLabel} · {typeLabel}</div>
+          {headline && <p className="mb-3 text-sm font-medium text-foreground line-clamp-2">{headline}</p>}
+          {scheduledAt && (
+            <p className="mb-2 text-xs text-muted-foreground">📅 Agendado: {new Date(scheduledAt).toLocaleDateString("pt-BR")}</p>
+          )}
+
+          {/* Row 1: Primary actions */}
+          <div className="flex gap-2 mb-2">
+            <Button size="sm" variant={approved ? "secondary" : "default"} className="flex-1 text-xs" onClick={handleApprove} disabled={isApproving || approved}>
+              {isApproving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+              {approved ? "Aprovado" : "Aprovar"}
+            </Button>
+            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => setScheduleOpen(true)}>
+              <CalendarDays className="w-3 h-3" />
+              Agendar
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="flex-1 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => navigate(`/content/${contentId}`)}
+            >
+              <ExternalLink className="w-3 h-3" />
+              Studio
+            </Button>
+          </div>
+
+          {/* Row 2: Regeneration actions */}
+          <div className="flex gap-2 mb-2">
+            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={handleRegenerateText} disabled={isRegeneratingText}>
+              {isRegeneratingText ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pencil className="w-3 h-3" />}
+              Novo texto
+            </Button>
+            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={handleRegenerateImage} disabled={isRegeneratingImage}>
+              {isRegeneratingImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImageIcon className="w-3 h-3" />}
+              Nova imagem
+            </Button>
+            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={onRegenerate}>
+              <RefreshCw className="w-3 h-3" />
+              Refazer tudo
+            </Button>
+          </div>
+
+          {/* Save background nudge — only for ai_background mode (has bg image + overlay text) */}
+          {slideData?.background_image_url && slideData?.render_mode !== "ai_full_design" && (
+            <button
+              className="w-full flex items-center justify-center gap-2 py-2 mb-2 text-xs text-primary/80 hover:text-primary bg-primary/5 hover:bg-primary/10 rounded-lg border border-primary/10 transition-all"
+              onClick={async () => {
+                try {
+                  const { data } = await supabase.from("generated_contents").select("slides, brand_id").eq("id", contentId).single();
+                  const bgUrl = data?.slides?.[0]?.background_image_url;
+                  if (!bgUrl) { toast.error("Nenhum fundo disponível"); return; }
+                  if (!data?.brand_id) { toast.error("Conteúdo sem marca associada"); return; }
+                  await supabase.from("brand_background_templates").insert({
+                    brand_id: data.brand_id,
+                    name: headline?.substring(0, 40) || "Fundo salvo",
+                    image_url: bgUrl,
+                  });
+                  toast.success("Fundo salvo no Brand Kit!");
+                } catch { toast.error("Erro ao salvar fundo"); }
+              }}
+            >
+              <Save className="w-3.5 h-3.5" />
+              Gostou do visual? Salve este fundo para usar de novo
+            </button>
+          )}
+
+          {/* Row 3: Reject (inline confirm) */}
+          {showRejectConfirm ? (
+            <div className="flex items-center justify-center gap-2 py-1">
+              <span className="text-xs text-muted-foreground">Tem certeza?</span>
+              <Button size="sm" variant="destructive" className="text-xs h-6 px-2" onClick={handleReject}>
+                Sim, excluir
+              </Button>
+              <Button size="sm" variant="ghost" className="text-xs h-6 px-2" onClick={() => setShowRejectConfirm(false)}>
+                Cancelar
+              </Button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowRejectConfirm(true)}
+              className="w-full text-center text-[11px] text-muted-foreground/60 hover:text-destructive transition-colors py-1"
+            >
+              <X className="w-3 h-3 inline mr-1" />
+              Reprovar e excluir
+            </button>
+          )}
+        </CardContent>
+      </Card>
+
+      <ScheduleModal open={scheduleOpen} onClose={() => setScheduleOpen(false)} onSchedule={handleSchedule} isScheduling={isScheduling} />
+    </>
+  );
+}

@@ -1,0 +1,1 @@
+INSERT INTO public.brand_shares (brand_id, shared_with_user_id, permission) VALUES ('ec5c3308-4431-4946-9551-dc1023b7189b', '1294d060-6783-4f7a-9df4-3c5f567eded4', 'read'), ('3907b2c9-7c96-455d-81ac-5ea4982b6927', '1294d060-6783-4f7a-9df4-3c5f567eded4', 'read') ON CONFLICT DO NOTHING;

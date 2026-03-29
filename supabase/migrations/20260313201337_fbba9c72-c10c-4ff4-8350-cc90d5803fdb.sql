@@ -1,0 +1,1 @@
+ALTER TABLE public.generated_contents ADD COLUMN IF NOT EXISTS rendered_image_urls text[] DEFAULT NULL;
