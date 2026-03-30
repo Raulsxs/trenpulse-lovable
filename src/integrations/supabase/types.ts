@@ -119,6 +119,238 @@ export type Database = {
         }
         Relationships: []
       }
+      generated_contents: {
+        Row: {
+          brand_id: string | null
+          brand_snapshot: Json | null
+          caption: string | null
+          content_type: string
+          created_at: string
+          generation_metadata: Json | null
+          hashtags: string[] | null
+          id: string
+          image_urls: string[] | null
+          include_cta: boolean | null
+          instagram_media_id: string | null
+          key_insights: string[] | null
+          platform: string
+          publish_attempts: number | null
+          publish_error: string | null
+          published_at: string | null
+          rendered_image_urls: string[] | null
+          scheduled_at: string | null
+          slide_count: number | null
+          slides: Json | null
+          source_summary: string | null
+          status: string | null
+          template_set_id: string | null
+          title: string
+          trend_id: string | null
+          updated_at: string
+          user_id: string
+          visual_mode: string
+        }
+        Insert: {
+          brand_id?: string | null
+          brand_snapshot?: Json | null
+          caption?: string | null
+          content_type?: string
+          created_at?: string
+          generation_metadata?: Json | null
+          hashtags?: string[] | null
+          id?: string
+          image_urls?: string[] | null
+          include_cta?: boolean | null
+          instagram_media_id?: string | null
+          key_insights?: string[] | null
+          platform?: string
+          publish_attempts?: number | null
+          publish_error?: string | null
+          published_at?: string | null
+          rendered_image_urls?: string[] | null
+          scheduled_at?: string | null
+          slide_count?: number | null
+          slides?: Json | null
+          source_summary?: string | null
+          status?: string | null
+          template_set_id?: string | null
+          title: string
+          trend_id?: string | null
+          updated_at?: string
+          user_id: string
+          visual_mode?: string
+        }
+        Update: {
+          brand_id?: string | null
+          brand_snapshot?: Json | null
+          caption?: string | null
+          content_type?: string
+          created_at?: string
+          generation_metadata?: Json | null
+          hashtags?: string[] | null
+          id?: string
+          image_urls?: string[] | null
+          include_cta?: boolean | null
+          instagram_media_id?: string | null
+          key_insights?: string[] | null
+          platform?: string
+          publish_attempts?: number | null
+          publish_error?: string | null
+          published_at?: string | null
+          rendered_image_urls?: string[] | null
+          scheduled_at?: string | null
+          slide_count?: number | null
+          slides?: Json | null
+          source_summary?: string | null
+          status?: string | null
+          template_set_id?: string | null
+          title?: string
+          trend_id?: string | null
+          updated_at?: string
+          user_id?: string
+          visual_mode?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "generated_contents_trend_id_fkey"
+            columns: ["trend_id"]
+            isOneToOne: false
+            referencedRelation: "trends"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          company_name: string | null
+          created_at: string
+          full_name: string | null
+          id: string
+          instagram_handle: string | null
+          interest_areas: string[] | null
+          native_language: string
+          preferred_audience: string
+          preferred_language: string
+          preferred_tone: string
+          rss_sources: string[] | null
+          secondary_languages: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          company_name?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          instagram_handle?: string | null
+          interest_areas?: string[] | null
+          native_language?: string
+          preferred_audience?: string
+          preferred_language?: string
+          preferred_tone?: string
+          rss_sources?: string[] | null
+          secondary_languages?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          company_name?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          instagram_handle?: string | null
+          interest_areas?: string[] | null
+          native_language?: string
+          preferred_audience?: string
+          preferred_language?: string
+          preferred_tone?: string
+          rss_sources?: string[] | null
+          secondary_languages?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      saved_trends: {
+        Row: {
+          id: string
+          saved_at: string
+          trend_id: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          saved_at?: string
+          trend_id: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          saved_at?: string
+          trend_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "saved_trends_trend_id_fkey"
+            columns: ["trend_id"]
+            isOneToOne: false
+            referencedRelation: "trends"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      trends: {
+        Row: {
+          created_at: string
+          description: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          keywords: string[] | null
+          relevance_score: number | null
+          scraped_at: string | null
+          source: string
+          source_url: string | null
+          theme: string
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          keywords?: string[] | null
+          relevance_score?: number | null
+          scraped_at?: string | null
+          source: string
+          source_url?: string | null
+          theme: string
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          keywords?: string[] | null
+          relevance_score?: number | null
+          scraped_at?: string | null
+          source?: string
+          source_url?: string | null
+          theme?: string
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       usage_tracking: {
         Row: {
           created_at: string | null
