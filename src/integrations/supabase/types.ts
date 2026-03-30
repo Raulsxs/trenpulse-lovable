@@ -14,7 +14,141 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      ai_cron_config: {
+        Row: {
+          active: boolean | null
+          created_at: string | null
+          days_of_week: number[] | null
+          hour_utc: number | null
+          id: string
+          last_run_at: string | null
+          qty_suggestions: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          active?: boolean | null
+          created_at?: string | null
+          days_of_week?: number[] | null
+          hour_utc?: number | null
+          id?: string
+          last_run_at?: string | null
+          qty_suggestions?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          active?: boolean | null
+          created_at?: string | null
+          days_of_week?: number[] | null
+          hour_utc?: number | null
+          id?: string
+          last_run_at?: string | null
+          qty_suggestions?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      ai_user_context: {
+        Row: {
+          brand_voice: string | null
+          business_niche: string | null
+          content_topics: string[] | null
+          extra_context: Json | null
+          instagram_handle: string | null
+          onboarding_done: boolean | null
+          onboarding_step: number | null
+          updated_at: string | null
+          user_id: string
+          whatsapp_number: string | null
+        }
+        Insert: {
+          brand_voice?: string | null
+          business_niche?: string | null
+          content_topics?: string[] | null
+          extra_context?: Json | null
+          instagram_handle?: string | null
+          onboarding_done?: boolean | null
+          onboarding_step?: number | null
+          updated_at?: string | null
+          user_id: string
+          whatsapp_number?: string | null
+        }
+        Update: {
+          brand_voice?: string | null
+          business_niche?: string | null
+          content_topics?: string[] | null
+          extra_context?: Json | null
+          instagram_handle?: string | null
+          onboarding_done?: boolean | null
+          onboarding_step?: number | null
+          updated_at?: string | null
+          user_id?: string
+          whatsapp_number?: string | null
+        }
+        Relationships: []
+      }
+      chat_messages: {
+        Row: {
+          content: string
+          created_at: string | null
+          id: string
+          intent: string | null
+          metadata: Json | null
+          role: string
+          user_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string | null
+          id?: string
+          intent?: string | null
+          metadata?: Json | null
+          role: string
+          user_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string | null
+          id?: string
+          intent?: string | null
+          metadata?: Json | null
+          role?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      usage_tracking: {
+        Row: {
+          created_at: string | null
+          generations_count: number | null
+          id: string
+          period_start: string
+          publications_count: number | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          generations_count?: number | null
+          id?: string
+          period_start: string
+          publications_count?: number | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          generations_count?: number | null
+          id?: string
+          period_start?: string
+          publications_count?: number | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
