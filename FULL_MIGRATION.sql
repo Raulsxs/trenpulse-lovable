@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS public.ai_cron_config (
   days_of_week INTEGER[] DEFAULT '{1,3,5}',
   hour_utc INTEGER DEFAULT 9,
   qty_suggestions INTEGER DEFAULT 3,
+  last_run_at TIMESTAMP WITH TIME ZONE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
 );
@@ -1739,6 +1740,6 @@ CREATE POLICY "Users can manage own photos"
 CREATE INDEX IF NOT EXISTS idx_user_photo_library_user_id
   ON public.user_photo_library (user_id, created_at DESC);
 
--- Post-migration: content_type constraint fix
+-- Post-migration fix
 ALTER TABLE generated_contents DROP CONSTRAINT IF EXISTS generated_contents_content_type_check;
 ALTER TABLE generated_contents ADD CONSTRAINT generated_contents_content_type_check CHECK (content_type IN ('post', 'story', 'carousel', 'document', 'article', 'cron_config'));
