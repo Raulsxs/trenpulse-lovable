@@ -15,6 +15,19 @@ Migrating TrendPulse from Lovable Cloud (managed Supabase) to a self-managed Sup
 
 ---
 
+## MIGRATION COMPLETED — 2026-03-30
+
+### Summary
+- New Supabase project: `qdmhqxpazffmaxleyzxs` (South America region)
+- New Lovable project: blank-canvas (https://github.com/Raulsxs/blank-canvas)
+- 31 tables created, 31 edge functions deployed
+- 8 auth users migrated with original UUIDs preserved
+- All brand data, user contexts, and templates migrated
+- Pending: generated_contents, chat_messages (large tables, can import later)
+- LOVABLE_API_KEY + all secrets configured
+
+---
+
 ## Phase 0 — AI Gateway Preparation (OPTIONAL — can do after migration)
 
 ### Status: HELPER CREATED, SUBSTITUTION DEFERRED

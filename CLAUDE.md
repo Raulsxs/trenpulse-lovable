@@ -194,12 +194,16 @@ Messages from DB are filtered by both `content` AND `intent`. Messages with inte
 ### image_urls updates
 Always MERGE with existing (append new, don't overwrite). Each PIPELINE_BACKGROUND call handles 1 slide and appends its image to the array.
 
-## Migration: Lovable Cloud → Supabase Own
+## Infrastructure (MIGRATED 2026-03-30)
 
-See `MIGRATION.md` for the full migration plan. Key points:
-- Keeping Lovable for frontend editing
-- Moving to self-managed Supabase for backend control
-- Replacing `LOVABLE_API_KEY` (Lovable Gateway) with `GOOGLE_AI_API_KEY` (Google AI Studio)
-- Helper: `supabase/functions/_shared/ai-gateway.ts` — auto-detects provider
-- 15 edge functions need to be updated to use the helper
-- Status: Phase 0 in progress
+**Old:** Lovable Cloud (managed Supabase) — project-guidance repo
+**New:** Self-managed Supabase + Lovable for frontend — blank-canvas repo
+
+- **Supabase project:** `qdmhqxpazffmaxleyzxs` (South America)
+- **GitHub repo:** https://github.com/Raulsxs/blank-canvas
+- **Lovable:** blank-canvas project (frontend editing only)
+- **Edge functions:** Deployed via Lovable, 31 functions
+- **AI Gateway:** `LOVABLE_API_KEY` (Lovable Gateway) — future migration to `GOOGLE_AI_API_KEY` (Google AI Studio) when billing activated
+- **Helper:** `supabase/functions/_shared/ai-gateway.ts` — auto-detects provider
+
+See `MIGRATION.md` for full migration details.
