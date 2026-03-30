@@ -1,4 +1,105 @@
 -- ============================================
+-- Missing tables not in original migrations
+-- (were created directly in Lovable Cloud)
+-- ============================================
+
+-- ai_user_context: stores user preferences for AI generation
+CREATE TABLE IF NOT EXISTS public.ai_user_context (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  business_niche TEXT,
+  brand_voice TEXT,
+  content_topics TEXT[],
+  instagram_handle TEXT,
+  extra_context JSONB DEFAULT '{}',
+  onboarding_done BOOLEAN DEFAULT false,
+  onboarding_step INTEGER,
+  whatsapp_number TEXT,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+ALTER TABLE public.ai_user_context ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can read own context" ON public.ai_user_context FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own context" ON public.ai_user_context FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can update own context" ON public.ai_user_context FOR UPDATE USING (auth.uid() = user_id);
+CREATE POLICY "Service role full access ai_user_context" ON public.ai_user_context FOR ALL USING (auth.role() = 'service_role');
+
+-- ai_cron_config: user preferences for automated content generation
+CREATE TABLE IF NOT EXISTS public.ai_cron_config (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  active BOOLEAN DEFAULT false,
+  days_of_week INTEGER[] DEFAULT '{1,3,5}',
+  hour_utc INTEGER DEFAULT 9,
+  qty_suggestions INTEGER DEFAULT 3,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+ALTER TABLE public.ai_cron_config ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can manage own cron config" ON public.ai_cron_config FOR ALL USING (auth.uid() = user_id);
+CREATE POLICY "Service role full access ai_cron_config" ON public.ai_cron_config FOR ALL USING (auth.role() = 'service_role');
+
+-- chat_messages: persisted chat history
+CREATE TABLE IF NOT EXISTS public.chat_messages (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'system')),
+  content TEXT NOT NULL,
+  intent TEXT,
+  metadata JSONB DEFAULT '{}',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+ALTER TABLE public.chat_messages ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can read own messages" ON public.chat_messages FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Users can insert own messages" ON public.chat_messages FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY "Users can delete own messages" ON public.chat_messages FOR DELETE USING (auth.uid() = user_id);
+CREATE POLICY "Service role full access chat_messages" ON public.chat_messages FOR ALL USING (auth.role() = 'service_role');
+
+-- subscription_plans: available subscription tiers
+CREATE TABLE IF NOT EXISTS public.subscription_plans (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name TEXT NOT NULL,
+  price_cents INTEGER NOT NULL DEFAULT 0,
+  features JSONB DEFAULT '{}',
+  max_generations INTEGER,
+  max_publications INTEGER,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+ALTER TABLE public.subscription_plans ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Anyone can read plans" ON public.subscription_plans FOR SELECT USING (true);
+
+-- user_subscriptions: user subscription status
+CREATE TABLE IF NOT EXISTS public.user_subscriptions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  plan_id UUID REFERENCES public.subscription_plans(id),
+  status TEXT DEFAULT 'active' CHECK (status IN ('active', 'cancelled', 'expired', 'trial')),
+  started_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  expires_at TIMESTAMP WITH TIME ZONE,
+  payment_provider TEXT,
+  external_id TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
+ALTER TABLE public.user_subscriptions ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can read own subscriptions" ON public.user_subscriptions FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Service role full access user_subscriptions" ON public.user_subscriptions FOR ALL USING (auth.role() = 'service_role');
+
+-- usage_tracking: monthly generation/publication counts
+CREATE TABLE IF NOT EXISTS public.usage_tracking (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  period_start DATE NOT NULL,
+  generations_count INTEGER DEFAULT 0,
+  publications_count INTEGER DEFAULT 0,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  UNIQUE(user_id, period_start)
+);
+ALTER TABLE public.usage_tracking ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can read own usage" ON public.usage_tracking FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY "Service role full access usage_tracking" ON public.usage_tracking FOR ALL USING (auth.role() = 'service_role');
+
+
+-- ============================================
 -- Migration: 20260120135321_3d92ab4d-73c5-4a7b-833e-34a7bd88b8ff.sql
 -- ============================================
 -- Create profiles table for user data
@@ -1682,10 +1783,8 @@ CREATE INDEX IF NOT EXISTS idx_user_photo_library_user_id
   ON public.user_photo_library (user_id, created_at DESC);
 
 
-
 -- ============================================
--- Post-migration fix: content_type constraint
+-- Post-migration: content_type constraint fix
 -- ============================================
 ALTER TABLE generated_contents DROP CONSTRAINT IF EXISTS generated_contents_content_type_check;
-ALTER TABLE generated_contents ADD CONSTRAINT generated_contents_content_type_check
-  CHECK (content_type IN ('post', 'story', 'carousel', 'document', 'article', 'cron_config'));
+ALTER TABLE generated_contents ADD CONSTRAINT generated_contents_content_type_check CHECK (content_type IN ('post', 'story', 'carousel', 'document', 'article', 'cron_config'));
