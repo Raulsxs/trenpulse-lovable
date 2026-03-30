@@ -429,6 +429,30 @@ export type Database = {
         }
         Relationships: []
       }
+      favorite_template_sets: {
+        Row: {
+          created_at: string
+          id: string
+          template_set_id: string
+          template_set_type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          template_set_id: string
+          template_set_type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          template_set_id?: string
+          template_set_type?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       generated_contents: {
         Row: {
           brand_id: string | null
@@ -529,6 +553,216 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      image_generations: {
+        Row: {
+          created_at: string
+          height: number | null
+          id: string
+          image_url: string | null
+          is_selected: boolean | null
+          model_used: string | null
+          prompt_id: string | null
+          ranking_reason: string | null
+          ranking_score: number | null
+          seed: string | null
+          slide_id: string
+          thumb_url: string | null
+          width: number | null
+        }
+        Insert: {
+          created_at?: string
+          height?: number | null
+          id?: string
+          image_url?: string | null
+          is_selected?: boolean | null
+          model_used?: string | null
+          prompt_id?: string | null
+          ranking_reason?: string | null
+          ranking_score?: number | null
+          seed?: string | null
+          slide_id: string
+          thumb_url?: string | null
+          width?: number | null
+        }
+        Update: {
+          created_at?: string
+          height?: number | null
+          id?: string
+          image_url?: string | null
+          is_selected?: boolean | null
+          model_used?: string | null
+          prompt_id?: string | null
+          ranking_reason?: string | null
+          ranking_score?: number | null
+          seed?: string | null
+          slide_id?: string
+          thumb_url?: string | null
+          width?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "image_generations_prompt_id_fkey"
+            columns: ["prompt_id"]
+            isOneToOne: false
+            referencedRelation: "image_prompts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "image_generations_slide_id_fkey"
+            columns: ["slide_id"]
+            isOneToOne: false
+            referencedRelation: "slides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      image_prompts: {
+        Row: {
+          brief_id: string | null
+          created_at: string
+          id: string
+          model_hint: string | null
+          negative_prompt: string | null
+          prompt: string
+          slide_id: string
+          variant_index: number | null
+        }
+        Insert: {
+          brief_id?: string | null
+          created_at?: string
+          id?: string
+          model_hint?: string | null
+          negative_prompt?: string | null
+          prompt: string
+          slide_id: string
+          variant_index?: number | null
+        }
+        Update: {
+          brief_id?: string | null
+          created_at?: string
+          id?: string
+          model_hint?: string | null
+          negative_prompt?: string | null
+          prompt?: string
+          slide_id?: string
+          variant_index?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "image_prompts_brief_id_fkey"
+            columns: ["brief_id"]
+            isOneToOne: false
+            referencedRelation: "visual_briefs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "image_prompts_slide_id_fkey"
+            columns: ["slide_id"]
+            isOneToOne: false
+            referencedRelation: "slides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      instagram_connections: {
+        Row: {
+          access_token: string
+          created_at: string
+          id: string
+          instagram_user_id: string
+          instagram_username: string | null
+          is_active: boolean
+          page_id: string
+          page_name: string | null
+          scopes: string[] | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          id?: string
+          instagram_user_id: string
+          instagram_username?: string | null
+          is_active?: boolean
+          page_id: string
+          page_name?: string | null
+          scopes?: string[] | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          id?: string
+          instagram_user_id?: string
+          instagram_username?: string | null
+          is_active?: boolean
+          page_id?: string
+          page_name?: string | null
+          scopes?: string[] | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      linkedin_connections: {
+        Row: {
+          access_token: string
+          created_at: string
+          id: string
+          is_active: boolean
+          linkedin_email: string | null
+          linkedin_name: string | null
+          linkedin_profile_url: string | null
+          linkedin_user_id: string
+          organization_id: string | null
+          organization_name: string | null
+          refresh_token: string | null
+          scopes: string[] | null
+          token_expires_at: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          access_token: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          linkedin_email?: string | null
+          linkedin_name?: string | null
+          linkedin_profile_url?: string | null
+          linkedin_user_id: string
+          organization_id?: string | null
+          organization_name?: string | null
+          refresh_token?: string | null
+          scopes?: string[] | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          access_token?: string
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          linkedin_email?: string | null
+          linkedin_name?: string | null
+          linkedin_profile_url?: string | null
+          linkedin_user_id?: string
+          organization_id?: string | null
+          organization_name?: string | null
+          refresh_token?: string | null
+          scopes?: string[] | null
+          token_expires_at?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       posts: {
         Row: {
@@ -727,6 +961,63 @@ export type Database = {
           },
         ]
       }
+      system_template_sets: {
+        Row: {
+          category: string
+          content_format: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          is_native: boolean
+          name: string
+          preview_colors: Json | null
+          preview_images: Json | null
+          reference_images: Json | null
+          sort_order: number
+          style_prompt: string | null
+          supported_formats: string[] | null
+          supported_platforms: string[] | null
+          template_set: Json
+        }
+        Insert: {
+          category?: string
+          content_format?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_native?: boolean
+          name: string
+          preview_colors?: Json | null
+          preview_images?: Json | null
+          reference_images?: Json | null
+          sort_order?: number
+          style_prompt?: string | null
+          supported_formats?: string[] | null
+          supported_platforms?: string[] | null
+          template_set?: Json
+        }
+        Update: {
+          category?: string
+          content_format?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          is_native?: boolean
+          name?: string
+          preview_colors?: Json | null
+          preview_images?: Json | null
+          reference_images?: Json | null
+          sort_order?: number
+          style_prompt?: string | null
+          supported_formats?: string[] | null
+          supported_platforms?: string[] | null
+          template_set?: Json
+        }
+        Relationships: []
+      }
       trends: {
         Row: {
           created_at: string
@@ -804,6 +1095,65 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      visual_briefs: {
+        Row: {
+          composition_notes: string | null
+          created_at: string
+          emotion: string | null
+          id: string
+          key_message: string | null
+          negative_elements: string | null
+          palette: Json | null
+          slide_id: string
+          style: string | null
+          text_limit_words: number | null
+          text_on_image: boolean | null
+          theme: string | null
+          updated_at: string
+          visual_metaphor: string | null
+        }
+        Insert: {
+          composition_notes?: string | null
+          created_at?: string
+          emotion?: string | null
+          id?: string
+          key_message?: string | null
+          negative_elements?: string | null
+          palette?: Json | null
+          slide_id: string
+          style?: string | null
+          text_limit_words?: number | null
+          text_on_image?: boolean | null
+          theme?: string | null
+          updated_at?: string
+          visual_metaphor?: string | null
+        }
+        Update: {
+          composition_notes?: string | null
+          created_at?: string
+          emotion?: string | null
+          id?: string
+          key_message?: string | null
+          negative_elements?: string | null
+          palette?: Json | null
+          slide_id?: string
+          style?: string | null
+          text_limit_words?: number | null
+          text_on_image?: boolean | null
+          theme?: string | null
+          updated_at?: string
+          visual_metaphor?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "visual_briefs_slide_id_fkey"
+            columns: ["slide_id"]
+            isOneToOne: true
+            referencedRelation: "slides"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
