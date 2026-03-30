@@ -234,12 +234,14 @@ CREATE TRIGGER update_generated_contents_updated_at
 BEFORE UPDATE ON public.generated_contents
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
+
 -- ============================================
 -- Migration: 20260120175148_00a2494e-3c94-47cb-9f4d-0a482e252f49.sql
 -- ============================================
 -- Enable required extensions for cron jobs
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS pg_net;
+
 -- ============================================
 -- Migration: 20260121165221_e7f01015-c14b-4194-8c32-ef004de6ed23.sql
 -- ============================================
@@ -285,6 +287,7 @@ USING (bucket_id = 'content-images');
 -- Add scheduled_at column to generated_contents for scheduling feature
 ALTER TABLE public.generated_contents 
 ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
+
 -- ============================================
 -- Migration: 20260205151453_9a3b3eda-d0f9-4395-afa5-d30186a3035a.sql
 -- ============================================
@@ -710,6 +713,7 @@ CREATE POLICY "Public can view generated images" ON storage.objects FOR SELECT U
 CREATE POLICY "Authenticated users can upload images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'generated-images' AND auth.role() = 'authenticated');
 CREATE POLICY "Users can update their images" ON storage.objects FOR UPDATE USING (bucket_id = 'generated-images' AND auth.role() = 'authenticated');
 CREATE POLICY "Users can delete their images" ON storage.objects FOR DELETE USING (bucket_id = 'generated-images' AND auth.role() = 'authenticated');
+
 -- ============================================
 -- Migration: 20260206170906_b5602765-9ed8-4ebd-aee6-174b7cc339f9.sql
 -- ============================================
@@ -751,6 +755,7 @@ USING (EXISTS (
 
 -- Index for fast lookups
 CREATE INDEX idx_brand_examples_brand_id ON public.brand_examples(brand_id);
+
 -- ============================================
 -- Migration: 20260208140849_efc025ac-de06-4c73-b949-298096e3386a.sql
 -- ============================================
@@ -778,6 +783,7 @@ CREATE POLICY "Public read access for content-images"
 ON storage.objects FOR SELECT
 TO public
 USING (bucket_id = 'content-images');
+
 -- ============================================
 -- Migration: 20260210111837_50277c5a-08a3-43fe-87d3-d20299484d52.sql
 -- ============================================
@@ -800,6 +806,7 @@ COMMENT ON COLUMN public.generated_contents.brand_snapshot IS 'Snapshot of brand
 ALTER TABLE public.brands ADD COLUMN IF NOT EXISTS style_guide jsonb DEFAULT NULL;
 
 COMMENT ON COLUMN public.brands.style_guide IS 'AI-analyzed style guide from brand examples: templates, layout rules, palette confirmation';
+
 -- ============================================
 -- Migration: 20260210115624_90a56c97-fa34-425d-a51c-f4f33f8f8293.sql
 -- ============================================
@@ -1013,6 +1020,7 @@ USING (bucket_id = 'generated-images' AND owner_id = auth.uid()::text);
 CREATE POLICY "Users can delete their own images" 
 ON storage.objects FOR DELETE 
 USING (bucket_id = 'generated-images' AND owner_id = auth.uid()::text);
+
 -- ============================================
 -- Migration: 20260217164627_942e93fb-2010-43fa-b785-ec785f3a719e.sql
 -- ============================================
@@ -1096,7 +1104,6 @@ CREATE POLICY "Users can view categories of their own or shared brands"
   ));
 
 -- Insert the share: raul's brands shared with maikon
-INSERT INTO public.brand_shares (brand_id, shared_with_user_id, permission)
 SELECT id, '58a0c7ec-faf7-4b70-91cd-ce335100f66f', 'read'
 FROM public.brands
 WHERE owner_user_id = '1294d060-6783-4f7a-9df4-3c5f567eded4';
@@ -1262,6 +1269,7 @@ COMMENT ON COLUMN public.brands.render_mode IS 'Controls image generation mode: 
 ALTER TABLE public.generated_contents DROP CONSTRAINT generated_contents_status_check;
 
 ALTER TABLE public.generated_contents ADD CONSTRAINT generated_contents_status_check CHECK (status = ANY (ARRAY['draft'::text, 'approved'::text, 'scheduled'::text, 'published'::text, 'rejected'::text, 'ready'::text, 'downloaded'::text]));
+
 -- ============================================
 -- Migration: 20260226120711_da850a48-09c3-4341-bb06-dc67afc9124a.sql
 -- ============================================
@@ -1397,10 +1405,12 @@ ON public.brand_background_templates
 FOR DELETE
 TO authenticated
 USING (is_brand_visible_to_user(brand_id, auth.uid()));
+
 -- ============================================
 -- Migration: 20260310135423_6fce1df2-a47d-4a80-9350-2f912aedf24f.sql
 -- ============================================
 ALTER TABLE public.ai_user_context ADD COLUMN IF NOT EXISTS whatsapp_number text;
+
 -- ============================================
 -- Migration: 20260310142907_155485cf-69c0-46bb-a3cb-181caa7ec077.sql
 -- ============================================
@@ -1440,14 +1450,17 @@ $$;
 
 GRANT EXECUTE ON FUNCTION get_cron_users_due() TO anon;
 GRANT EXECUTE ON FUNCTION get_cron_users_due() TO authenticated;
+
 -- ============================================
 -- Migration: 20260313012915_94d4f1ba-2230-4830-b09f-60ecc9e03f21.sql
 -- ============================================
 ALTER PUBLICATION supabase_realtime ADD TABLE public.image_generations;
+
 -- ============================================
 -- Migration: 20260313201337_fbba9c72-c10c-4ff4-8350-cc90d5803fdb.sql
 -- ============================================
 ALTER TABLE public.generated_contents ADD COLUMN IF NOT EXISTS rendered_image_urls text[] DEFAULT NULL;
+
 -- ============================================
 -- Migration: 20260315011041_8d155637-86fe-4121-878b-fca22a6308c1.sql
 -- ============================================
@@ -1486,14 +1499,16 @@ CREATE POLICY "Users can delete own trends"
 -- Migration: 20260315025119_fe43c05d-3b73-4e6a-9811-2eac8d3b344f.sql
 -- ============================================
 ALTER PUBLICATION supabase_realtime ADD TABLE public.generated_contents;
+
 -- ============================================
 -- Migration: 20260315155817_5743ac44-cfa3-4366-96ee-5e7eeddd5e1c.sql
 -- ============================================
-INSERT INTO public.brand_shares (brand_id, shared_with_user_id, permission) VALUES ('ec5c3308-4431-4946-9551-dc1023b7189b', '1294d060-6783-4f7a-9df4-3c5f567eded4', 'read'), ('3907b2c9-7c96-455d-81ac-5ea4982b6927', '1294d060-6783-4f7a-9df4-3c5f567eded4', 'read') ON CONFLICT DO NOTHING;
+
 -- ============================================
 -- Migration: 20260315220623_68a0a666-aff2-4202-b5db-c7f4f827aae5.sql
 -- ============================================
 ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
+
 -- ============================================
 -- Migration: 20260316112619_add_visual_preferences_to_brands.sql
 -- ============================================
@@ -1545,6 +1560,7 @@ CREATE TRIGGER update_linkedin_connections_updated_at
   BEFORE UPDATE ON public.linkedin_connections
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
+
 -- ============================================
 -- Migration: 20260317112700_add_brand_creation_mode_and_purpose.sql
 -- ============================================
@@ -1704,6 +1720,7 @@ FOR SELECT USING (bucket_id = 'guides');
 
 CREATE POLICY "Auth upload guides" ON storage.objects
 FOR INSERT TO authenticated WITH CHECK (bucket_id = 'guides');
+
 -- ============================================
 -- Migration: 20260323_visual_style_defaults_and_photo_library.sql
 -- ============================================
