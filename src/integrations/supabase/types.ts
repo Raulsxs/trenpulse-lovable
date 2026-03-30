@@ -89,6 +89,150 @@ export type Database = {
         }
         Relationships: []
       }
+      brand_background_templates: {
+        Row: {
+          background_images: Json
+          brand_id: string
+          content_format: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          slide_count: number
+          source_content_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          background_images?: Json
+          brand_id: string
+          content_format?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          slide_count?: number
+          source_content_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          background_images?: Json
+          brand_id?: string
+          content_format?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          slide_count?: number
+          source_content_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_background_templates_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brand_example_categories: {
+        Row: {
+          brand_id: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          brand_id: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          brand_id?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_example_categories_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brand_examples: {
+        Row: {
+          brand_id: string
+          carousel_group_id: string | null
+          category_id: string | null
+          category_mode: string
+          content_type: string | null
+          created_at: string
+          description: string | null
+          id: string
+          image_url: string
+          purpose: string
+          slide_index: number | null
+          subtype: string | null
+          thumb_url: string | null
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          brand_id: string
+          carousel_group_id?: string | null
+          category_id?: string | null
+          category_mode?: string
+          content_type?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url: string
+          purpose?: string
+          slide_index?: number | null
+          subtype?: string | null
+          thumb_url?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Update: {
+          brand_id?: string
+          carousel_group_id?: string | null
+          category_id?: string | null
+          category_mode?: string
+          content_type?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          image_url?: string
+          purpose?: string
+          slide_index?: number | null
+          subtype?: string | null
+          thumb_url?: string | null
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_examples_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       brand_shares: {
         Row: {
           brand_id: string
@@ -114,6 +258,59 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "brand_shares_brand_id_fkey"
+            columns: ["brand_id"]
+            isOneToOne: false
+            referencedRelation: "brands"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      brand_template_sets: {
+        Row: {
+          brand_id: string
+          category_id: string | null
+          category_name: string | null
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          source_example_ids: Json | null
+          status: string
+          template_set: Json
+          updated_at: string
+          visual_signature: Json | null
+        }
+        Insert: {
+          brand_id: string
+          category_id?: string | null
+          category_name?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          source_example_ids?: Json | null
+          status?: string
+          template_set?: Json
+          updated_at?: string
+          visual_signature?: Json | null
+        }
+        Update: {
+          brand_id?: string
+          category_id?: string | null
+          category_name?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          source_example_ids?: Json | null
+          status?: string
+          template_set?: Json
+          updated_at?: string
+          visual_signature?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "brand_template_sets_brand_id_fkey"
             columns: ["brand_id"]
             isOneToOne: false
             referencedRelation: "brands"
