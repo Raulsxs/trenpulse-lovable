@@ -98,7 +98,6 @@ ALTER TABLE public.usage_tracking ENABLE ROW LEVEL SECURITY;
 CREATE POLICY "Users can read own usage" ON public.usage_tracking FOR SELECT USING (auth.uid() = user_id);
 CREATE POLICY "Service role full access usage_tracking" ON public.usage_tracking FOR ALL USING (auth.role() = 'service_role');
 
-
 -- ============================================
 -- Migration: 20260120135321_3d92ab4d-73c5-4a7b-833e-34a7bd88b8ff.sql
 -- ============================================
@@ -234,14 +233,12 @@ CREATE TRIGGER update_generated_contents_updated_at
 BEFORE UPDATE ON public.generated_contents
 FOR EACH ROW
 EXECUTE FUNCTION public.update_updated_at_column();
-
 -- ============================================
 -- Migration: 20260120175148_00a2494e-3c94-47cb-9f4d-0a482e252f49.sql
 -- ============================================
 -- Enable required extensions for cron jobs
 CREATE EXTENSION IF NOT EXISTS pg_cron;
 CREATE EXTENSION IF NOT EXISTS pg_net;
-
 -- ============================================
 -- Migration: 20260121165221_e7f01015-c14b-4194-8c32-ef004de6ed23.sql
 -- ============================================
@@ -287,7 +284,6 @@ USING (bucket_id = 'content-images');
 -- Add scheduled_at column to generated_contents for scheduling feature
 ALTER TABLE public.generated_contents 
 ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP WITH TIME ZONE DEFAULT NULL;
-
 -- ============================================
 -- Migration: 20260205151453_9a3b3eda-d0f9-4395-afa5-d30186a3035a.sql
 -- ============================================
@@ -713,7 +709,6 @@ CREATE POLICY "Public can view generated images" ON storage.objects FOR SELECT U
 CREATE POLICY "Authenticated users can upload images" ON storage.objects FOR INSERT WITH CHECK (bucket_id = 'generated-images' AND auth.role() = 'authenticated');
 CREATE POLICY "Users can update their images" ON storage.objects FOR UPDATE USING (bucket_id = 'generated-images' AND auth.role() = 'authenticated');
 CREATE POLICY "Users can delete their images" ON storage.objects FOR DELETE USING (bucket_id = 'generated-images' AND auth.role() = 'authenticated');
-
 -- ============================================
 -- Migration: 20260206170906_b5602765-9ed8-4ebd-aee6-174b7cc339f9.sql
 -- ============================================
@@ -755,7 +750,6 @@ USING (EXISTS (
 
 -- Index for fast lookups
 CREATE INDEX idx_brand_examples_brand_id ON public.brand_examples(brand_id);
-
 -- ============================================
 -- Migration: 20260208140849_efc025ac-de06-4c73-b949-298096e3386a.sql
 -- ============================================
@@ -783,22 +777,20 @@ CREATE POLICY "Public read access for content-images"
 ON storage.objects FOR SELECT
 TO public
 USING (bucket_id = 'content-images');
-
 -- ============================================
 -- Migration: 20260210111837_50277c5a-08a3-43fe-87d3-d20299484d52.sql
 -- ============================================
 
 -- Add brand_id and brand_snapshot to generated_contents
 ALTER TABLE public.generated_contents
-  ADD COLUMN brand_id uuid REFERENCES public.brands(id) ON DELETE SET NULL,
-  ADD COLUMN brand_snapshot jsonb DEFAULT NULL;
+  ADD COLUMN IF NOT EXISTS brand_id uuid REFERENCES public.brands(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS brand_snapshot jsonb DEFAULT NULL;
 
 -- Add index for brand_id lookups
 CREATE INDEX idx_generated_contents_brand_id ON public.generated_contents(brand_id);
 
 -- Comment for documentation
 COMMENT ON COLUMN public.generated_contents.brand_snapshot IS 'Snapshot of brand tokens at generation time: {name, palette, fonts, visual_tone, do_rules, dont_rules, logo_url, image_style}';
-
 
 -- ============================================
 -- Migration: 20260210113725_5c2a0fae-01ba-4961-b36a-fde3e680be8d.sql
@@ -807,7 +799,6 @@ COMMENT ON COLUMN public.generated_contents.brand_snapshot IS 'Snapshot of brand
 ALTER TABLE public.brands ADD COLUMN IF NOT EXISTS style_guide jsonb DEFAULT NULL;
 
 COMMENT ON COLUMN public.brands.style_guide IS 'AI-analyzed style guide from brand examples: templates, layout rules, palette confirmation';
-
 -- ============================================
 -- Migration: 20260210115624_90a56c97-fa34-425d-a51c-f4f33f8f8293.sql
 -- ============================================
@@ -820,7 +811,6 @@ ADD COLUMN IF NOT EXISTS visual_mode text NOT NULL DEFAULT 'brand_guided';
 ALTER TABLE public.generated_contents
 ADD COLUMN IF NOT EXISTS source_summary text,
 ADD COLUMN IF NOT EXISTS key_insights text[];
-
 
 -- ============================================
 -- Migration: 20260211165659_939bfb48-62a7-4270-b284-37f404c71160.sql
@@ -847,7 +837,6 @@ CREATE POLICY "Users can update examples of their brands"
     WHERE b.id = brand_examples.brand_id AND b.owner_user_id = auth.uid()
   ));
 
-
 -- ============================================
 -- Migration: 20260211175440_bc94f21e-0e4b-4200-a963-0ee503f7eeb3.sql
 -- ============================================
@@ -866,7 +855,7 @@ CREATE TABLE public.brand_template_sets (
 );
 
 -- Add default_template_set_id to brands
-ALTER TABLE public.brands ADD COLUMN default_template_set_id UUID REFERENCES public.brand_template_sets(id) ON DELETE SET NULL;
+ALTER TABLE public.brands ADD COLUMN IF NOT EXISTS default_template_set_id UUID REFERENCES public.brand_template_sets(id) ON DELETE SET NULL;
 
 -- Enable RLS
 ALTER TABLE public.brand_template_sets ENABLE ROW LEVEL SECURITY;
@@ -896,7 +885,6 @@ CREATE TRIGGER update_brand_template_sets_updated_at
   BEFORE UPDATE ON public.brand_template_sets
   FOR EACH ROW
   EXECUTE FUNCTION public.update_updated_at_column();
-
 
 -- ============================================
 -- Migration: 20260211192101_a3c3901d-246d-4305-9967-b56614f2a8f8.sql
@@ -941,11 +929,11 @@ CREATE TRIGGER update_brand_example_categories_updated_at
 
 -- A2) Alter brand_examples
 ALTER TABLE public.brand_examples
-  ADD COLUMN category_id uuid REFERENCES public.brand_example_categories(id) ON DELETE SET NULL,
-  ADD COLUMN category_mode text NOT NULL DEFAULT 'auto',
-  ADD COLUMN carousel_group_id uuid,
-  ADD COLUMN slide_index integer,
-  ADD COLUMN updated_at timestamptz NOT NULL DEFAULT now();
+  ADD COLUMN IF NOT EXISTS category_id uuid REFERENCES public.brand_example_categories(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS category_mode text NOT NULL DEFAULT 'auto',
+  ADD COLUMN IF NOT EXISTS carousel_group_id uuid,
+  ADD COLUMN IF NOT EXISTS slide_index integer,
+  ADD COLUMN IF NOT EXISTS updated_at timestamptz NOT NULL DEFAULT now();
 
 CREATE INDEX idx_brand_examples_category ON public.brand_examples (brand_id, category_id);
 CREATE INDEX idx_brand_examples_carousel ON public.brand_examples (brand_id, carousel_group_id);
@@ -958,12 +946,11 @@ CREATE TRIGGER update_brand_examples_updated_at
 
 -- A3) Alter brands (dirty tracking)
 ALTER TABLE public.brands
-  ADD COLUMN template_sets_status text NOT NULL DEFAULT 'idle',
-  ADD COLUMN template_sets_dirty boolean NOT NULL DEFAULT false,
-  ADD COLUMN template_sets_dirty_count integer NOT NULL DEFAULT 0,
-  ADD COLUMN template_sets_updated_at timestamptz,
-  ADD COLUMN template_sets_last_error text;
-
+  ADD COLUMN IF NOT EXISTS template_sets_status text NOT NULL DEFAULT 'idle',
+  ADD COLUMN IF NOT EXISTS template_sets_dirty boolean NOT NULL DEFAULT false,
+  ADD COLUMN IF NOT EXISTS template_sets_dirty_count integer NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS template_sets_updated_at timestamptz,
+  ADD COLUMN IF NOT EXISTS template_sets_last_error text;
 
 -- ============================================
 -- Migration: 20260211195109_04f26995-38c5-46b8-8381-518343b12c5d.sql
@@ -974,7 +961,6 @@ ALTER TABLE public.generated_contents
   ADD COLUMN IF NOT EXISTS template_set_id uuid REFERENCES public.brand_template_sets(id) ON DELETE SET NULL,
   ADD COLUMN IF NOT EXISTS slide_count integer DEFAULT NULL,
   ADD COLUMN IF NOT EXISTS include_cta boolean DEFAULT true;
-
 
 -- ============================================
 -- Migration: 20260212122559_f3d2b3cb-afab-47eb-bab7-b5fae033e5cd.sql
@@ -991,7 +977,6 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_brand_template_sets_brand_category_active
   ON public.brand_template_sets (brand_id, category_id)
   WHERE status = 'active' AND category_id IS NOT NULL;
 
-
 -- ============================================
 -- Migration: 20260215183316_32edd5fa-d1c9-43ef-8666-907fb5f7b116.sql
 -- ============================================
@@ -1007,7 +992,6 @@ WHERE scheduled_at IS NOT NULL;
 
 CREATE INDEX IF NOT EXISTS idx_generated_contents_user_status 
 ON public.generated_contents (user_id, status);
-
 
 -- ============================================
 -- Migration: 20260217154532_cb017cbb-1de6-4a64-954f-99300004eac2.sql
@@ -1028,7 +1012,6 @@ USING (bucket_id = 'generated-images' AND owner_id = auth.uid()::text);
 CREATE POLICY "Users can delete their own images" 
 ON storage.objects FOR DELETE 
 USING (bucket_id = 'generated-images' AND owner_id = auth.uid()::text);
-
 -- ============================================
 -- Migration: 20260217164627_942e93fb-2010-43fa-b785-ec785f3a719e.sql
 -- ============================================
@@ -1117,7 +1100,6 @@ SELECT id, '58a0c7ec-faf7-4b70-91cd-ce335100f66f', 'read'
 FROM public.brands
 WHERE owner_user_id = '1294d060-6783-4f7a-9df4-3c5f567eded4';
 
-
 -- ============================================
 -- Migration: 20260217165000_53770ff7-a302-41a7-a3fe-0f8d3ce04aa2.sql
 -- ============================================
@@ -1166,7 +1148,6 @@ CREATE POLICY "Users can view categories of their own or shared brands"
   ON public.brand_example_categories FOR SELECT
   USING (public.is_brand_visible_to_user(brand_id, auth.uid()));
 
-
 -- ============================================
 -- Migration: 20260217223713_fef2b8d8-0f5a-4668-83b7-6abbaa9d06a2.sql
 -- ============================================
@@ -1179,7 +1160,6 @@ ALTER TABLE public.profiles
   ADD COLUMN IF NOT EXISTS preferred_audience text NOT NULL DEFAULT 'gestores',
   ADD COLUMN IF NOT EXISTS interest_areas text[] DEFAULT '{}',
   ADD COLUMN IF NOT EXISTS rss_sources text[] DEFAULT '{}';
-
 
 -- ============================================
 -- Migration: 20260217224041_25d3c339-077f-48ae-92bb-021dbe4efeb7.sql
@@ -1231,17 +1211,15 @@ CREATE POLICY "Users can remove favorites"
   ON public.favorite_template_sets FOR DELETE
   USING (auth.uid() = user_id);
 
-
 -- ============================================
 -- Migration: 20260217224651_75559ec8-0fa1-4b60-812e-1690d9cdaad8.sql
 -- ============================================
 
 -- Add generation metadata column to track debug/observability info
 ALTER TABLE public.generated_contents
-ADD COLUMN generation_metadata jsonb DEFAULT '{}'::jsonb;
+ADD COLUMN IF NOT EXISTS generation_metadata jsonb DEFAULT '{}'::jsonb;
 
 COMMENT ON COLUMN public.generated_contents.generation_metadata IS 'Stores generation debug info: model, timing_ms, slide_image_times, errors, warnings';
-
 
 -- ============================================
 -- Migration: 20260217230239_24860e58-b93a-4e1f-a187-34cb2bc6053a.sql
@@ -1264,7 +1242,6 @@ UPDATE public.system_template_sets
 SET supported_formats = ARRAY[content_format]
 WHERE supported_formats = '{post}' AND content_format != 'post';
 
-
 -- ============================================
 -- Migration: 20260218000050_a44bb7d6-5250-4f35-8d67-016d2ca980b0.sql
 -- ============================================
@@ -1278,14 +1255,12 @@ ADD COLUMN IF NOT EXISTS render_mode text NOT NULL DEFAULT 'LEGACY_FULL_IMAGE';
 -- Add comment for documentation
 COMMENT ON COLUMN public.brands.render_mode IS 'Controls image generation mode: LEGACY_FULL_IMAGE (AI renders text in image) or AI_BG_OVERLAY (AI generates background only, text overlaid by app)';
 
-
 -- ============================================
 -- Migration: 20260219160015_be4fcc33-92d2-4794-89bb-500375791128.sql
 -- ============================================
 ALTER TABLE public.generated_contents DROP CONSTRAINT generated_contents_status_check;
 
 ALTER TABLE public.generated_contents ADD CONSTRAINT generated_contents_status_check CHECK (status = ANY (ARRAY['draft'::text, 'approved'::text, 'scheduled'::text, 'published'::text, 'rejected'::text, 'ready'::text, 'downloaded'::text]));
-
 -- ============================================
 -- Migration: 20260226120711_da850a48-09c3-4341-bb06-dc67afc9124a.sql
 -- ============================================
@@ -1325,22 +1300,20 @@ CREATE TRIGGER update_brand_background_templates_updated_at
   BEFORE UPDATE ON public.brand_background_templates
   FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();
 
-
 -- ============================================
 -- Migration: 20260303142637_7d20bb11-f910-4906-88bd-ebfabcd0a047.sql
 -- ============================================
 
 -- Add platform column to generated_contents (default 'instagram' for backward compat)
 ALTER TABLE public.generated_contents 
-ADD COLUMN platform text NOT NULL DEFAULT 'instagram';
+ADD COLUMN IF NOT EXISTS platform text NOT NULL DEFAULT 'instagram';
 
 -- Add supported_platforms to system_template_sets
 ALTER TABLE public.system_template_sets
-ADD COLUMN supported_platforms text[] DEFAULT '{instagram}'::text[];
+ADD COLUMN IF NOT EXISTS supported_platforms text[] DEFAULT '{instagram}'::text[];
 
 -- Update existing system_template_sets to include instagram
 UPDATE public.system_template_sets SET supported_platforms = '{instagram}'::text[] WHERE supported_platforms IS NULL;
-
 
 -- ============================================
 -- Migration: 20260303163506_78279bd3-7b01-4120-8c06-5cbfb3d80058.sql
@@ -1395,7 +1368,6 @@ ALTER TABLE public.generated_contents
   ADD COLUMN IF NOT EXISTS publish_error text,
   ADD COLUMN IF NOT EXISTS publish_attempts integer DEFAULT 0;
 
-
 -- ============================================
 -- Migration: 20260306211928_6145475c-88b0-459e-b4c3-d00f2df6d04e.sql
 -- ============================================
@@ -1424,12 +1396,10 @@ ON public.brand_background_templates
 FOR DELETE
 TO authenticated
 USING (is_brand_visible_to_user(brand_id, auth.uid()));
-
 -- ============================================
 -- Migration: 20260310135423_6fce1df2-a47d-4a80-9350-2f912aedf24f.sql
 -- ============================================
-ALTER TABLE public.ai_user_context ADD COLUMN whatsapp_number text;
-
+ALTER TABLE public.ai_user_context ADD COLUMN IF NOT EXISTS whatsapp_number text;
 -- ============================================
 -- Migration: 20260310142907_155485cf-69c0-46bb-a3cb-181caa7ec077.sql
 -- ============================================
@@ -1469,17 +1439,14 @@ $$;
 
 GRANT EXECUTE ON FUNCTION get_cron_users_due() TO anon;
 GRANT EXECUTE ON FUNCTION get_cron_users_due() TO authenticated;
-
 -- ============================================
 -- Migration: 20260313012915_94d4f1ba-2230-4830-b09f-60ecc9e03f21.sql
 -- ============================================
 ALTER PUBLICATION supabase_realtime ADD TABLE public.image_generations;
-
 -- ============================================
 -- Migration: 20260313201337_fbba9c72-c10c-4ff4-8350-cc90d5803fdb.sql
 -- ============================================
 ALTER TABLE public.generated_contents ADD COLUMN IF NOT EXISTS rendered_image_urls text[] DEFAULT NULL;
-
 -- ============================================
 -- Migration: 20260315011041_8d155637-86fe-4121-878b-fca22a6308c1.sql
 -- ============================================
@@ -1514,29 +1481,24 @@ CREATE POLICY "Users can delete own trends"
   ON public.trends FOR DELETE TO authenticated
   USING (user_id = auth.uid());
 
-
 -- ============================================
 -- Migration: 20260315025119_fe43c05d-3b73-4e6a-9811-2eac8d3b344f.sql
 -- ============================================
 ALTER PUBLICATION supabase_realtime ADD TABLE public.generated_contents;
-
 -- ============================================
 -- Migration: 20260315155817_5743ac44-cfa3-4366-96ee-5e7eeddd5e1c.sql
 -- ============================================
 INSERT INTO public.brand_shares (brand_id, shared_with_user_id, permission) VALUES ('ec5c3308-4431-4946-9551-dc1023b7189b', '1294d060-6783-4f7a-9df4-3c5f567eded4', 'read'), ('3907b2c9-7c96-455d-81ac-5ea4982b6927', '1294d060-6783-4f7a-9df4-3c5f567eded4', 'read') ON CONFLICT DO NOTHING;
-
 -- ============================================
 -- Migration: 20260315220623_68a0a666-aff2-4202-b5db-c7f4f827aae5.sql
 -- ============================================
 ALTER PUBLICATION supabase_realtime ADD TABLE public.chat_messages;
-
 -- ============================================
 -- Migration: 20260316112619_add_visual_preferences_to_brands.sql
 -- ============================================
 -- Add visual_preferences JSONB column to brands table
 -- Stores user-specified preferences like phone_mockup, body_in_card, etc.
 ALTER TABLE public.brands ADD COLUMN IF NOT EXISTS visual_preferences jsonb DEFAULT NULL;
-
 
 -- ============================================
 -- Migration: 20260316220521_87182712-7192-4f24-8a13-2e3077c04c59.sql
@@ -1582,7 +1544,6 @@ CREATE TRIGGER update_linkedin_connections_updated_at
   BEFORE UPDATE ON public.linkedin_connections
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
-
 -- ============================================
 -- Migration: 20260317112700_add_brand_creation_mode_and_purpose.sql
 -- ============================================
@@ -1597,7 +1558,6 @@ ADD COLUMN IF NOT EXISTS purpose text NOT NULL DEFAULT 'reference';
 -- Index for fast background photo lookup during generation
 CREATE INDEX IF NOT EXISTS idx_brand_examples_purpose
 ON public.brand_examples (brand_id, purpose) WHERE purpose = 'background';
-
 
 -- ============================================
 -- Migration: 20260318_billing_tables.sql
@@ -1696,7 +1656,6 @@ ON CONFLICT (name) DO UPDATE SET
 CREATE INDEX IF NOT EXISTS idx_usage_tracking_user_period ON usage_tracking (user_id, period_start);
 CREATE INDEX IF NOT EXISTS idx_user_subscriptions_user ON user_subscriptions (user_id);
 
-
 -- ============================================
 -- Migration: 20260318_content_metrics.sql
 -- ============================================
@@ -1732,7 +1691,6 @@ CREATE POLICY "Service role manages metrics"
 CREATE INDEX IF NOT EXISTS idx_content_metrics_user ON content_metrics (user_id);
 CREATE INDEX IF NOT EXISTS idx_content_metrics_content ON content_metrics (content_id);
 
-
 -- ============================================
 -- Migration: 20260318175632_6da307cc-89b4-48cd-a771-ed09eb68b330.sql
 -- ============================================
@@ -1745,7 +1703,6 @@ FOR SELECT USING (bucket_id = 'guides');
 
 CREATE POLICY "Auth upload guides" ON storage.objects
 FOR INSERT TO authenticated WITH CHECK (bucket_id = 'guides');
-
 -- ============================================
 -- Migration: 20260323_visual_style_defaults_and_photo_library.sql
 -- ============================================
@@ -1782,9 +1739,6 @@ CREATE POLICY "Users can manage own photos"
 CREATE INDEX IF NOT EXISTS idx_user_photo_library_user_id
   ON public.user_photo_library (user_id, created_at DESC);
 
-
--- ============================================
 -- Post-migration: content_type constraint fix
--- ============================================
 ALTER TABLE generated_contents DROP CONSTRAINT IF EXISTS generated_contents_content_type_check;
 ALTER TABLE generated_contents ADD CONSTRAINT generated_contents_content_type_check CHECK (content_type IN ('post', 'story', 'carousel', 'document', 'article', 'cron_config'));
