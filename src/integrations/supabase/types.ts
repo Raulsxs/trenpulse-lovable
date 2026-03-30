@@ -89,6 +89,87 @@ export type Database = {
         }
         Relationships: []
       }
+      brands: {
+        Row: {
+          created_at: string
+          creation_mode: string
+          default_template_set_id: string | null
+          default_visual_style: string | null
+          do_rules: string | null
+          dont_rules: string | null
+          fonts: Json | null
+          id: string
+          logo_url: string | null
+          name: string
+          owner_user_id: string
+          palette: Json | null
+          render_mode: string
+          style_guide: Json | null
+          style_guide_updated_at: string | null
+          style_guide_version: number
+          template_sets_dirty: boolean
+          template_sets_dirty_count: number
+          template_sets_last_error: string | null
+          template_sets_status: string
+          template_sets_updated_at: string | null
+          updated_at: string
+          visual_preferences: Json | null
+          visual_tone: string | null
+        }
+        Insert: {
+          created_at?: string
+          creation_mode?: string
+          default_template_set_id?: string | null
+          default_visual_style?: string | null
+          do_rules?: string | null
+          dont_rules?: string | null
+          fonts?: Json | null
+          id?: string
+          logo_url?: string | null
+          name: string
+          owner_user_id: string
+          palette?: Json | null
+          render_mode?: string
+          style_guide?: Json | null
+          style_guide_updated_at?: string | null
+          style_guide_version?: number
+          template_sets_dirty?: boolean
+          template_sets_dirty_count?: number
+          template_sets_last_error?: string | null
+          template_sets_status?: string
+          template_sets_updated_at?: string | null
+          updated_at?: string
+          visual_preferences?: Json | null
+          visual_tone?: string | null
+        }
+        Update: {
+          created_at?: string
+          creation_mode?: string
+          default_template_set_id?: string | null
+          default_visual_style?: string | null
+          do_rules?: string | null
+          dont_rules?: string | null
+          fonts?: Json | null
+          id?: string
+          logo_url?: string | null
+          name?: string
+          owner_user_id?: string
+          palette?: Json | null
+          render_mode?: string
+          style_guide?: Json | null
+          style_guide_updated_at?: string | null
+          style_guide_version?: number
+          template_sets_dirty?: boolean
+          template_sets_dirty_count?: number
+          template_sets_last_error?: string | null
+          template_sets_status?: string
+          template_sets_updated_at?: string | null
+          updated_at?: string
+          visual_preferences?: Json | null
+          visual_tone?: string | null
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           content: string
