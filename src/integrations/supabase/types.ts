@@ -429,6 +429,62 @@ export type Database = {
         }
         Relationships: []
       }
+      content_metrics: {
+        Row: {
+          comments: number | null
+          content_id: string
+          created_at: string | null
+          engagement_rate: number | null
+          fetched_at: string | null
+          id: string
+          impressions: number | null
+          likes: number | null
+          platform: string
+          reach: number | null
+          saves: number | null
+          shares: number | null
+          user_id: string
+        }
+        Insert: {
+          comments?: number | null
+          content_id: string
+          created_at?: string | null
+          engagement_rate?: number | null
+          fetched_at?: string | null
+          id?: string
+          impressions?: number | null
+          likes?: number | null
+          platform: string
+          reach?: number | null
+          saves?: number | null
+          shares?: number | null
+          user_id: string
+        }
+        Update: {
+          comments?: number | null
+          content_id?: string
+          created_at?: string | null
+          engagement_rate?: number | null
+          fetched_at?: string | null
+          id?: string
+          impressions?: number | null
+          likes?: number | null
+          platform?: string
+          reach?: number | null
+          saves?: number | null
+          shares?: number | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_metrics_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: true
+            referencedRelation: "generated_contents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       favorite_template_sets: {
         Row: {
           created_at: string
@@ -891,6 +947,85 @@ export type Database = {
           },
         ]
       }
+      quality_feedback: {
+        Row: {
+          created_at: string
+          id: string
+          image_generation_id: string
+          notes: string | null
+          reasons: Json | null
+          user_id: string
+          vote: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          image_generation_id: string
+          notes?: string | null
+          reasons?: Json | null
+          user_id: string
+          vote: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          image_generation_id?: string
+          notes?: string | null
+          reasons?: Json | null
+          user_id?: string
+          vote?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quality_feedback_image_generation_id_fkey"
+            columns: ["image_generation_id"]
+            isOneToOne: false
+            referencedRelation: "image_generations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quality_metrics: {
+        Row: {
+          adherence: number | null
+          brand_consistency: number | null
+          created_at: string
+          id: string
+          legibility: number | null
+          premium_look: number | null
+          publish_ready: boolean | null
+          slide_id: string
+        }
+        Insert: {
+          adherence?: number | null
+          brand_consistency?: number | null
+          created_at?: string
+          id?: string
+          legibility?: number | null
+          premium_look?: number | null
+          publish_ready?: boolean | null
+          slide_id: string
+        }
+        Update: {
+          adherence?: number | null
+          brand_consistency?: number | null
+          created_at?: string
+          id?: string
+          legibility?: number | null
+          premium_look?: number | null
+          publish_ready?: boolean | null
+          slide_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quality_metrics_slide_id_fkey"
+            columns: ["slide_id"]
+            isOneToOne: false
+            referencedRelation: "slides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saved_trends: {
         Row: {
           id: string
@@ -920,10 +1055,49 @@ export type Database = {
           },
         ]
       }
+      slide_versions: {
+        Row: {
+          created_at: string
+          id: string
+          layout_preset: string | null
+          selected_image_generation_id: string | null
+          slide_id: string
+          slide_text: string | null
+          version: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          layout_preset?: string | null
+          selected_image_generation_id?: string | null
+          slide_id: string
+          slide_text?: string | null
+          version: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          layout_preset?: string | null
+          selected_image_generation_id?: string | null
+          slide_id?: string
+          slide_text?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "slide_versions_slide_id_fkey"
+            columns: ["slide_id"]
+            isOneToOne: false
+            referencedRelation: "slides"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       slides: {
         Row: {
           created_at: string
           id: string
+          image_layout_params: Json | null
           image_url: string | null
           layout_preset: string | null
           post_id: string
@@ -934,6 +1108,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          image_layout_params?: Json | null
           image_url?: string | null
           layout_preset?: string | null
           post_id: string
@@ -944,6 +1119,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          image_layout_params?: Json | null
           image_url?: string | null
           layout_preset?: string | null
           post_id?: string
@@ -960,6 +1136,45 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      subscription_plans: {
+        Row: {
+          brand_limit: number
+          created_at: string | null
+          display_name: string
+          features: Json | null
+          generation_limit: number
+          id: string
+          is_active: boolean | null
+          name: string
+          price_monthly: number
+          price_yearly: number | null
+        }
+        Insert: {
+          brand_limit: number
+          created_at?: string | null
+          display_name: string
+          features?: Json | null
+          generation_limit: number
+          id?: string
+          is_active?: boolean | null
+          name: string
+          price_monthly: number
+          price_yearly?: number | null
+        }
+        Update: {
+          brand_limit?: number
+          created_at?: string | null
+          display_name?: string
+          features?: Json | null
+          generation_limit?: number
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          price_monthly?: number
+          price_yearly?: number | null
+        }
+        Relationships: []
       }
       system_template_sets: {
         Row: {
@@ -1023,6 +1238,7 @@ export type Database = {
           created_at: string
           description: string | null
           expires_at: string | null
+          full_content: string | null
           id: string
           is_active: boolean | null
           keywords: string[] | null
@@ -1038,6 +1254,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           expires_at?: string | null
+          full_content?: string | null
           id?: string
           is_active?: boolean | null
           keywords?: string[] | null
@@ -1053,6 +1270,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           expires_at?: string | null
+          full_content?: string | null
           id?: string
           is_active?: boolean | null
           keywords?: string[] | null
@@ -1095,6 +1313,80 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      user_photo_library: {
+        Row: {
+          created_at: string | null
+          id: string
+          image_url: string
+          label: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          image_url: string
+          label?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          image_url?: string
+          label?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      user_subscriptions: {
+        Row: {
+          asaas_customer_id: string | null
+          asaas_subscription_id: string | null
+          cancel_at_period_end: boolean | null
+          created_at: string | null
+          current_period_end: string
+          current_period_start: string
+          id: string
+          plan_id: string
+          status: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          asaas_customer_id?: string | null
+          asaas_subscription_id?: string | null
+          cancel_at_period_end?: boolean | null
+          created_at?: string | null
+          current_period_end?: string
+          current_period_start?: string
+          id?: string
+          plan_id: string
+          status?: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          asaas_customer_id?: string | null
+          asaas_subscription_id?: string | null
+          cancel_at_period_end?: boolean | null
+          created_at?: string | null
+          current_period_end?: string
+          current_period_start?: string
+          id?: string
+          plan_id?: string
+          status?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_subscriptions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       visual_briefs: {
         Row: {
@@ -1160,6 +1452,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_cron_users_due: {
+        Args: never
+        Returns: {
+          brand_voice: string
+          business_niche: string
+          content_topics: string[]
+          extra_context: Json
+          qty_suggestions: number
+          user_id: string
+          whatsapp_number: string
+        }[]
+      }
       is_brand_visible_to_user: {
         Args: { _brand_id: string; _user_id: string }
         Returns: boolean
