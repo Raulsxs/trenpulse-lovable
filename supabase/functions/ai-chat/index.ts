@@ -2202,10 +2202,21 @@ Varie os estilos. Retorne APENAS o JSON.`;
 
         // ── FETCH ARTICLE CONTENT (if URL provided) ──
         let articleContent = "";
+        // Resolve Google redirect URLs (google.com/url?q=REAL_URL)
+        let resolvedSourceUrl = sourceUrl;
         if (hasSourceUrl) {
           try {
-            console.log('[INICIAR_GERACAO] fetching article from URL:', sourceUrl);
-            const articleResp = await fetch(sourceUrl, {
+            const urlObj = new URL(sourceUrl);
+            if (urlObj.hostname.includes("google.com") && urlObj.pathname === "/url" && urlObj.searchParams.get("q")) {
+              resolvedSourceUrl = urlObj.searchParams.get("q")!;
+              console.log(`[INICIAR_GERACAO] resolved Google redirect: ${resolvedSourceUrl}`);
+            }
+          } catch { /* not a valid URL, continue as-is */ }
+        }
+        if (hasSourceUrl) {
+          try {
+            console.log('[INICIAR_GERACAO] fetching article from URL:', resolvedSourceUrl);
+            const articleResp = await fetch(resolvedSourceUrl, {
               headers: { "User-Agent": "TrendPulse/1.0 (content-generator)" },
               redirect: "follow",
             });
@@ -2328,14 +2339,14 @@ REGRAS:
         const ctMapInit: Record<string, string> = { post: "post", carousel: "carousel", story: "story", document: "document", article: "article" };
         const mappedCTInit = ctMapInit[contentType] || "post";
 
-        // Call generate-content with 45s timeout
+        // Call generate-content with extended timeout for inference.sh
         console.log(`[INICIAR_GERACAO] calling generate-content: title="${(extractedContentInit || "").substring(0, 100)}", theme="${nicheInitVal}", articleContent=${articleContent.length}chars, brand=${resolvedBrandIdInit?.substring(0,8)}, style=${effectiveStyleInit}, recentTitles=${recentTitlesInit.length}`, Date.now()-t0Init, 'ms');
         try {
           const abortCtrl = new AbortController();
-          // Documents and carousels generate more text → need more time
-          // Small instance: 60s wall / 50s CPU. Network I/O doesn't count as CPU.
+          // inference.sh (minimax-m-25) takes ~30-70s for text generation
+          // Documents/carousels need even more (multiple slides)
           const isHeavyContent = mappedCTInit === "document" || mappedCTInit === "carousel";
-          const genTimeout = isHeavyContent ? 55000 : 45000;
+          const genTimeout = isHeavyContent ? 120000 : 90000;
           const abortTimer = setTimeout(() => abortCtrl.abort(), genTimeout);
           let genResp: Response;
           try {

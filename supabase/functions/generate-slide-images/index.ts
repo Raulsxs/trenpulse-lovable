@@ -439,6 +439,11 @@ ${brandColorHint}
             } else {
               const errText = await infRes.text();
               console.warn(`[generate-slide-images] inference.sh error [${infRes.status}]: ${errText.substring(0, 300)}`);
+              // On 422 (RESOURCE_EXHAUSTED/quota) or 429 (rate limit), skip directly to fallback
+              if (infRes.status === 422 || infRes.status === 429) {
+                console.warn(`[generate-slide-images] inference.sh ${infRes.status} — quota/rate limit, going to fallback`);
+                break;
+              }
               // On 500 server errors with reference images, retry WITHOUT images
               // (broken/expired image URLs are a common cause of 500)
               if (infRes.status >= 500 && refImages.length > 0 && infAttempt === 0) {
@@ -537,7 +542,10 @@ async function generateImage(contentParts: any[]): Promise<string | null> {
     }
 
     const status = response.status;
-    if (status === 402) throw new Error("Insufficient credits.");
+    if (status === 402) {
+      console.warn("[generate-slide-images] All providers exhausted (402). Returning null.");
+      return null;
+    }
     if (status === 429 || status === 502 || status === 503) {
       await response.text();
       console.warn(`[generate-slide-images] Retryable error ${status} on retry ${retry + 1}`);
