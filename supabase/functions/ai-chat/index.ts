@@ -5,11 +5,19 @@ import { fetchAI } from "../_shared/ai-gateway.ts";
 // Compatibility wrapper — uses centralized AI gateway (inference.sh > Google > Lovable)
 // Returns a Response so all existing callers (.ok, .json()) work unchanged
 async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
-  const result = await fetchAI(body as any);
-  return new Response(JSON.stringify({ choices: result.choices }), {
-    status: result.ok ? 200 : (result.status || 500),
-    headers: { "Content-Type": "application/json" },
-  });
+  try {
+    const result = await fetchAI(body as any);
+    return new Response(JSON.stringify({ choices: result.choices }), {
+      status: result.ok ? 200 : (result.status || 500),
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err: any) {
+    console.error("[aiGatewayFetch] Exception:", err?.message || err);
+    return new Response(JSON.stringify({ choices: [{ message: { content: "" } }], error: err?.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
 }
 
 const corsHeaders = {
