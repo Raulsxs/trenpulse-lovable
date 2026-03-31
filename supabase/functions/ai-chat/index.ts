@@ -276,7 +276,7 @@ async function renderCompositeAndUpdateContent(opts: {
       slide0bgUrl: enrichedSlides[0]?.background_image_url || enrichedSlides[0]?.image_url || "NONE",
       dimensions: resolveContentDimensions(contentType, platform),
       platform: platform || "instagram",
-      renderMode,
+      visualStyle: visualStyle || "unknown",
     }));
 
     // 60s timeout for render-slide-image
