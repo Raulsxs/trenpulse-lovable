@@ -291,21 +291,22 @@ Deno.serve(async (req) => {
     // Build caption — LinkedIn max is 3000 chars for commentary
     const LINKEDIN_MAX_CHARS = 3000;
     let caption = content.caption || content.title || "";
-    if (content.hashtags && content.hashtags.length > 0) {
+    // Only add hashtags from array if caption doesn't already contain hashtags
+    const captionHasHashtags = caption.includes("#");
+    if (!captionHasHashtags && content.hashtags && content.hashtags.length > 0) {
       const hashtagStr = "\n\n" + content.hashtags
         .slice(0, 5)
         .map((h: string) => (h.startsWith("#") ? h : `#${h}`))
         .join(" ");
-      // Only add hashtags if they fit within the limit
       if (caption.length + hashtagStr.length <= LINKEDIN_MAX_CHARS) {
         caption += hashtagStr;
       }
     }
-    // Truncate if still over limit (shouldn't happen normally)
+    // Truncate if still over limit
     if (caption.length > LINKEDIN_MAX_CHARS) {
       caption = caption.substring(0, LINKEDIN_MAX_CHARS - 3) + "...";
     }
-    console.log(`[publish-linkedin] Caption length: ${caption.length} chars`);
+    console.log(`[publish-linkedin] Caption length: ${caption.length} chars, preview: ${caption.substring(0, 200)}...${caption.substring(caption.length - 100)}`);
 
     // Collect image URLs
     const slides = (content.slides as any[]) || [];
