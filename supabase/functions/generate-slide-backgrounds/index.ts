@@ -1,5 +1,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchAI } from "../_shared/ai-gateway.ts";
+
+async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
+  try {
+    const result = await fetchAI(body as any);
+    return new Response(JSON.stringify({ choices: result.choices }), {
+      status: result.ok ? 200 : (result.status || 500),
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err: any) {
+    console.error("[aiGatewayFetch] Exception:", err?.message || err);
+    return new Response(JSON.stringify({ choices: [{ message: { content: "" } }], error: err?.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -31,8 +48,7 @@ serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
     );
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const apiKey = Deno.env.get("LOVABLE_API_KEY") || Deno.env.get("INFERENCE_SH_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY") || "";
 
     const {
       brandId, templateSetId, categoryId, contentFormat,
@@ -210,17 +226,10 @@ Respond ONLY with the generated background image. No text output.`;
         await new Promise(r => setTimeout(r, delay));
       }
 
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${LOVABLE_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-3-pro-image-preview",
-          messages: [{ role: "user", content: contentParts }],
-          modalities: ["image", "text"],
-        }),
+      const response = await aiGatewayFetch({
+        model: "google/gemini-3-pro-image-preview",
+        messages: [{ role: "user", content: contentParts }],
+        modalities: ["image", "text"],
       });
 
       if (response.ok) {

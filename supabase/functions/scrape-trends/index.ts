@@ -1,5 +1,22 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchAI } from "../_shared/ai-gateway.ts";
+
+async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
+  try {
+    const result = await fetchAI(body as any);
+    return new Response(JSON.stringify({ choices: result.choices }), {
+      status: result.ok ? 200 : (result.status || 500),
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err: any) {
+    console.error("[aiGatewayFetch] Exception:", err?.message || err);
+    return new Response(JSON.stringify({ choices: [{ message: { content: "" } }], error: err?.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -119,7 +136,7 @@ serve(async (req) => {
     const FIRECRAWL_API_KEY = Deno.env.get("FIRECRAWL_API_KEY");
     const SUPABASE_URL = Deno.env.get("SUPABASE_URL");
     const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
+    const apiKey = Deno.env.get("LOVABLE_API_KEY") || Deno.env.get("INFERENCE_SH_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY") || "";
 
     if (!FIRECRAWL_API_KEY) {
       return new Response(
@@ -262,7 +279,7 @@ serve(async (req) => {
     console.log(`Total trends found: ${allTrends.length}`);
 
     // ── AI enrichment ──
-    if (allTrends.length > 0 && LOVABLE_API_KEY) {
+    if (allTrends.length > 0 && apiKey) {
       try {
         console.log("Enriching trends with AI...");
 
@@ -279,18 +296,12 @@ serve(async (req) => {
         const themesStr = ALLOWED_THEMES.join('", "');
         const nicheContext = niche ? `O nicho do usuário é "${niche}". Priorize relevância para esse setor.` : "";
 
-        const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash-lite",
-            messages: [
-              {
-                role: "system",
-                content: `Você é um especialista em tendências de mercado.
+        const aiResponse = await aiGatewayFetch({
+          model: "google/gemini-2.5-flash-lite",
+          messages: [
+            {
+              role: "system",
+              content: `Você é um especialista em tendências de mercado.
 ${nicheContext}
 Analise as tendências fornecidas e retorne um JSON válido com:
 - theme: uma das categorias: "${themesStr}"
@@ -299,10 +310,9 @@ Analise as tendências fornecidas e retorne um JSON válido com:
 - relevance_score (70-99) baseado em atualidade e impacto${niche ? ` para o setor de ${niche}` : ""}
 
 Retorne APENAS o JSON válido, sem markdown ou explicações.`,
-              },
-              { role: "user", content: JSON.stringify(trendsForAi) },
-            ],
-          }),
+            },
+            { role: "user", content: JSON.stringify(trendsForAi) },
+          ],
         });
 
         if (aiResponse.ok) {

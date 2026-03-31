@@ -1,6 +1,23 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import JSZip from "https://esm.sh/jszip@3.10.1";
+import { fetchAI } from "../_shared/ai-gateway.ts";
+
+async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
+  try {
+    const result = await fetchAI(body as any);
+    return new Response(JSON.stringify({ choices: result.choices }), {
+      status: result.ok ? 200 : (result.status || 500),
+      headers: { "Content-Type": "application/json" },
+    });
+  } catch (err: any) {
+    console.error("[aiGatewayFetch] Exception:", err?.message || err);
+    return new Response(JSON.stringify({ choices: [{ message: { content: "" } }], error: err?.message }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -321,8 +338,7 @@ serve(async (req) => {
       });
     }
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
+    const apiKey = Deno.env.get("LOVABLE_API_KEY") || Deno.env.get("INFERENCE_SH_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY") || "";
 
     const slides = content.slides as Slide[];
     const brandSnapshot = content.brand_snapshot as BrandTokens | null;
@@ -360,17 +376,10 @@ serve(async (req) => {
         // Fallback: generate AI image
         const prompt = `${slide.illustrationPrompt || slide.imagePrompt || slide.headline}. Professional social media marketing image, modern, clean, Instagram, high quality, ${width}x${height}. No text.`;
         try {
-          const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash-image",
-              messages: [{ role: "user", content: prompt }],
-              modalities: ["image", "text"],
-            }),
+          const response = await aiGatewayFetch({
+            model: "google/gemini-2.5-flash-image",
+            messages: [{ role: "user", content: prompt }],
+            modalities: ["image", "text"],
           });
           if (response.ok) {
             const data = await response.json();
