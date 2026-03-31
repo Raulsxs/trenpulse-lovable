@@ -157,8 +157,9 @@ async function renderCompositeAndUpdateContent(opts: {
   logPrefix: string;
   niche?: string;
   lovableApiKey?: string;
+  visualStyle?: string;
 }) {
-  const { svc, supabaseUrl, authHeader, supabaseAnonKey, contentId, slides, brandSnapshot, contentType, platform, logPrefix, niche, lovableApiKey: apiKey } = opts;
+  const { svc, supabaseUrl, authHeader, supabaseAnonKey, contentId, slides, brandSnapshot, contentType, platform, logPrefix, niche, lovableApiKey: apiKey, visualStyle } = opts;
 
   try {
     // Enrich slides with image_layout_params from DB (set by analyze-image-layout)
@@ -256,6 +257,17 @@ async function renderCompositeAndUpdateContent(opts: {
       console.warn(`${logPrefix} layout enrichment skipped:`, enrichErr.message);
     }
 
+    // ai_illustration_titled: only render headline on top of illustration (no body/bullets/footer)
+    if (visualStyle === "ai_illustration_titled") {
+      console.log(`${logPrefix} ai_illustration_titled: stripping body/bullets — title only`);
+      enrichedSlides = enrichedSlides.map((s: any) => ({
+        ...s,
+        body: "",
+        bullets: [],
+        overlay: { ...(s.overlay || {}), body: "", bullets: [], footer: "" },
+      }));
+    }
+
     // Pre-call diagnostic
     console.log(`${logPrefix} sending to render-slide-image:`, JSON.stringify({
       slidesCount: enrichedSlides.length,
@@ -264,6 +276,7 @@ async function renderCompositeAndUpdateContent(opts: {
       slide0bgUrl: enrichedSlides[0]?.background_image_url || enrichedSlides[0]?.image_url || "NONE",
       dimensions: resolveContentDimensions(contentType, platform),
       platform: platform || "instagram",
+      renderMode,
     }));
 
     // 60s timeout for render-slide-image
@@ -2921,6 +2934,7 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
                   contentId: pipeContentId, slides: updatedSlides,
                   brandSnapshot: gcForRender.brand_snapshot, contentType: gcForRender.content_type || "post",
                   platform: gcForRender.platform || "instagram", logPrefix: "[PIPELINE_BACKGROUND]", lovableApiKey,
+                  visualStyle: pipeVisualStyle,
                 });
               } else {
                 // Full design: image already has text — append to image_urls (don't overwrite)
@@ -2941,6 +2955,7 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
                 contentId: pipeContentId, slides: gcForRender.slides as any[] || [],
                 brandSnapshot: gcForRender.brand_snapshot, contentType: gcForRender.content_type || "post",
                 platform: gcForRender.platform || "instagram", logPrefix: "[PIPELINE_BACKGROUND]", lovableApiKey,
+                visualStyle: pipeVisualStyle,
               });
             }
 
