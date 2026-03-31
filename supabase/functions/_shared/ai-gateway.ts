@@ -32,7 +32,7 @@ interface AIConfig {
 }
 
 /** inference.sh app IDs */
-const INFERENCE_CHAT_APP = "openrouter/minimax-m-25@4fjnhng9";
+const INFERENCE_CHAT_APP = "openrouter/gemini-3-pro-preview@5ecn4hsp";
 const INFERENCE_IMAGE_APP = "google/gemini-2-5-flash-image@19ht2vsk";
 const INFERENCE_IMAGE_APP_PREMIUM = "google/gemini-3-1-flash-image-preview@7f5j281b";
 
