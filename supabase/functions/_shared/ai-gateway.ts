@@ -32,7 +32,7 @@ interface AIConfig {
 }
 
 /** inference.sh app IDs */
-const INFERENCE_CHAT_APP = "openrouter/gemini-3-pro-preview@5ecn4hsp";
+const INFERENCE_CHAT_APP = "openrouter/minimax-m-25@4fjnhng9";
 const INFERENCE_IMAGE_APP = "google/gemini-2-5-flash-image@19ht2vsk";
 const INFERENCE_IMAGE_APP_PREMIUM = "google/gemini-3-1-flash-image-preview@7f5j281b";
 
@@ -317,6 +317,7 @@ async function fetchInference(config: AIConfig, request: FetchAIRequest): Promis
 
   const body: Record<string, unknown> = {
     app: INFERENCE_CHAT_APP,
+    wait: true,
     input: {
       text,
       system_prompt: system_prompt || "you are a helpful assistant that can answer questions and help with tasks.",
@@ -353,9 +354,11 @@ async function fetchInference(config: AIConfig, request: FetchAIRequest): Promis
   }
 
   const data = await res.json();
-  const responseText = data.output?.response || data.response || "";
+  // With wait:true, response is in data.data.output.response
+  // Without wait, it's in data.output.response
+  const responseText = data.data?.output?.response || data.output?.response || data.response || "";
 
-  console.log(`[ai-gateway] inference.sh chat response: ${responseText.length} chars`);
+  console.log(`[ai-gateway] inference.sh chat response: ${responseText.length} chars, keys: ${JSON.stringify(Object.keys(data))}`);
 
   // If inference.sh returns 200 but empty content, fallback to Google/Lovable
   if (!responseText || responseText.trim().length === 0) {
@@ -387,6 +390,7 @@ async function fetchInferenceImage(config: AIConfig, request: FetchAIRequest): P
 
   const body: Record<string, unknown> = {
     app,
+    wait: true,
     input: {
       prompt,
       num_images: 1,
@@ -420,8 +424,10 @@ async function fetchInferenceImage(config: AIConfig, request: FetchAIRequest): P
   }
 
   const data = await res.json();
-  const images = data.output?.images || data.images || [];
-  const description = data.output?.description || data.description || "";
+  // With wait:true, data is in data.data.output
+  const output = data.data?.output || data.output || {};
+  const images = output.images || data.images || [];
+  const description = output.description || data.description || "";
 
   console.log(`[ai-gateway] inference.sh image response: ${images.length} images, desc=${description.length} chars`);
 

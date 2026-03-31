@@ -368,6 +368,7 @@ ${brandColorHint}
             }
             const infBody = {
               app: "google/gemini-3-1-flash-image-preview@7f5j281b",
+              wait: true,
               input: {
                 prompt: promptText,
                 aspect_ratio: aspectRatio,
@@ -392,12 +393,13 @@ ${brandColorHint}
               const responseKeys = Object.keys(infData || {});
               console.log(`[generate-slide-images] inference.sh response keys: ${responseKeys.join(", ")}, output keys: ${Object.keys(infData?.output || {}).join(", ")}`);
 
-              // Try multiple response formats — API may return in different structures
-              const imageUrl = infData.output?.images?.[0]
-                || infData.output?.image
+              // Try multiple response formats — with wait:true, data is in infData.data.output
+              const infOutput = infData.data?.output || infData.output || {};
+              const imageUrl = infOutput.images?.[0]
+                || infOutput.image
                 || infData.images?.[0]
                 || infData.image
-                || infData.output?.url;
+                || infOutput.url;
 
               if (imageUrl && typeof imageUrl === "string" && imageUrl.startsWith("http")) {
                 console.log(`[generate-slide-images] inference.sh returned image URL: ${imageUrl.substring(0, 100)}`);
