@@ -1,5 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchAI } from "../_shared/ai-gateway.ts";
+
+async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
+  const result = await fetchAI(body as any);
+  return new Response(JSON.stringify({ choices: result.choices }), {
+    status: result.ok ? 200 : (result.status || 500),
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -195,17 +204,10 @@ async function generateAndUpload(
     }
 
     try {
-      const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash-image",
-          messages: [{ role: "user", content: prompt }],
-          modalities: ["image", "text"],
-        }),
+      const response = await aiGatewayFetch({
+        model: "google/gemini-2.5-flash-image",
+        messages: [{ role: "user", content: prompt }],
+        modalities: ["image", "text"],
       });
 
       if (!response.ok) {

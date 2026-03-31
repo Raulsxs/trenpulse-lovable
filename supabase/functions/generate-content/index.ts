@@ -1,5 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchAI } from "../_shared/ai-gateway.ts";
+
+async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
+  const result = await fetchAI(body as any);
+  return new Response(JSON.stringify({ choices: result.choices }), {
+    status: result.ok ? 200 : (result.status || 500),
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -558,9 +567,6 @@ serve(async (req) => {
 
     console.log(`[generate-content] Request: contentType=${contentType}, contentStyle=${contentStyle}, brandId=${brandId}, templateSetId=${templateSetId}, requestedSlideCount=${requestedSlideCount}, includeCta=${includeCta}`);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
-
     // ══════ BRAND LOADING ══════
     let brandTokens: BrandTokens | null = null;
     let brandContext = "";
@@ -1027,33 +1033,29 @@ ${(contentType === "carousel" || contentType === "document") ? (isLinkedInDocume
 
       let response: Response;
       try {
-        response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${LOVABLE_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: aiModel,
-            messages: [
-              { role: "system", content: systemPrompt },
-              brandReferenceImageUrls.length > 0
-                ? {
-                    role: "user",
-                    content: [
-                      { type: "text", text: userPrompt },
-                      ...brandReferenceImageUrls.map((url: string) => ({
-                        type: "image_url",
-                        image_url: { url },
-                      })),
-                      { type: "text", text: "\n\nAs imagens acima são referências visuais da marca. Use-as para entender o estilo visual e gerar conteúdo que siga essa identidade. O illustrationPrompt de cada slide DEVE descrever backgrounds que repliquem esse estilo." },
-                    ],
-                  }
-                : { role: "user", content: userPrompt },
-            ],
-          }),
-          signal: abortCtrl.signal,
+        const aiPromise = aiGatewayFetch({
+          model: aiModel,
+          messages: [
+            { role: "system", content: systemPrompt },
+            brandReferenceImageUrls.length > 0
+              ? {
+                  role: "user",
+                  content: [
+                    { type: "text", text: userPrompt },
+                    ...brandReferenceImageUrls.map((url: string) => ({
+                      type: "image_url",
+                      image_url: { url },
+                    })),
+                    { type: "text", text: "\n\nAs imagens acima são referências visuais da marca. Use-as para entender o estilo visual e gerar conteúdo que siga essa identidade. O illustrationPrompt de cada slide DEVE descrever backgrounds que repliquem esse estilo." },
+                  ],
+                }
+              : { role: "user", content: userPrompt },
+          ],
         });
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          abortCtrl.signal.addEventListener("abort", () => reject(Object.assign(new Error("AbortError"), { name: "AbortError" })));
+        });
+        response = await Promise.race([aiPromise, timeoutPromise]);
         clearTimeout(abortTimer);
       } catch (err: any) {
         clearTimeout(abortTimer);
@@ -1215,17 +1217,10 @@ ${(contentType === "carousel" || contentType === "document") ? (isLinkedInDocume
         if (!prompt) continue;
 
         try {
-          const imgResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${LOVABLE_API_KEY}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              model: "google/gemini-2.5-flash-image",
-              messages: [{ role: "user", content: prompt }],
-              modalities: ["image", "text"],
-            }),
+          const imgResponse = await aiGatewayFetch({
+            model: "google/gemini-2.5-flash-image",
+            messages: [{ role: "user", content: prompt }],
+            modalities: ["image", "text"],
           });
 
           if (imgResponse.ok) {

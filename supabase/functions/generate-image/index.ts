@@ -1,5 +1,14 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchAI } from "../_shared/ai-gateway.ts";
+
+async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
+  const result = await fetchAI(body as any);
+  return new Response(JSON.stringify({ choices: result.choices }), {
+    status: result.ok ? 200 : (result.status || 500),
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -47,28 +56,16 @@ serve(async (req) => {
 
     const { prompt, style = "professional social media marketing" } = await req.json() as GenerateImageRequest;
     
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
-    }
-
     const enhancedPrompt = `${prompt}. Style: ${style}, modern, clean design, suitable for Instagram, high quality, vibrant colors, professional aesthetic`;
 
     console.log("Generating image with prompt:", enhancedPrompt.substring(0, 100) + "...");
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash-image",
-        messages: [
-          { role: "user", content: enhancedPrompt }
-        ],
-        modalities: ["image", "text"],
-      }),
+    const response = await aiGatewayFetch({
+      model: "google/gemini-2.5-flash-image",
+      messages: [
+        { role: "user", content: enhancedPrompt }
+      ],
+      modalities: ["image", "text"],
     });
 
     if (!response.ok) {

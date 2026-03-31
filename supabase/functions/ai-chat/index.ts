@@ -1,5 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { fetchAI } from "../_shared/ai-gateway.ts";
+
+// Compatibility wrapper — uses centralized AI gateway (inference.sh > Google > Lovable)
+// Returns a Response so all existing callers (.ok, .json()) work unchanged
+async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
+  const result = await fetchAI(body as any);
+  return new Response(JSON.stringify({ choices: result.choices }), {
+    status: result.ok ? 200 : (result.status || 500),
+    headers: { "Content-Type": "application/json" },
+  });
+}
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -80,13 +91,7 @@ async function validateCompositeWithVision(opts: {
 
 Responda em JSON: { "legivel": bool, "sobreposicao": bool, "relevante": bool, "score": number, "sugestao": string }`;
 
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${lovableApiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
+    const resp = await aiGatewayFetch({
         model: "google/gemini-2.5-flash",
         messages: [{
           role: "user",
@@ -95,8 +100,7 @@ Responda em JSON: { "legivel": bool, "sobreposicao": bool, "relevante": bool, "s
             { type: "image_url", image_url: { url: imageUrl } },
           ],
         }],
-      }),
-    });
+      });
 
     if (!resp.ok) {
       console.error(`${logPrefix} Vision validation failed (${resp.status})`);
@@ -618,9 +622,9 @@ serve(async (req) => {
 
   try {
     const { message, history, intent_hint, url, generationParams, imageUrls } = await req.json();
-    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY");
+    const lovableApiKey = Deno.env.get("LOVABLE_API_KEY") || Deno.env.get("INFERENCE_SH_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY");
 
-    if (!lovableApiKey) throw new Error("LOVABLE_API_KEY is not configured");
+    if (!lovableApiKey) throw new Error("No AI API key configured (INFERENCE_SH_API_KEY, GOOGLE_AI_API_KEY, or LOVABLE_API_KEY)");
     if (!message) throw new Error("message is required");
 
     // Auth
@@ -780,17 +784,10 @@ Responda APENAS com o nome da categoria, sem explicação.
 
 Mensagem do usuário: "${message}"`;
 
-      const classifyResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${lovableApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const classifyResp = await aiGatewayFetch({
           model: "google/gemini-2.5-flash-lite",
           messages: [{ role: "user", content: classifyPrompt }],
-        }),
-      });
+        });
 
       if (classifyResp.ok) {
         const classifyData = await classifyResp.json();
@@ -914,13 +911,7 @@ Mensagem do usuário: "${message}"`;
           try {
             const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
             if (LOVABLE_API_KEY) {
-              const extractionResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                method: "POST",
-                headers: {
-                  Authorization: `Bearer ${LOVABLE_API_KEY}`,
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
+              const extractionResp = await aiGatewayFetch({
                   model: "google/gemini-2.5-flash-lite",
                   messages: [
                     {
@@ -928,8 +919,7 @@ Mensagem do usuário: "${message}"`;
                       content: `O usuário enviou esta mensagem para criar um conteúdo para Instagram:\n"${sourceText}"\n\nExtraia as informações relevantes e responda APENAS em JSON válido (sem markdown):\n{\n  "content": "o texto/frase/tema principal a ser usado no conteúdo (sem prefixos como 'crie um post sobre')",\n  "is_quote": true ou false (é uma frase/citação literal que deve ser exibida como está?),\n  "author": "autor da frase se mencionado, ou null",\n  "topic": "tema geral resumido em 2-5 palavras"\n}`,
                     },
                   ],
-                }),
-              });
+                });
               if (extractionResp.ok) {
                 const extractionData = await extractionResp.json();
                 const raw = extractionData.choices?.[0]?.message?.content || "";
@@ -1493,17 +1483,10 @@ INSTRUÇÃO DO USUÁRIO: "${message}"
 Retorne APENAS o resultado em JSON: { "headline": "novo título", "body": "novo corpo" }
 Mantenha o texto curto e impactante para Instagram. Se o usuário não especificar qual parte editar, aplique a edição no elemento mais relevante.`;
 
-          const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${lovableApiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
+          const aiResp = await aiGatewayFetch({
               model: "google/gemini-2.5-flash",
               messages: [{ role: "user", content: editPrompt }],
-            }),
-          });
+            });
 
           if (!aiResp.ok) throw new Error(`AI edit failed: ${aiResp.status}`);
           const aiData = await aiResp.json();
@@ -1639,11 +1622,7 @@ Regras:
 - Mantenha x entre 3-50 e y entre 3-95
 - Só inclua campos que precisam mudar`;
 
-          const aiVisualResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content: visualEditPrompt }] }),
-          });
+          const aiVisualResp = await aiGatewayFetch({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content: visualEditPrompt }] });
 
           if (!aiVisualResp.ok) throw new Error("AI visual edit failed");
           const aiVisualData = await aiVisualResp.json();
@@ -1902,11 +1881,7 @@ REGRAS CRÍTICAS:
 Responda APENAS em JSON:
 {"suggestions":[{"title":"...","description":"...","format":"post","platform":"instagram"},...]}`;
 
-          const suggestResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content: suggestPrompt }] }),
-          });
+          const suggestResp = await aiGatewayFetch({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content: suggestPrompt }] });
 
           if (suggestResp.ok) {
             const suggestData = await suggestResp.json();
@@ -1963,11 +1938,7 @@ Para cada, retorne JSON: { "items": [{ "title": "tema curto", "style": "news|tip
 
 Varie os estilos. Retorne APENAS o JSON.`;
 
-          const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content: seriesPrompt }] }),
-          });
+          const aiResp = await aiGatewayFetch({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content: seriesPrompt }] });
 
           if (!aiResp.ok) throw new Error("AI failed");
           const aiData = await aiResp.json();
@@ -2088,17 +2059,10 @@ Varie os estilos. Retorne APENAS o JSON.`;
           // Call AI to generate new text
           const textPrompt = `Reescreva o texto abaixo para uma postagem de Instagram no nicho "${niche}", tom "${voice}". Mantenha a mesma ideia central mas use palavras e estrutura diferentes. Retorne APENAS o novo texto, sem explicações.\n\nTexto atual:\n${oldText}`;
 
-          const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${lovableApiKey}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
+          const aiResp = await aiGatewayFetch({
               model: "google/gemini-2.5-flash",
               messages: [{ role: "user", content: textPrompt }],
-            }),
-          });
+            });
 
           if (!aiResp.ok) throw new Error(`AI failed: ${aiResp.status}`);
           const aiData = await aiResp.json();
@@ -2272,10 +2236,7 @@ Varie os estilos. Retorne APENAS o JSON.`;
         const shouldExtract = articleContent.length > 100 || contentForExtraction.length > 200;
         if (shouldExtract && contentForExtraction.length > 5) {
           try {
-            const extractResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
+            const extractResp = await aiGatewayFetch({
                 model: "google/gemini-2.5-flash-lite",
                 messages: [{ role: "user", content: `Extraia os pontos-chave deste conteúdo para criar um post de redes sociais.
 
@@ -2298,8 +2259,7 @@ REGRAS:
 - Extraia NÚMEROS, NOMES, DATAS específicos do conteúdo
 - Os insights devem ser concretos e acionáveis
 - Responda APENAS JSON` }],
-              }),
-            });
+              });
             if (extractResp.ok) {
               const extractData = await extractResp.json();
               const raw = extractData.choices?.[0]?.message?.content || "";
@@ -2618,11 +2578,7 @@ Slide role: ${slide.slide_index === 0 ? "cover" : "content"}
 
 Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body":"texto complementar (máx 180 chars)"}`;
 
-            const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-              body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content: textPrompt }] }),
-            });
+            const aiResp = await aiGatewayFetch({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content: textPrompt }] });
             if (aiResp.ok) {
               const aiData = await aiResp.json();
               const raw = aiData.choices?.[0]?.message?.content || "";
@@ -2734,11 +2690,7 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
                   if (slideInfo?.slide_text && slideInfo.slide_text.length >= 5) continue; // already has text
                   const slideIndex = slideInfo?.slide_index || 0;
                   const textPrompt = `Gere texto para slide ${slideIndex + 1} para ${pipePlatform || "instagram"}. Nicho: ${ctxPipe.business_niche || "geral"}. Tom: ${ctxPipe.brand_voice || "natural"}. Estilo: ${pipeContentStyle || "educativo"}. Responda em JSON: {"headline":"título (máx 60 chars)","body":"texto (máx 180 chars)"}`;
-                  const aiResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                    method: "POST",
-                    headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-                    body: JSON.stringify({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content: textPrompt }] }),
-                  });
+                  const aiResp = await aiGatewayFetch({ model: "google/gemini-2.5-flash", messages: [{ role: "user", content: textPrompt }] });
                   if (aiResp.ok) {
                     const aiData = await aiResp.json();
                     const jsonMatch = (aiData.choices?.[0]?.message?.content || "").match(/\{[\s\S]*\}/);
@@ -3297,17 +3249,13 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
             }
 
             // Name is explicit: only extract optional colors/tone from CURRENT message
-            const extractResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
+            const extractResp = await aiGatewayFetch({
                 model: "google/gemini-2.5-flash-lite",
                 messages: [{
                   role: "user",
                   content: `A marca já tem nome definido: "${explicitName}".\nExtraia SOMENTE da mensagem atual os dados opcionais de identidade visual.\nMensagem atual: "${message}"\nJSON: { "colors": ["#hex"] ou null, "visual_tone": "string ou null" }\nResponda APENAS JSON.`,
                 }],
-              }),
-            });
+              });
 
             let extracted: any = {};
             if (extractResp.ok) {
@@ -3455,17 +3403,13 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
 
             if (!skipPrefs) {
               // Parse user preferences via AI
-              const prefResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-                method: "POST",
-                headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-                body: JSON.stringify({
+              const prefResp = await aiGatewayFetch({
                   model: "google/gemini-2.5-flash-lite",
                   messages: [{
                     role: "user",
                     content: `O usuário descreveu preferências visuais para sua marca: "${message}"\n\nExtraia em JSON:\n{\n  "phone_mockup": true/false/null,\n  "body_in_card": true/false/null,\n  "inner_frame": true/false/null,\n  "waves": true/false/null,\n  "abstract_elements": true/false/null,\n  "photo_backgrounds": true/false/null,\n  "gradient_backgrounds": true/false/null,\n  "preferred_bg_mode": "gradient"|"photo"|"solid"|"illustration"|null,\n  "custom_notes": "observação livre do usuário ou null"\n}\n\nRegras:\n- phone_mockup = mockups de celular/notebook/dispositivo\n- body_in_card = texto dentro de caixas/cards\n- inner_frame = moldura decorativa ao redor\n- waves = elementos ondulados/curvos\n- abstract_elements = formas abstratas/geométricas\n- photo_backgrounds = fotos como fundo\n- gradient_backgrounds = gradientes como fundo\n- null = usuário não mencionou\n- custom_notes = qualquer preferência que não se encaixe nos campos acima\n\nResponda APENAS JSON.`,
                   }],
-                }),
-              });
+                });
 
               let visualPrefs: Record<string, any> = {};
               if (prefResp.ok) {
@@ -3494,17 +3438,13 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
 
           // ── STEP 2: Colors + Visual Tone ──
           if (currentStep === 2 && currentBrandId) {
-            const colorResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-              method: "POST",
-              headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-              body: JSON.stringify({
+            const colorResp = await aiGatewayFetch({
                 model: "google/gemini-2.5-flash",
                 messages: [{
                   role: "user",
                   content: `O usuário descreveu cores e estilo para sua marca: "${message}"\nExtraia as cores em hex e o tom visual. Se descreveu com palavras (ex: "azul escuro"), converta para hex.\nJSON: { "colors": ["#hex1", "#hex2"], "visual_tone": "clean|editorial|tech|luxury|playful|organic" }\nTons: clean=minimalista, editorial=editorial, tech=futurista/moderno, luxury=sofisticado/elegante, playful=jovem/divertido, organic=natural.\nResponda APENAS JSON.`,
                 }],
-              }),
-            });
+              });
 
             let colors: string[] = [];
             let tone = "clean";
@@ -3782,10 +3722,7 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
       case "ATUALIZAR_PERFIL": {
         try {
           // Use AI to extract what the user wants to update
-          const extractResp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${lovableApiKey}`, "Content-Type": "application/json" },
-            body: JSON.stringify({
+          const extractResp = await aiGatewayFetch({
               model: "google/gemini-2.5-flash-lite",
               messages: [{ role: "user", content: `O usuário quer atualizar seu perfil. Extraia EXATAMENTE o que ele quer mudar.
 
@@ -3801,8 +3738,7 @@ Ações: set (definir), add (adicionar a lista), remove (remover de lista), ask 
 NUNCA invente um valor. Se não está claro, use action "ask".
 
 Mensagem: "${message}"` }],
-            }),
-          });
+            });
           if (extractResp.ok) {
             const extractData = await extractResp.json();
             const raw = extractData.choices?.[0]?.message?.content || "";
@@ -3861,17 +3797,10 @@ Mensagem: "${message}"` }],
         { role: "user", content: message },
       ];
 
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${lovableApiKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const aiResponse = await aiGatewayFetch({
           model: "google/gemini-3-flash-preview",
           messages: aiMessages,
-        }),
-      });
+        });
 
       if (!aiResponse.ok) {
         if (aiResponse.status === 429) {

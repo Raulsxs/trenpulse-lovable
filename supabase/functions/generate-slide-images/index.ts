@@ -367,7 +367,7 @@ ${brandColorHint}
               await new Promise(r => setTimeout(r, 2000));
             }
             const infBody = {
-              app: "google/gemini-3-1-flash-image-preview",
+              app: "google/gemini-3-1-flash-image-preview@7f5j281b",
               input: {
                 prompt: promptText,
                 aspect_ratio: aspectRatio,
