@@ -357,6 +357,16 @@ async function fetchInference(config: AIConfig, request: FetchAIRequest): Promis
 
   console.log(`[ai-gateway] inference.sh chat response: ${responseText.length} chars`);
 
+  // If inference.sh returns 200 but empty content, fallback to Google/Lovable
+  if (!responseText || responseText.trim().length === 0) {
+    console.warn("[ai-gateway] inference.sh returned empty response (200), trying fallback...");
+    try {
+      return fetchOpenAICompatible(getFallbackAIConfig(), request);
+    } catch {
+      return { ok: true, status: 200, choices: [{ message: { content: "" } }] };
+    }
+  }
+
   return {
     ok: true,
     status: 200,
