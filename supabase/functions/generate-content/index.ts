@@ -1035,8 +1035,8 @@ ${(contentType === "carousel" || contentType === "document") ? (isLinkedInDocume
       console.log(`[generate-content] calling AI model=${aiModel} attempt=${attempt + 1}/${maxRetries}`, Date.now() - t0, "ms");
 
       const abortCtrl = new AbortController();
-      // 30s timeout — must complete within Lovable's ~50s CPU limit (including retry + DB ops)
-      const aiTimeout = 30000;
+      // 60s timeout — inference.sh (minimax-m-25) takes ~30-35s for long prompts
+      const aiTimeout = 60000;
       const abortTimer = setTimeout(() => abortCtrl.abort(), aiTimeout);
 
       let response: Response;
@@ -1068,9 +1068,9 @@ ${(contentType === "carousel" || contentType === "document") ? (isLinkedInDocume
       } catch (err: any) {
         clearTimeout(abortTimer);
         if (err.name === "AbortError") {
-          console.error(`[generate-content] AI timeout after 30s, attempt`, attempt + 1);
+          console.error(`[generate-content] AI timeout after 60s, attempt`, attempt + 1);
           if (attempt < maxRetries - 1) continue;
-          throw new Error("AI timeout after 30s");
+          throw new Error("AI timeout after 60s");
         }
         throw err;
       }
