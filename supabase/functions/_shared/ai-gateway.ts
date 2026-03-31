@@ -325,11 +325,14 @@ async function fetchInference(config: AIConfig, request: FetchAIRequest): Promis
       stream: false,
       temperature: 0.7,
       max_tokens: 64000,
-      ...(images.length > 0 ? { images } : {}),
     },
   };
 
-  console.log(`[ai-gateway] inference.sh chat: app=${INFERENCE_CHAT_APP}, textLen=${text.length}, contextLen=${context.length}, images=${images.length}`);
+  // Note: minimax-m-25 does not support image inputs — images stripped for text chat
+  if (images.length > 0) {
+    console.log(`[ai-gateway] inference.sh chat: stripped ${images.length} images (text-only model)`);
+  }
+  console.log(`[ai-gateway] inference.sh chat: app=${INFERENCE_CHAT_APP}, textLen=${text.length}, contextLen=${context.length}`);
 
   const res = await fetch(config.url, {
     method: "POST",
