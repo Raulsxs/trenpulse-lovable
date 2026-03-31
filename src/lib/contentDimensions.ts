@@ -6,7 +6,7 @@
  * - Instagram post:      1080x1080 (1:1)
  * - Instagram story:     1080x1920 (9:16)
  * - Instagram carousel:  1080x1080 (1:1)
- * - LinkedIn post:       1200x627  (landscape 1.91:1)
+ * - LinkedIn post:       1200x1200 (1:1 square)
  * - LinkedIn carousel:   1080x1080 (1:1)
  * - LinkedIn document:   1080x1350 (4:5) — presentation slide format
  * - LinkedIn story:      1080x1920 (9:16)
@@ -22,7 +22,7 @@ export interface Dimensions {
 
 export function getContentDimensions(platform: string, contentType: string): Dimensions {
   if (platform === "linkedin") {
-    if (contentType === "post") return { width: 1200, height: 627 };
+    if (contentType === "post") return { width: 1200, height: 1200 };
     if (contentType === "document") return { width: 1080, height: 1350 }; // 4:5 presentation
     if (contentType === "story") return { width: 1080, height: 1920 };
     return { width: 1080, height: 1080 }; // carousel
@@ -39,8 +39,11 @@ export function isMultiSlide(contentType: string): boolean {
 
 /** Get the aspect ratio CSS string */
 export function getAspectRatio(platform: string, contentType: string): string {
-  if (platform === "linkedin" && (contentType === "post" || contentType === "article")) {
+  if (platform === "linkedin" && contentType === "article") {
     return "1200/627";
+  }
+  if (platform === "linkedin" && contentType === "post") {
+    return "1200/1200";
   }
   if (platform === "linkedin" && contentType === "document") return "1080/1350";
   if (contentType === "story") return "9/16";

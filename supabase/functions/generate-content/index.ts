@@ -918,7 +918,7 @@ NUNCA gere conteúdo genérico (frases motivacionais, citações) quando o usuá
 
     // ══════ USER PROMPT ══════
     const formatLabel = isLinkedIn
-      ? (contentType === "post" ? "post para LinkedIn (1 slide, 1200x627)" : contentType === "article" ? "artigo para LinkedIn (banner 1200x627 + texto longo)" : `documento profissional para LinkedIn com EXATAMENTE ${totalSlides} páginas (1080x1350 cada)`)
+      ? (contentType === "post" ? "post para LinkedIn (1 slide, 1200x1200)" : contentType === "article" ? "artigo para LinkedIn (banner 1200x627 + texto longo)" : `documento profissional para LinkedIn com EXATAMENTE ${totalSlides} páginas (1080x1350 cada)`)
       : (contentType === "post" ? "post para feed (1 slide, 1080x1350)" : contentType === "story" ? "story (1 slide, 1080x1920)" : `carrossel com EXATAMENTE ${totalSlides} slides (1080x1350 cada)`);
 
     const slideRolesStr = (contentType === "carousel" || contentType === "document")

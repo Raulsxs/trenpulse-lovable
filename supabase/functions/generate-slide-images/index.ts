@@ -323,20 +323,20 @@ Do NOT create a graphic design with large text. Create a PHOTOGRAPHIC SCENE abou
       if (INFERENCE_SH_KEY) {
         const aspectMap: Record<string, string> = {
           "1080x1080": "1:1",
-          "1200x627": "16:9",
+          "1200x1200": "1:1",
           "1080x1350": "4:5",
           "1080x1920": "9:16",
         };
         const isLinkedInPost = platform === "linkedin" && contentFormat === "post";
         const isLinkedInDoc = platform === "linkedin" && contentFormat === "document";
         const isStoryFormat = contentFormat === "story";
-        const dimKey = isLinkedInPost ? "1200x627" : isLinkedInDoc ? "1080x1350" : isStoryFormat ? "1080x1920" : "1080x1080";
+        const dimKey = isLinkedInPost ? "1200x1200" : isLinkedInDoc ? "1080x1350" : isStoryFormat ? "1080x1920" : "1080x1080";
         const aspectRatio = aspectMap[dimKey] || "1:1";
         const mode = illustrationMode ? "ILLUSTRATION" : "FULL-DESIGN";
         console.log(`[generate-slide-images] Using inference.sh for ${mode}: platform=${platform}, contentFormat=${contentFormat}, aspect=${aspectRatio}`);
 
         // Build prompt text
-        const dimLabel = isLinkedInPost ? "HORIZONTAL LANDSCAPE 16:9 (1200x627px)" : isLinkedInDoc ? "VERTICAL PORTRAIT 4:5 (1080x1350px)" : isStoryFormat ? "VERTICAL PORTRAIT 9:16 (1080x1920px)" : "SQUARE 1:1 (1080x1080px)";
+        const dimLabel = isLinkedInPost ? "SQUARE 1:1 (1200x1200px)" : isLinkedInDoc ? "VERTICAL PORTRAIT 4:5 (1080x1350px)" : isStoryFormat ? "VERTICAL PORTRAIT 9:16 (1080x1920px)" : "SQUARE 1:1 (1080x1080px)";
 
         let promptText: string;
         if (illustrationMode) {
@@ -606,9 +606,9 @@ function buildBackgroundOnlyPrompt(
   let aspectRatio: string;
   let orientation: string;
   if (isLinkedInPost) {
-    dimensions = "1200×627";
-    aspectRatio = "1.91:1";
-    orientation = "landscape";
+    dimensions = "1200×1200";
+    aspectRatio = "1:1";
+    orientation = "square";
   } else if (isLinkedInDoc) {
     dimensions = "1080×1350";
     aspectRatio = "4:5";
@@ -796,7 +796,7 @@ function buildPrompt(
   const isLinkedInPostFormat = platform === "linkedin" && contentFormat === "post";
   let orientation: string, aspectRatio: string, dimensions: string;
   if (isLinkedInPostFormat) {
-    orientation = "horizontal (landscape)"; aspectRatio = "1.91:1"; dimensions = "1200x627";
+    orientation = "quadrado (square)"; aspectRatio = "1:1"; dimensions = "1200x1200";
   } else if (isLinkedInDocFormat) {
     orientation = "vertical (portrait)"; aspectRatio = "4:5"; dimensions = "1080x1350";
   } else if (isStoryFormat) {
@@ -817,7 +817,7 @@ function buildPrompt(
 
   if (isLinkedInPost) {
     // LinkedIn Post — horizontal, professional, minimal text
-    formatDesignNote = `DESIGN: LinkedIn Post HORIZONTAL (1.91:1, 1200x627).
+    formatDesignNote = `DESIGN: LinkedIn Post SQUARE (1:1, 1200x1200).
 - Estilo corporativo, clean e profissional.
 - Headline GRANDE e BOLD centralizado.
 - Body curto abaixo do headline (se houver).

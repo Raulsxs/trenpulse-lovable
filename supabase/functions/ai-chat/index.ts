@@ -134,7 +134,7 @@ Responda em JSON: { "legivel": bool, "sobreposicao": bool, "relevante": bool, "s
 
 function resolveContentDimensions(contentType: string, platform: string = "instagram") {
   if (platform === "linkedin") {
-    if (contentType === "post") return { width: 1200, height: 627 };
+    if (contentType === "post") return { width: 1200, height: 1200 };
     if (contentType === "document") return { width: 1080, height: 1350 }; // 4:5 presentation
     if (contentType === "story") return { width: 1080, height: 1920 };
     return { width: 1080, height: 1080 }; // carousel

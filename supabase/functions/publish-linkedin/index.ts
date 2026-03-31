@@ -165,8 +165,8 @@ async function renderCompositesAndBuildPdf(
 
   // If text content exists, render composites
   if (hasTextContent && slides.length > 0) {
-    const dims = { width: 1080, height: contentType === "story" ? 1920 : contentType === "post" || contentType === "article" ? 627 : 1350 };
-    // LinkedIn post/article: 1200x627, document/carousel: 1080x1350
+    const dims = { width: 1080, height: contentType === "story" ? 1920 : contentType === "article" ? 627 : contentType === "post" ? 1200 : 1350 };
+    // LinkedIn post: 1200x1200, article: 1200x627, document/carousel: 1080x1350
     if (contentType === "post" || contentType === "article") {
       dims.width = 1200;
     }
