@@ -1099,6 +1099,7 @@ export type Database = {
           id: string
           image_layout_params: Json | null
           image_url: string | null
+          layout_analysis: string[] | null
           layout_preset: string | null
           post_id: string
           slide_index: number
@@ -1110,6 +1111,7 @@ export type Database = {
           id?: string
           image_layout_params?: Json | null
           image_url?: string | null
+          layout_analysis?: string[] | null
           layout_preset?: string | null
           post_id: string
           slide_index: number
@@ -1121,6 +1123,7 @@ export type Database = {
           id?: string
           image_layout_params?: Json | null
           image_url?: string | null
+          layout_analysis?: string[] | null
           layout_preset?: string | null
           post_id?: string
           slide_index?: number
