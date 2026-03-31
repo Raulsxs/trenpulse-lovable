@@ -35,6 +35,7 @@ interface AIConfig {
 const INFERENCE_CHAT_APP = "openrouter/minimax-m-25@4fjnhng9";
 const INFERENCE_IMAGE_APP = "google/gemini-2-5-flash-image@19ht2vsk";
 const INFERENCE_IMAGE_APP_PREMIUM = "google/gemini-3-1-flash-image-preview@7f5j281b";
+const INFERENCE_IMAGE_APP_FAST = "pruna/qwen-image-fast@1ve9kx83";
 
 /** Map OpenAI model names to inference.sh image apps */
 const INFERENCE_IMAGE_APP_MAP: Record<string, string> = {
@@ -388,8 +389,12 @@ async function fetchInference(config: AIConfig, request: FetchAIRequest): Promis
 // ── inference.sh image generation ──
 
 async function fetchInferenceImage(config: AIConfig, request: FetchAIRequest): Promise<FetchAIResponse> {
-  const prompt = extractPromptForImage(request.messages);
   const app = INFERENCE_IMAGE_APP_MAP[request.model] || INFERENCE_IMAGE_APP;
+  return fetchInferenceImageWithApp(config, request, app);
+}
+
+async function fetchInferenceImageWithApp(config: AIConfig, request: FetchAIRequest, app: string): Promise<FetchAIResponse> {
+  const prompt = extractPromptForImage(request.messages);
 
   const body: Record<string, unknown> = {
     app,
@@ -417,8 +422,19 @@ async function fetchInferenceImage(config: AIConfig, request: FetchAIRequest): P
     const errText = await res.text();
     console.error(`[ai-gateway] inference.sh image error [${res.status}]: ${errText.substring(0, 300)}`);
 
+    // Try qwen-image-fast as quick fallback before Google/Lovable
+    if (app !== INFERENCE_IMAGE_APP_FAST) {
+      console.warn("[ai-gateway] inference.sh image failed, trying qwen-image-fast...");
+      try {
+        const qwenResult = await fetchInferenceImageWithApp(config, request, INFERENCE_IMAGE_APP_FAST);
+        if (qwenResult.ok) return qwenResult;
+      } catch {
+        console.warn("[ai-gateway] qwen-image-fast also failed");
+      }
+    }
+
     // Fallback to Google/Lovable for image generation
-    console.warn("[ai-gateway] inference.sh image failed, trying fallback...");
+    console.warn("[ai-gateway] inference.sh image failed, trying Google/Lovable fallback...");
     try {
       return fetchOpenAICompatible(getFallbackAIConfig(), request);
     } catch {
@@ -429,7 +445,10 @@ async function fetchInferenceImage(config: AIConfig, request: FetchAIRequest): P
   const data = await res.json();
   // With wait:true, data is in data.data.output
   const output = data.data?.output || data.output || {};
-  const images = output.images || data.images || [];
+  // Gemini returns images[] array, qwen returns single image string
+  const rawImages = output.images || data.images || [];
+  const singleImage = output.image || data.image;
+  const images = rawImages.length > 0 ? rawImages : (singleImage ? [singleImage] : []);
   const description = output.description || data.description || "";
 
   console.log(`[ai-gateway] inference.sh image response: ${images.length} images, desc=${description.length} chars`);

@@ -1744,8 +1744,7 @@ export default function ChatWindow() {
                     const stepOrder: Record<string, string> = {
                       content_type: "platform",
                       brand: hasSourcePreset ? "platform" : "content_type",
-                      content_style: "brand",
-                      source_input: "content_style",
+                      source_input: "brand",
                       source_link: "source_input",
                       source_write: "source_input",
                       suggestions_pending: "source_input",

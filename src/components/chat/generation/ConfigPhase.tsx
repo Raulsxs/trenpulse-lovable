@@ -103,10 +103,7 @@ export default function ConfigPhase({ configStep, flow, userId, onSelect, onCanc
 
           setBrands(brandsWithThumbs);
           setLoading(false);
-          // Auto-select if single brand — pass full brand object with metadata
-          if (brandsWithThumbs.length === 1) {
-            onSelect("brand_auto", brandsWithThumbs[0]);
-          }
+          // BUG-005/006: Do NOT auto-select single brand — always show UI with "Sem marca" option
         });
     }
   }, [configStep, userId]);

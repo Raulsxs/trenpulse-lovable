@@ -73,6 +73,7 @@ export default function ActionCard({
   // Slide data for client-side rendering (same component as studio)
   const [slideData, setSlideData] = useState<any>(null);
   const [brandSnapshot, setBrandSnapshot] = useState<any>(null);
+  const [generationMetadata, setGenerationMetadata] = useState<any>(null);
   const [composedImageUrls, setComposedImageUrls] = useState<string[] | null>(null);
   const [isPolling, setIsPolling] = useState(false);
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
@@ -130,7 +131,7 @@ export default function ActionCard({
       try {
         const { data } = await supabase
           .from("generated_contents")
-          .select("slides, brand_snapshot, platform, content_type, created_at, image_urls")
+          .select("slides, brand_snapshot, platform, content_type, created_at, image_urls, generation_metadata")
           .eq("id", contentId)
           .maybeSingle();
 
@@ -153,6 +154,7 @@ export default function ActionCard({
           // Always update slideData with latest
           setSlideData(slide);
           setBrandSnapshot(data.brand_snapshot);
+          if (data.generation_metadata) setGenerationMetadata(data.generation_metadata);
           if (data.platform) setResolvedPlatform(data.platform);
           const fetchedImageUrls = data.image_urls as string[] | null;
           if (fetchedImageUrls?.length) setComposedImageUrls(fetchedImageUrls);
@@ -204,6 +206,8 @@ export default function ActionCard({
         if (slide) {
           setSlideData(slide);
           setBrandSnapshot((payload.new as any)?.brand_snapshot);
+          const newMeta = (payload.new as any)?.generation_metadata;
+          if (newMeta) setGenerationMetadata(newMeta);
           const newImageUrls = (payload.new as any)?.image_urls as string[] | null;
           if (newImageUrls?.length) setComposedImageUrls(newImageUrls);
           if (hasRenderableImage(slide, newImageUrls || undefined)) {
@@ -565,14 +569,16 @@ export default function ActionCard({
                       alt=""
                       style={{ width: containerWidth, height: dims.height * scale, objectFit: "cover" }}
                     />
-                  ) : (
+                  ) : (() => {
+                    const isIllustrationTitled = generationMetadata?.visual_style === "ai_illustration_titled";
+                    return (
                     <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: dims.width, height: dims.height }}>
                       <SlideBgOverlayRenderer
                         backgroundImageUrl={renderImageUrl}
                         overlay={{
                           headline: slideData.overlay?.headline || slideData.headline,
-                          body: slideData.overlay?.body || slideData.body,
-                          bullets: slideData.overlay?.bullets || slideData.bullets,
+                          body: isIllustrationTitled ? "" : (slideData.overlay?.body || slideData.body),
+                          bullets: isIllustrationTitled ? [] : (slideData.overlay?.bullets || slideData.bullets),
                           footer: slideData.overlay?.footer,
                         }}
                         overlayStyle={slideData.overlay_style}
@@ -587,7 +593,8 @@ export default function ActionCard({
                         } : null}
                       />
                     </div>
-                  )}
+                    );
+                  })()}
                 </div>
               );
             })() : isPolling || isRegeneratingImage ? (

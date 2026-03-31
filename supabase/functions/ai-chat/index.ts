@@ -356,6 +356,7 @@ async function renderCompositeAndUpdateContent(opts: {
           vision_score: visionResult.score,
           vision_sugestao: visionResult.sugestao,
           vision_low_quality: isLowQuality,
+          ...(visualStyle ? { visual_style: visualStyle } : {}),
         };
         await svc.from("generated_contents").update(metaUpdate).eq("id", contentId);
       }
@@ -923,6 +924,46 @@ Mensagem do usuário: "${message}"`;
         let mappedContentStyle: string | null = styleMap[(contentStyle || "").toLowerCase()] || contentStyle || null;
         console.log("[ai-chat] contentStyle:", mappedContentStyle, "from generationParams:", contentStyle);
 
+        // ── Fetch article content from URL (BUG-002 fix) ──
+        let articleContent = "";
+        if (sourceUrl && sourceUrl.length > 10) {
+          let resolvedUrl = sourceUrl;
+          try {
+            const urlObj = new URL(sourceUrl);
+            if (urlObj.hostname.includes("google.com") && urlObj.pathname === "/url" && urlObj.searchParams.get("q")) {
+              resolvedUrl = urlObj.searchParams.get("q")!;
+            }
+          } catch { }
+
+          try {
+            const articleResp = await fetch(resolvedUrl, {
+              headers: { "User-Agent": "TrendPulse/1.0 (content-generator)" },
+              redirect: "follow",
+            });
+            if (articleResp.ok) {
+              const html = await articleResp.text();
+              const textContent = html
+                .replace(/<script[\s\S]*?<\/script>/gi, "")
+                .replace(/<style[\s\S]*?<\/style>/gi, "")
+                .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+                .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+                .replace(/<header[\s\S]*?<\/header>/gi, "")
+                .replace(/<[^>]+>/g, " ")
+                .replace(/&nbsp;/g, " ")
+                .replace(/&amp;/g, "&")
+                .replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">")
+                .replace(/&quot;/g, '"')
+                .replace(/\s+/g, " ")
+                .trim();
+              articleContent = textContent.substring(0, 4000);
+              console.log("[ai-chat] GERAR_CONTEUDO fetched article, length:", articleContent.length);
+            }
+          } catch (e: any) {
+            console.error("[ai-chat] GERAR_CONTEUDO article fetch error:", e?.message);
+          }
+        }
+
         // ── AI-based extraction of user message ──
         let extractedContent = sourceText || "";
         let extractedAuthor: string | null = null;
@@ -1011,7 +1052,7 @@ Mensagem do usuário: "${message}"`;
             source_url: sourceUrl || null,
             theme: niche,
             keywords: topics,
-            fullContent: extractedContent || null,
+            fullContent: articleContent || extractedContent || null,
           },
           contentType: mappedContentType,
           contentStyle: mappedContentStyle,
@@ -1309,6 +1350,46 @@ Mensagem do usuário: "${message}"`;
             handle,
           });
 
+          // ── Fetch article content from URL (BUG-004 fix) ──
+          let articleContent = "";
+          if (sourceUrl && sourceUrl.length > 10) {
+            let resolvedUrl = sourceUrl;
+            try {
+              const urlObj = new URL(sourceUrl);
+              if (urlObj.hostname.includes("google.com") && urlObj.pathname === "/url" && urlObj.searchParams.get("q")) {
+                resolvedUrl = urlObj.searchParams.get("q")!;
+              }
+            } catch { }
+
+            try {
+              const articleResp = await fetch(resolvedUrl, {
+                headers: { "User-Agent": "TrendPulse/1.0 (content-generator)" },
+                redirect: "follow",
+              });
+              if (articleResp.ok) {
+                const html = await articleResp.text();
+                const textContent = html
+                  .replace(/<script[\s\S]*?<\/script>/gi, "")
+                  .replace(/<style[\s\S]*?<\/style>/gi, "")
+                  .replace(/<nav[\s\S]*?<\/nav>/gi, "")
+                  .replace(/<footer[\s\S]*?<\/footer>/gi, "")
+                  .replace(/<header[\s\S]*?<\/header>/gi, "")
+                  .replace(/<[^>]+>/g, " ")
+                  .replace(/&nbsp;/g, " ")
+                  .replace(/&amp;/g, "&")
+                  .replace(/&lt;/g, "<")
+                  .replace(/&gt;/g, ">")
+                  .replace(/&quot;/g, '"')
+                  .replace(/\s+/g, " ")
+                  .trim();
+                articleContent = textContent.substring(0, 4000);
+                console.log("[ai-chat] GERAR_POST/CARROSSEL/STORY fetched article, length:", articleContent.length);
+              }
+            } catch (e: any) {
+              console.error("[ai-chat] GERAR_POST/CARROSSEL/STORY article fetch error:", e?.message);
+            }
+          }
+
           const sourceText = sourceUrl
             ? `Crie conteúdo baseado neste link: ${sourceUrl}\n\nContexto do usuário: nicho ${niche}. Tom: ${voice}. Temas preferidos: ${topics.join(", ")}`
             : `${message}\n\nContexto do usuário: nicho ${niche}. Tom: ${voice}. Temas preferidos: ${topics.join(", ")}`;
@@ -1316,11 +1397,11 @@ Mensagem do usuário: "${message}"`;
           const genBody: any = {
             trend: {
               title: sourceUrl ? "Conteúdo baseado em link" : message.substring(0, 100),
-              description: sourceText,
+              description: articleContent || sourceText,
               source_url: sourceUrl || null,
               theme: niche,
               keywords: topics,
-              fullContent: sourceUrl ? null : sourceText,
+              fullContent: articleContent || (sourceUrl ? null : sourceText),
             },
             contentType,
             visualMode: brandId ? "brand_guided" : "template_only",
@@ -2359,7 +2440,7 @@ REGRAS:
           // inference.sh (minimax-m-25) takes ~30-70s for text generation
           // Documents/carousels need even more (multiple slides)
           const isHeavyContent = mappedCTInit === "document" || mappedCTInit === "carousel";
-          const genTimeout = isHeavyContent ? 120000 : 90000;
+          const genTimeout = isHeavyContent ? 180000 : 90000;
           const abortTimer = setTimeout(() => abortCtrl.abort(), genTimeout);
           let genResp: Response;
           try {
@@ -2491,7 +2572,7 @@ REGRAS:
               }
 
               // 6. Link back to generated_contents
-              await svcInit.from("generated_contents").update({ generation_metadata: { post_id: postIdInit, project_id: projInit.id } }).eq("id", contentIdInit);
+              await svcInit.from("generated_contents").update({ generation_metadata: { post_id: postIdInit, project_id: projInit.id, visual_style: effectiveVisualStyle } }).eq("id", contentIdInit);
 
               console.log('[INICIAR_GERACAO] TOTAL', Date.now()-t0Init, 'ms — returning:', JSON.stringify({ contentId: contentIdInit, postId: postIdInit, slidesCount: dbSlides.length }));
               replyOverride = "Configuração concluída! Gerando opções visuais...";

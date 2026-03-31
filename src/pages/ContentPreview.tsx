@@ -1272,6 +1272,7 @@ const ContentPreview = () => {
 
               // Priority 1: BG Overlay mode OR any slide with text
               if (hasBgOverlay || hasText) {
+                const isIllustrationTitled = content?.generation_metadata?.visual_style === "ai_illustration_titled";
                 return renderFrame(
                   <div className="absolute inset-0" style={{
                     transform: `scale(${scaleRatio})`,
@@ -1283,8 +1284,8 @@ const ContentPreview = () => {
                       backgroundImageUrl={currentSlideData.background_image_url}
                       overlay={{
                         headline: currentSlideData.headline,
-                        body: currentSlideData.body,
-                        bullets: currentSlideData.bullets,
+                        body: isIllustrationTitled ? "" : currentSlideData.body,
+                        bullets: isIllustrationTitled ? [] : currentSlideData.bullets,
                       }}
                       overlayStyle={currentSlideData.overlay_style}
                       overlayPositions={currentSlideData.overlay_positions}
