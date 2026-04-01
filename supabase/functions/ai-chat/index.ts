@@ -268,6 +268,17 @@ async function renderCompositeAndUpdateContent(opts: {
       }));
     }
 
+    // photo_overlay: only headline (impact phrase), no body/bullets — clean photo with text at bottom
+    if (visualStyle === "photo_overlay") {
+      console.log(`${logPrefix} photo_overlay: stripping body/bullets — headline only for clean photo layout`);
+      enrichedSlides = enrichedSlides.map((s: any) => ({
+        ...s,
+        body: "",
+        bullets: [],
+        overlay: { ...(s.overlay || {}), body: "", bullets: [], footer: "" },
+      }));
+    }
+
     // Pre-call diagnostic
     console.log(`${logPrefix} sending to render-slide-image:`, JSON.stringify({
       slidesCount: enrichedSlides.length,
@@ -298,6 +309,7 @@ async function renderCompositeAndUpdateContent(opts: {
         dimensions: resolveContentDimensions(contentType, platform),
         platform: platform || "instagram",
         content_type: contentType || "post",
+        visual_style: visualStyle || null,
       }),
     });
     clearTimeout(renderTimer);
@@ -850,7 +862,7 @@ Mensagem do usuário: "${message}"`;
           break;
         }
 
-        const { contentType, contentStyle, slideCount, backgroundMode, templateId, sourceUrl, sourceText, uploadedImageUrl, platform: gcPlatform } = generationParams;
+        const { contentType, contentStyle, slideCount, backgroundMode, templateId, sourceUrl, sourceText, uploadedImageUrl, platform: gcPlatform, visualStyle: gcVisualStyle } = generationParams;
 
         // Resolve brand: use provided brandId, or fallback to user's preferred recent brand
         let resolvedBrandId = generationParams.brandId || null;
@@ -1028,6 +1040,11 @@ Mensagem do usuário: "${message}"`;
           if (extractedAuthor) {
             briefingNotes += ` Autor: ${extractedAuthor}`;
           }
+        }
+
+        // photo_overlay: instruct Gemini to generate only a strong, short headline
+        if (gcVisualStyle === "photo_overlay") {
+          briefingNotes += `\nMODO FOTO PESSOAL: A imagem de fundo será uma foto pessoal/profissional do usuário. Gere APENAS um headline forte e curto (máx 80 caracteres) — uma frase de impacto que ficará sobreposta na parte inferior da foto. NÃO gere body, bullets ou footer. O headline deve ser a única frase visível na imagem.`;
         }
 
         // Determine visual mode — prefer explicit from client, then infer
@@ -2410,7 +2427,12 @@ REGRAS:
         const nicheInitVal = ctxInit.business_niche || "geral";
         const voiceInit = ctxInit.brand_voice || "natural";
         const topicsInit = ctxInit.content_topics || [];
-        const briefingInit = buildQualityBriefing({ niche: nicheInitVal, voice: voiceInit, topics: topicsInit, sourceUrl: sourceUrl || undefined });
+        let briefingInit = buildQualityBriefing({ niche: nicheInitVal, voice: voiceInit, topics: topicsInit, sourceUrl: sourceUrl || undefined });
+
+        // photo_overlay: instruct Gemini to generate only a strong, short headline
+        if (effectiveVisualStyle === "photo_overlay") {
+          briefingInit += `\nMODO FOTO PESSOAL: A imagem de fundo será uma foto pessoal/profissional do usuário. Gere APENAS um headline forte e curto (máx 80 caracteres) — uma frase de impacto que ficará sobreposta na parte inferior da foto. NÃO gere body, bullets ou footer. O headline deve ser a única frase visível na imagem.`;
+        }
 
         // Fetch user's secondary languages for bilingual captions
         let userSecondaryLanguages: string[] = [];

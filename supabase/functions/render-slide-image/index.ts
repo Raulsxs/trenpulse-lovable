@@ -67,6 +67,7 @@ function buildSlideElement(
   bgSrc?: string,
   brandSnapshot?: Record<string, any> | null,
   isLinkedInDocument?: boolean,
+  isPhotoOverlay?: boolean,
 ) {
   const overlay = slide.overlay || {};
   const overlayStyle = slide.overlay_style || {};
@@ -84,7 +85,7 @@ function buildSlideElement(
   const isVertical = h > w; // story (1080x1920) or document
   const formatFontMultiplier = isVertical ? 1.35 : 1;
 
-  const defaultHeadlineSize = isFirstSlide ? 52 : 44;
+  const defaultHeadlineSize = isPhotoOverlay ? 56 : (isFirstSlide ? 52 : 44);
   const headlineFontSize = (overlayStyle.headline_font_size || defaultHeadlineSize) * fontScale * formatFontMultiplier;
 
   const baseBodyFontSize = (overlayStyle.body_font_size || 26) * fontScale * formatFontMultiplier;
@@ -129,6 +130,13 @@ function buildSlideElement(
     footer:   overlayPositions.footer   || defaults.footer,
   };
 
+  // photo_overlay: override headline to bottom area (lower third layout)
+  if (isPhotoOverlay) {
+    const isVertical = h > w;
+    pos.headline = { x: 6, y: isVertical ? 72 : 65 };
+    pos.footer = { x: 6, y: isVertical ? 92 : 90 };
+  }
+
   // Helper: create absolutely positioned text block with safe padding
   // NOTE: backgroundColor "transparent" is explicit to prevent Satori rendering a white box
   const posBlock = (position: { x: number; y: number }, blockMaxWidth: number, children: any) =>
@@ -168,8 +176,24 @@ function buildSlideElement(
     );
   }
 
-  // Scrim gradient — LinkedIn documents use light style, others use dark
-  if (isLinkedInDocument) {
+  // Scrim gradient — photo_overlay uses "lower third" (clean top, dark bottom),
+  // LinkedIn documents use light style, others use full dark scrim
+  if (isPhotoOverlay) {
+    // "Lower third" layout: photo stays clean on top, gradient only at bottom for text
+    children.push(
+      React.createElement("div", {
+        style: {
+          position: "absolute",
+          top: 0,
+          left: 0,
+          width: w,
+          height: h,
+          backgroundImage:
+            "linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.0) 45%, rgba(0,0,0,0.25) 65%, rgba(0,0,0,0.75) 100%)",
+        },
+      }),
+    );
+  } else if (isLinkedInDocument) {
     // Light professional style: subtle white overlay for readability on light backgrounds
     children.push(
       React.createElement("div", {
@@ -426,10 +450,11 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { slides, brand_snapshot, content_id, dimensions, slide_offset, platform, content_type } = await req.json();
+    const { slides, brand_snapshot, content_id, dimensions, slide_offset, platform, content_type, visual_style } = await req.json();
     const w = Math.min(Math.max(Number(dimensions?.width) || 1080, 720), 1200);
     const h = Math.min(Math.max(Number(dimensions?.height) || 1080, 627), 1920);
     const isLinkedInDocument = platform === "linkedin" && content_type === "document";
+    const isPhotoOverlay = visual_style === "photo_overlay";
     const offset = Number(slide_offset) || 0;
 
     if (!slides || !Array.isArray(slides) || slides.length === 0) {
@@ -455,7 +480,7 @@ Deno.serve(async (req) => {
       const bgSrc =
         slide.background_image_url || slide.image_url || slide.previewImage;
 
-      const element = buildSlideElement(slide, w, h, bgSrc, brand_snapshot, isLinkedInDocument);
+      const element = buildSlideElement(slide, w, h, bgSrc, brand_snapshot, isLinkedInDocument, isPhotoOverlay);
       const imageResponse = new ImageResponse(element, {
         width: w,
         height: h,
