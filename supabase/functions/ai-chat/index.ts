@@ -510,6 +510,12 @@ async function runStudioImagePipeline(opts: {
           templateSetId: defaultTsId,
           backgroundOnly: true,
           platform: slidePlatform,
+          allSlides: gcSlidesArr.map((s: any, i: number) => ({
+            role: i === 0 ? "cover" : (i === dbSlides.length - 1 ? "cta" : "content"),
+            headline: s.headline || "",
+            image_headline: s.image_headline || "",
+            body: s.body || "",
+          })),
         });
 
         if (bgResult.ok) {
@@ -2909,6 +2915,12 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
                 backgroundOnly: pipeBackgroundOnly,
                 illustrationMode: pipeVisualStyle === "ai_illustration" || pipeVisualStyle === "ai_illustration_titled",
                 platform: resolvedPlatform,
+                allSlides: allSlideContent.map((s: any, i: number) => ({
+                  role: i === 0 ? "cover" : (i === totalSlidesInContent - 1 ? "cta" : "content"),
+                  headline: s.headline || "",
+                  image_headline: s.image_headline || "",
+                  body: s.body || "",
+                })),
               }, 90000); // 90s — inference.sh retries + Gateway fallback need time
 
               const bgUrl = bgResult.data?.imageUrl || bgResult.data?.bgImageUrl;

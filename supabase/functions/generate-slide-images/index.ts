@@ -59,6 +59,7 @@ serve(async (req) => {
       backgroundOnly, // when true, generate background without any text
       illustrationMode, // when true, generate illustrative scene (not text-heavy design)
       platform: requestPlatform,
+      allSlides: requestAllSlides, // all slides data for narrative context in carousels
     } = await req.json();
     const platform = requestPlatform || "instagram";
 
@@ -115,7 +116,7 @@ serve(async (req) => {
       // Choose prompt based on mode
       const prompt = isBgOnly
         ? buildBackgroundOnlyPrompt(slide, slideIndex || 0, totalSlides || 1, null, contentFormat, platform, null, null, galleryStyle.name, language)
-        : buildPrompt(slide, slideIndex || 0, totalSlides || 1, null, undefined, undefined, contentFormat, platform, null, null, galleryStyle.name, language, null);
+        : buildPrompt(slide, slideIndex || 0, totalSlides || 1, null, undefined, undefined, contentFormat, platform, null, null, galleryStyle.name, language, null, requestAllSlides);
       contentParts.push({ type: "text", text: prompt });
 
       const result = await generateImage(contentParts);
@@ -308,7 +309,7 @@ Do NOT create a graphic design with large text. Create a PHOTOGRAPHIC SCENE abou
     } else if (isBgOnly) {
       prompt = buildBackgroundOnlyPrompt(slide, slideIndex || 0, totalSlides || 1, brandInfo, contentFormat, platform, rules, visualSignature, templateSetName, language, brandInfo?.visual_preferences);
     } else {
-      prompt = buildPrompt(slide, slideIndex || 0, totalSlides || 1, brandInfo, undefined, undefined, contentFormat, platform, rules, visualSignature, templateSetName, language, brandInfo?.visual_preferences);
+      prompt = buildPrompt(slide, slideIndex || 0, totalSlides || 1, brandInfo, undefined, undefined, contentFormat, platform, rules, visualSignature, templateSetName, language, brandInfo?.visual_preferences, requestAllSlides);
     }
     contentParts.push({ type: "text", text: prompt });
 
@@ -722,6 +723,7 @@ function buildPrompt(
   templateSetName?: string | null,
   language?: string,
   visualPreferences?: any,
+  allSlides?: any[],
 ): string {
   const headline = slide.headline || "";
   const body = slide.body || "";
@@ -734,8 +736,8 @@ function buildPrompt(
   // Use full headline — NEVER truncate. AI must fit it by reducing font size.
   const imageHeadline = slide.image_headline || headline;
 
-  // Body in image: only short body for Instagram, never for LinkedIn
-  const imageBody = isLinkedInPost ? "" : (body.length > 80 ? "" : body);
+  // For full-design mode, include body text — AI model decides layout/font size
+  const imageBody = isLinkedInPost ? "" : body;
 
   const articleSnippet = articleContent ? sanitizeText(articleContent.substring(0, 400)) : "";
 
@@ -879,11 +881,28 @@ ${carouselRoles[role] || carouselRoles.content}
     textBlock = `---HEADLINE---\n${imageHeadline}\n${imageBody ? `---BODY---\n${imageBody}\n` : ""}---FIM DO TEXTO---`;
   }
 
+  // Add narrative context for carousel/document slides
+  let narrativeContext = "";
+  if (allSlides && allSlides.length > 1) {
+    const slidesSummary = allSlides.map((s: any, i: number) => {
+      const role = s.role || (i === 0 ? "capa" : i === allSlides.length - 1 ? "fechamento" : "conteúdo");
+      const h = s.image_headline || s.headline || "";
+      const marker = i === slideIndex ? "→ VOCÊ ESTÁ GERANDO ESTE" : "";
+      return `  Slide ${i + 1} (${role}): "${h}" ${marker}`;
+    }).join("\n");
+
+    narrativeContext = `\nNARRATIVA COMPLETA DO CARROSSEL (para contexto e continuidade):
+${slidesSummary}
+
+IMPORTANTE: Este slide deve fazer sentido como CONTINUAÇÃO do anterior e PREPARAÇÃO para o próximo.
+O carrossel conta uma HISTÓRIA — cada slide revela uma nova camada da narrativa.\n`;
+  }
+
   return `Crie ${totalSlides > 1 ? `o slide ${slideIndex + 1} de ${totalSlides} de um ${formatLabel}` : `um ${formatLabel}`} para ${platformLabel}, seguindo EXATAMENTE o mesmo estilo visual das imagens de referência anexadas.
 
 ${formatDesignNote}
 ${brandContext}
-
+${narrativeContext}
 TEXTO DA IMAGEM (idioma: ${lang}):
 A imagem deve conter APENAS este texto — COMPLETO e SEM CORTES:
 

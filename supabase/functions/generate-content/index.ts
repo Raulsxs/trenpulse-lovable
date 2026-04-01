@@ -980,6 +980,17 @@ ${isQuoteStyle ? `- A headline do cover DEVE SER EXATAMENTE: "${trend.title}"
 - PROIBIDO gerar conteúdo genérico que poderia ser sobre qualquer artigo. O conteúdo DEVE ser específico a ESTA fonte.
 - image_headline: versão CURTA e IMPACTANTE do headline (6-10 palavras). Deve funcionar como chamada visual na imagem.`}
 
+${(contentType === "carousel" || contentType === "document") ? `
+NARRATIVA DO CARROSSEL (PRIORIDADE MÁXIMA):
+- Cada slide deve contar UMA PARTE de uma história completa sobre o artigo.
+- O leitor deve sentir PROGRESSÃO ao deslizar: gancho → contexto → aprofundamento → conclusão.
+- PROIBIDO repetir a mesma informação em slides diferentes.
+- Cada slide deve ser AUTO-CONTIDO (fazer sentido sozinho) mas criar CURIOSIDADE para o próximo.
+- O headline de cada slide deve ser uma AFIRMAÇÃO COMPLETA e ESPECÍFICA (não uma pergunta vaga).
+- O body de cada slide deve ter entre 80-160 chars com informação DENSA e CONCRETA.
+- NUNCA deixe um slide com headline mas sem body — todo slide precisa de conteúdo substantivo.
+- Pense como um EDITOR DE REVISTA: cada slide é uma página que entrega valor e convida a virar.` : ""}
+
 Retorne EXATAMENTE este JSON (sem markdown, sem backticks):
 {
   "title": "${isQuoteStyle ? trend.title : 'título curto e chamativo (máx 60 chars)'}",
@@ -1002,7 +1013,7 @@ ${styleConfig.captionGuide}` : `legenda completa. ${styleConfig.captionGuide}`}"
       "template": "${templatePool[0]}",
       "headline": "${isQuoteStyle ? trend.title : `${textLimits.headline[0]}-${textLimits.headline[1]} chars, gancho criativo`}",
       "image_headline": "${isQuoteStyle ? trend.title : '6-8 palavras no máximo — versão CURTA e IMPACTANTE do headline para usar como thumbnail visual na imagem. Deve capturar a essência em poucas palavras.'}",
-      "body": "${isQuoteStyle ? '' : isLinkedInDocument ? '150-400 chars, análise profunda com dados' : `${textLimits.body[0]}-${textLimits.body[1]} chars, texto denso`}",
+      "body": "${isQuoteStyle ? '' : isLinkedInDocument ? '150-400 chars, análise profunda com dados — OBRIGATÓRIO em TODAS as páginas' : (contentType === 'carousel' ? `${textLimits.body[0]}-${textLimits.body[1]} chars, texto denso — OBRIGATÓRIO: cada slide DEVE ter body com informação substantiva, NUNCA deixe vazio` : `${textLimits.body[0]}-${textLimits.body[1]} chars, texto denso`)}",
       "bullets": [${isQuoteStyle ? '' : '"opcional: items acionáveis para slides insight/context"'}],${isLinkedInDocument ? `
       "slide_title": "subtítulo curto 20-40 chars (identifica o tema da página)",
       "key_stat": "número/porcentagem proeminente (opcional, usado em slides data/insight)",` : ''}
@@ -1148,6 +1159,23 @@ ${(contentType === "carousel" || contentType === "document") ? (isLinkedInDocume
     }
 
     if (!generated) throw new Error("Failed to generate valid JSON after retries");
+
+    // ══════ VALIDATE CAROUSEL SLIDE CONTENT ══════
+    if ((contentType === "carousel" || contentType === "document") && generated.slides) {
+      for (let i = 0; i < generated.slides.length; i++) {
+        const s = generated.slides[i];
+        // Ensure body is not empty for content slides
+        if (s.role !== "cta" && (!s.body || s.body.length < 20)) {
+          console.warn(`[generate-content] Slide ${i} has weak body (${(s.body || "").length} chars), enriching...`);
+          if (!s.body && s.bullets?.length > 0) {
+            // Convert bullets to body if body is missing
+            s.body = s.bullets.slice(0, 2).join(". ") + ".";
+          } else if (!s.body) {
+            s.body = s.headline ? `Descubra mais sobre: ${s.headline}` : "";
+          }
+        }
+      }
+    }
 
     // ══════ POST-PROCESS SLIDES ══════
     let processedSlides = (generated.slides || []).map((slide: any, i: number) => {
