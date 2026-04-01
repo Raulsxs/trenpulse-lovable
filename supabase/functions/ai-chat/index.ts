@@ -572,7 +572,7 @@ async function runStudioImagePipeline(opts: {
     if (selectedImages?.length) {
       const { data: content } = await svc
         .from("generated_contents")
-        .select("slides, brand_snapshot, content_type, platform")
+        .select("slides, brand_snapshot, content_type, platform, generation_metadata")
         .eq("id", contentId)
         .single();
 
@@ -627,6 +627,7 @@ async function runStudioImagePipeline(opts: {
           platform: content.platform || "instagram",
           logPrefix: "[ai-chat:pipeline]",
           lovableApiKey,
+          visualStyle: (content?.generation_metadata as any)?.visual_style || undefined,
         });
       }
     } else {
@@ -1249,7 +1250,7 @@ Mensagem do usuário: "${message}"`;
 
                         // Render composite images (text + background) and overwrite image_urls
                         const { data: gcForRender } = await svc.from("generated_contents")
-                          .select("brand_snapshot, content_type")
+                          .select("brand_snapshot, content_type, generation_metadata")
                           .eq("id", contentId)
                           .single();
 
@@ -1265,6 +1266,7 @@ Mensagem do usuário: "${message}"`;
                           platform: gcPlatform || "instagram",
                           logPrefix: "[ai-chat]",
                           lovableApiKey,
+                          visualStyle: (gcForRender?.generation_metadata as any)?.visual_style || gcVisualStyle || undefined,
                         });
                       }
                     }
@@ -1494,6 +1496,7 @@ Mensagem do usuário: "${message}"`;
                   slides: genSlides2,
                   brandId,
                   contentType,
+                  visualStyle: generationParams?.visualStyle || undefined,
                 });
               }
 
@@ -1675,6 +1678,7 @@ Mantenha o texto curto e impactante para Instagram. Se o usuário não especific
             platform: (gc as any).platform || "instagram",
             logPrefix: "[ai-chat:edit]",
             lovableApiKey,
+            visualStyle: (gc.generation_metadata as any)?.visual_style || undefined,
           });
 
           replyOverride = `✏️ Texto editado!\n\n**${newHeadline}**\n\nConfira abaixo 👇`;
@@ -2758,7 +2762,7 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
         const svcComp = createClient(supabaseUrl, serviceKeyComp);
 
         // Update generated_contents slides with approved backgrounds and texts
-        const { data: gcComp } = await svcComp.from("generated_contents").select("slides, brand_snapshot, content_type, platform").eq("id", compContentId).single();
+        const { data: gcComp } = await svcComp.from("generated_contents").select("slides, brand_snapshot, content_type, platform, generation_metadata").eq("id", compContentId).single();
         const existingSlides = (gcComp?.slides as any[]) || [];
 
         const updatedSlides = existingSlides.map((s: any, i: number) => {
@@ -2776,6 +2780,7 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
           svc: svcComp, supabaseUrl, authHeader: authHeader!, supabaseAnonKey,
           contentId: compContentId, slides: updatedSlides, brandSnapshot: gcComp?.brand_snapshot,
           contentType: gcComp?.content_type || "post", platform: gcComp?.platform || "instagram", logPrefix: "[COMPOR_SLIDES]", lovableApiKey,
+          visualStyle: (gcComp?.generation_metadata as any)?.visual_style || undefined,
         });
 
         actionResult = { composite_urls: compositeResult || [] };
@@ -3220,7 +3225,7 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
               // Render composite (text overlay on new background)
               const { data: gcForComposite } = await svc
                 .from("generated_contents")
-                .select("slides, brand_snapshot, content_type, platform")
+                .select("slides, brand_snapshot, content_type, platform, generation_metadata")
                 .eq("id", targetContentId)
                 .single();
               if (gcForComposite?.slides) {
@@ -3232,6 +3237,7 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
                   contentType: gcForComposite.content_type || "post",
                   platform: gcForComposite.platform || "instagram",
                   logPrefix: "[REGENERAR_IMAGEM]",
+                  visualStyle: (gcForComposite?.generation_metadata as any)?.visual_style || undefined,
                 });
               }
 
