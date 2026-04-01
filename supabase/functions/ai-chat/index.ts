@@ -159,15 +159,21 @@ async function renderCompositeAndUpdateContent(opts: {
   lovableApiKey?: string;
   visualStyle?: string;
 }) {
-  const { svc, supabaseUrl, authHeader, supabaseAnonKey, contentId, slides, brandSnapshot, contentType, platform, logPrefix, niche, lovableApiKey: apiKey, visualStyle } = opts;
+  const { svc, supabaseUrl, authHeader, supabaseAnonKey, contentId, slides, brandSnapshot, contentType, platform, logPrefix, niche, lovableApiKey: apiKey, visualStyle: explicitVisualStyle } = opts;
 
   try {
     // Enrich slides with image_layout_params from DB (set by analyze-image-layout)
     let enrichedSlides = slides;
+    let visualStyle = explicitVisualStyle;
     try {
       // Get the post_id for this content to properly scope the slides query
       const { data: gcContent } = await svc.from("generated_contents").select("slides, generation_metadata").eq("id", contentId).single();
       const postId = (gcContent?.generation_metadata as any)?.post_id;
+      // Auto-detect visual_style from generation_metadata when not explicitly passed
+      if (!visualStyle && (gcContent?.generation_metadata as any)?.visual_style) {
+        visualStyle = (gcContent.generation_metadata as any).visual_style;
+        console.log(`${logPrefix} auto-detected visual_style from generation_metadata: ${visualStyle}`);
+      }
       const dbSlides = (gcContent?.slides as any[]) || [];
       const slideIndices = dbSlides.map((_: any, i: number) => i);
 
@@ -401,8 +407,9 @@ async function runStudioImagePipeline(opts: {
   slides: any[];
   brandId: string;
   contentType: string;
+  visualStyle?: string;
 }) {
-  const { supabaseUrl, authHeader, supabaseAnonKey, contentId, slides, brandId, contentType } = opts;
+  const { supabaseUrl, authHeader, supabaseAnonKey, contentId, slides, brandId, contentType, visualStyle } = opts;
   const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
   const svc = createClient(supabaseUrl, serviceKey);
 
@@ -459,7 +466,7 @@ async function runStudioImagePipeline(opts: {
 
     // Store post_id in generated_contents so ActionCard can poll image_generations
     await svc.from("generated_contents")
-      .update({ generation_metadata: { post_id: post.id, project_id: project.id } })
+      .update({ generation_metadata: { post_id: post.id, project_id: project.id, visual_style: visualStyle || null } })
       .eq("id", contentId);
 
     console.log(`[ai-chat:pipeline] Created ${dbSlides.length} slides in DB, stored post_id=${post.id}. Running pipeline...`);
@@ -639,6 +646,7 @@ async function runStudioImagePipelineWithSoftTimeout(
     slides: any[];
     brandId: string;
     contentType: string;
+    visualStyle?: string;
   },
   timeoutMs = 90000,
 ) {
@@ -1206,7 +1214,7 @@ Mensagem do usuário: "${message}"`;
                       if (dbSlides?.length) {
                         // Store post_id in generation_metadata
                         await svc.from("generated_contents")
-                          .update({ generation_metadata: { post_id: post.id, project_id: project.id } })
+                          .update({ generation_metadata: { post_id: post.id, project_id: project.id, visual_style: gcVisualStyle || null } })
                           .eq("id", contentId);
 
                         // Insert image_generations with is_selected=true for each slide
@@ -1273,6 +1281,7 @@ Mensagem do usuário: "${message}"`;
                   slides: genSlides,
                   brandId: resolvedBrandId,
                   contentType: mappedContentType,
+                  visualStyle: gcVisualStyle || undefined,
                 });
 
                 replyOverride = "✅ Conteúdo gerado! Confira abaixo 👇";
