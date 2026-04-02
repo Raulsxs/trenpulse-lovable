@@ -327,6 +327,39 @@ export default function ConfigPhase({ configStep, flow, userId, onSelect, onCanc
         <SourceInputField placeholder="https://..." onSubmit={(text) => onSelect("sourceInput", text)} />
       );
 
+    case "source_type":
+      return wrapper(
+        "✍️ O que você quer escrever?",
+        <div className="flex flex-col gap-2">
+          <button
+            className="flex items-center gap-3 p-3 rounded-xl border border-border/60 bg-muted/20 hover:bg-primary/5 hover:border-primary/30 transition-all text-left"
+            onClick={() => onSelect("source_type", "phrase")}
+          >
+            <span className="text-lg">💬</span>
+            <div>
+              <div className="text-sm font-medium">Uma frase</div>
+              <div className="text-xs text-muted-foreground">Frase de impacto, citação ou mensagem que será usada exatamente como você escrever</div>
+            </div>
+          </button>
+          <button
+            className="flex items-center gap-3 p-3 rounded-xl border border-border/60 bg-muted/20 hover:bg-primary/5 hover:border-primary/30 transition-all text-left"
+            onClick={() => onSelect("source_type", "topic")}
+          >
+            <span className="text-lg">📝</span>
+            <div>
+              <div className="text-sm font-medium">Um tema ou assunto</div>
+              <div className="text-xs text-muted-foreground">Descreva o assunto e a IA gera o conteúdo completo para você</div>
+            </div>
+          </button>
+        </div>
+      );
+
+    case "source_phrase":
+      return wrapper(
+        "💬 Digite sua frase",
+        <SourceInputField placeholder="Ex: Sonhos são caminhos do coração" onSubmit={(text) => onSelect("sourceInput", text)} />
+      );
+
     case "source_write":
       return wrapper(
         "✏️ Sobre o que é o conteúdo?",

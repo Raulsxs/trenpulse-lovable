@@ -771,7 +771,18 @@ export default function ChatWindow() {
             }
           })();
         } else {
-          // write from scratch
+          // write from scratch — ask if it's a phrase or a topic
+          setConfigStep("source_type");
+        }
+        break;
+      }
+
+      case "source_type": {
+        if (value === "phrase") {
+          updateFlow({ contentStyle: "quote" });
+          setConfigStep("source_phrase");
+        } else {
+          // topic — go to normal write field
           setConfigStep("source_write");
         }
         break;
