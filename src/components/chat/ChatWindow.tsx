@@ -805,7 +805,12 @@ export default function ChatWindow() {
         if (brandDefault) {
           updateFlow({ visualStyle: brandDefault as any });
           if (brandDefault === "photo_overlay") {
-            setConfigStep("photo_source");
+            const ctSrc = flow.contentType;
+            if (ctSrc === "carousel" || ctSrc === "document") {
+              setConfigStep("slide_count");
+            } else {
+              setConfigStep("photo_source");
+            }
           } else if (brandDefault === "template_clean" || brandDefault === "ai_full_design" || brandDefault === "ai_illustration") {
             const ctSrc = flow.contentType;
             if (ctSrc === "carousel" || ctSrc === "document") {
@@ -900,13 +905,13 @@ export default function ChatWindow() {
           setConfigStep("upload_image");
         } else {
           // ai_generate → start generation with brand_guided default (skip fidelity question)
-          startGeneration({ backgroundMode: value, visualMode: "brand_guided" });
+          startGeneration({ backgroundMode: value, visualMode: "brand_guided", visualStyle: genFlow.flow.visualStyle || undefined });
           return;
         }
         break;
       case "templateId":
         updateFlow({ templateId: value, backgroundMode: "saved_template" });
-        startGeneration({ templateId: value, backgroundMode: "saved_template" });
+        startGeneration({ templateId: value, backgroundMode: "saved_template", visualStyle: genFlow.flow.visualStyle || undefined });
         break;
       case "photoSource":
         if (value === "brand_photos") {
@@ -995,7 +1000,7 @@ export default function ChatWindow() {
             slideCount: flow.slideCount,
             backgroundMode: flow.backgroundMode,
             visualMode: flow.visualMode,
-            visualStyle: flow.visualStyle || "ai_full_design",
+            visualStyle: flow.visualStyle || (flow.backgroundMode === "brand_photos" ? "photo_overlay" : "ai_full_design"),
             templateId: flow.templateId,
             uploadedImageUrl: flow.uploadedImageUrl,
             sourceUrl: flow.sourceUrl,
@@ -1030,7 +1035,7 @@ export default function ChatWindow() {
       // Sending all slides in one call causes the parent function to timeout at 60s
       // before all slides complete, losing Phase 3 (image_urls update).
       // Without a brand, default to illustration mode (no brand refs to replicate)
-      const vs = flow.visualStyle || (flow.brandId ? "ai_full_design" : "ai_illustration");
+      const vs = flow.visualStyle || (flow.backgroundMode === "brand_photos" ? "photo_overlay" : flow.brandId ? "ai_full_design" : "ai_illustration");
       const slideIds = slides.map((s: any) => s.id);
       const pipelineParams = {
         contentId,
