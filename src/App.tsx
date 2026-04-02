@@ -31,6 +31,7 @@ import LinkedInCallback from "./pages/LinkedInCallback";
 import Pricing from "./pages/Pricing";
 import Analytics from "./pages/Analytics";
 import Onboarding from "./pages/Onboarding";
+import AdminAnalytics from "./pages/AdminAnalytics";
 
 const queryClient = new QueryClient();
 
@@ -68,6 +69,7 @@ const App = () => (
                 <Route path="/onboarding" element={<Onboarding />} />
                 <Route path="/pricing" element={<Pricing />} />
                 <Route path="/privacy" element={<PrivacyPolicy />} />
+                <Route path="/admin" element={<AdminAnalytics />} />
                 {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
                 <Route path="*" element={<NotFound />} />
               </Routes>
