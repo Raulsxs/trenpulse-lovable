@@ -1000,12 +1000,18 @@ Mensagem do usuário: "${message}"`;
           try {
             const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
             if (LOVABLE_API_KEY) {
+              // Different prompt depending on whether user explicitly chose "phrase" mode
+              const brandName = brands?.find((b: any) => b.id === resolvedBrandId)?.name || null;
+              const extractionPrompt = isQuote
+                ? `O usuário quer usar esta frase em uma imagem para Instagram/LinkedIn:\n"${sourceText}"\n\nSua tarefa: POLIR a frase (corrigir ortografia, gramática, pontuação, capitalização) mantendo 100% do sentido e intenção original. Não reescreva nem mude o tom — apenas corrija erros e melhore a apresentação.\n\nResponda APENAS em JSON válido (sem markdown):\n{\n  "content": "a frase polida e corrigida",\n  "author": "autor se mencionado no texto, ou ${brandName ? `"${brandName}"` : "null"}",\n  "topic": "tema geral em 2-5 palavras"\n}`
+                : `O usuário enviou esta mensagem para criar um conteúdo para Instagram:\n"${sourceText}"\n\nExtraia as informações relevantes e responda APENAS em JSON válido (sem markdown):\n{\n  "content": "o texto/frase/tema principal a ser usado no conteúdo (sem prefixos como 'crie um post sobre')",\n  "is_quote": true ou false (é uma frase/citação literal que deve ser exibida como está?),\n  "author": "autor da frase se mencionado, ou null",\n  "topic": "tema geral resumido em 2-5 palavras"\n}`;
+
               const extractionResp = await aiGatewayFetch({
                   model: "google/gemini-2.5-flash-lite",
                   messages: [
                     {
                       role: "user",
-                      content: `O usuário enviou esta mensagem para criar um conteúdo para Instagram:\n"${sourceText}"\n\nExtraia as informações relevantes e responda APENAS em JSON válido (sem markdown):\n{\n  "content": "o texto/frase/tema principal a ser usado no conteúdo (sem prefixos como 'crie um post sobre')",\n  "is_quote": true ou false (é uma frase/citação literal que deve ser exibida como está?),\n  "author": "autor da frase se mencionado, ou null",\n  "topic": "tema geral resumido em 2-5 palavras"\n}`,
+                      content: extractionPrompt,
                     },
                   ],
                 });
@@ -1045,9 +1051,9 @@ Mensagem do usuário: "${message}"`;
 
         // For "quote" style, pass user text as the literal headline
         if (isQuote && (extractedContent || sourceUrl)) {
-          briefingNotes += `\nESTILO FRASE: O texto fornecido deve ser usado como headline literal do slide. O body fica vazio ou tem apenas atribuição/autor.`;
+          briefingNotes += `\nESTILO FRASE: O texto fornecido deve ser usado como headline literal do slide. O body deve conter APENAS a atribuição do autor em formato "— Nome do Autor" (sem outro texto). Bullets devem ficar vazios.`;
           if (extractedAuthor) {
-            briefingNotes += ` Autor: ${extractedAuthor}`;
+            briefingNotes += ` Autor: ${extractedAuthor}. Coloque "— ${extractedAuthor}" no body da imagem em texto menor abaixo da frase.`;
           }
         }
 
@@ -1109,15 +1115,16 @@ Mensagem do usuário: "${message}"`;
           const userPhrase = (extractedContent || sourceText).trim();
           const numSlides = slideCount || 1;
 
-          // Build slides with user's phrase as headline (no body, no bullets)
+          // Build slides with user's phrase as headline + author attribution
+          const authorLine = extractedAuthor ? `— ${extractedAuthor}` : "";
           const directSlides = [];
           for (let i = 0; i < numSlides; i++) {
             directSlides.push({
               headline: i === 0 ? userPhrase : "",
-              body: "",
+              body: i === 0 ? authorLine : "",
               bullets: [],
               footer: "",
-              overlay: { headline: userPhrase, body: "", bullets: [], footer: "" },
+              overlay: { headline: userPhrase, body: i === 0 ? authorLine : "", bullets: [], footer: "" },
             });
           }
 
