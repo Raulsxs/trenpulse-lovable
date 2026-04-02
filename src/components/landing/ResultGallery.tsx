@@ -1,44 +1,37 @@
 import { motion } from "framer-motion";
 import { Instagram, Linkedin, Heart, MessageCircle, Send, Bookmark } from "lucide-react";
 
-const MOCK_RESULTS = [
+const RESULTS = [
   {
     platform: "instagram",
     type: "Post",
-    headline: "5 Hábitos Noturnos que Transformam seu Sono",
-    gradient: "from-indigo-600 to-purple-600",
-    caption: "Sabia que 72% das pessoas dormem menos de 7h? Veja como mudar isso...",
-  },
-  {
-    platform: "instagram",
-    type: "Carrossel",
-    headline: "O Futuro da Telemedicina em 2026",
-    gradient: "from-teal-500 to-cyan-600",
-    caption: "A telemedicina está revolucionando o acesso à saúde. Deslize para saber mais...",
-    slides: 5,
-  },
-  {
-    platform: "linkedin",
-    type: "Documento",
-    headline: "Como Implementar OKRs na Sua Empresa",
-    gradient: "from-blue-700 to-blue-500",
-    caption: "Um guia prático para alinhar sua equipe com metas que realmente importam.",
-    slides: 7,
+    imageUrl: "https://qdmhqxpazffmaxleyzxs.supabase.co/storage/v1/object/public/generated-images/ai-slides/9e262f50-ded1-4c29-9011-4e9ad399a827/slide-0-1775169134148.png",
+    caption: "Nova ferramenta do Google converte desenhos visuais em código funcional em tempo real.",
   },
   {
     platform: "instagram",
     type: "Post",
-    headline: '"Sonhos são caminhos do coração"',
-    gradient: "from-amber-500 to-orange-600",
-    caption: "Cada passo que você dá é uma escolha de coragem. #motivação",
-    isQuote: true,
+    imageUrl: "https://qdmhqxpazffmaxleyzxs.supabase.co/storage/v1/object/public/generated-images/ai-slides/1a74cfb0-901e-43f5-9234-62eba821153b/slide-0-1774996162912.png",
+    caption: "Um erro de publicação no npm expôs parte do código-fonte do Claude Code.",
+  },
+  {
+    platform: "instagram",
+    type: "Post",
+    imageUrl: "https://qdmhqxpazffmaxleyzxs.supabase.co/storage/v1/object/public/generated-images/ai-slides/3eab3ddd-4174-457e-92f7-8c852da19c65/slide-0-1774992869605.png",
+    caption: "Anthropic limita uso do Claude mesmo para assinantes pagantes — entenda o impacto.",
+  },
+  {
+    platform: "instagram",
+    type: "Post",
+    imageUrl: "https://qdmhqxpazffmaxleyzxs.supabase.co/storage/v1/object/public/generated-images/ai-slides/9b4f83b3-9dff-416f-ba24-a0e47ffc3e9e/slide-0-1774959193413.png",
+    caption: "OpenAI encerra Sora após 6 meses — downloads caíram 70%.",
   },
 ];
 
 export function ResultGallery() {
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-      {MOCK_RESULTS.map((result, i) => (
+      {RESULTS.map((result, i) => (
         <motion.div
           key={i}
           initial={{ opacity: 0, y: 20 }}
@@ -47,35 +40,14 @@ export function ResultGallery() {
           transition={{ duration: 0.5, delay: i * 0.1 }}
         >
           <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm hover:shadow-md transition-shadow group">
-            {/* Image mockup */}
-            <div className={`aspect-square bg-gradient-to-br ${result.gradient} p-6 flex flex-col justify-end relative overflow-hidden`}>
-              {/* Decorative elements */}
-              <div className="absolute top-4 right-4 opacity-20">
-                <div className="w-20 h-20 rounded-full border-2 border-white/30" />
-              </div>
-              <div className="absolute top-8 left-8 opacity-10">
-                <div className="w-32 h-32 rounded-full bg-white/20" />
-              </div>
-
-              {/* Type badge */}
-              <div className="absolute top-3 left-3">
-                <span className="bg-black/30 backdrop-blur-sm text-white text-[10px] px-2 py-0.5 rounded-full font-medium">
-                  {result.type}{result.slides ? ` • ${result.slides} slides` : ""}
-                </span>
-              </div>
-
-              {/* Text overlay */}
-              <div className="relative z-10">
-                {result.isQuote && (
-                  <div className="w-8 h-0.5 bg-white/60 rounded mb-3" />
-                )}
-                <h3 className={`text-white font-bold leading-tight ${result.isQuote ? "text-lg italic" : "text-base"}`}>
-                  {result.headline}
-                </h3>
-                {result.isQuote && (
-                  <p className="text-white/60 text-xs mt-2">— Autor</p>
-                )}
-              </div>
+            {/* Real generated image */}
+            <div className="aspect-square overflow-hidden">
+              <img
+                src={result.imageUrl}
+                alt={result.caption}
+                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                loading="lazy"
+              />
             </div>
 
             {/* Social mockup footer */}
@@ -95,7 +67,7 @@ export function ResultGallery() {
                 ) : (
                   <Linkedin className="w-3 h-3 text-blue-600" />
                 )}
-                <span className="text-[10px] text-muted-foreground capitalize">{result.platform}</span>
+                <span className="text-[10px] text-muted-foreground capitalize">{result.platform} • {result.type}</span>
               </div>
             </div>
           </div>

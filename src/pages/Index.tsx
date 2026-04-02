@@ -195,10 +195,6 @@ const Index = () => {
             title="Resultados reais"
             subtitle="Conteúdos gerados pelo TrendPulse — prontos para publicar"
           />
-          {/* Placeholder note */}
-          <p className="text-center text-xs text-muted-foreground mb-6 italic">
-            Mockups ilustrativos — substitua por prints reais da plataforma
-          </p>
           <ResultGallery />
         </div>
       </section>
@@ -210,15 +206,13 @@ const Index = () => {
             title="Veja em ação"
             subtitle="Do tema ao post pronto em menos de 30 segundos"
           />
-          {/* Video/GIF placeholder */}
-          <div className="aspect-video bg-muted/50 rounded-xl border border-border flex items-center justify-center">
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                <div className="w-0 h-0 border-t-8 border-b-8 border-l-12 border-transparent border-l-primary ml-1" />
-              </div>
-              <p className="text-sm text-muted-foreground">Grave um vídeo demonstrativo da plataforma</p>
-              <p className="text-xs text-muted-foreground/60 mt-1">Coloque em public/landing/demo.mp4</p>
-            </div>
+          {/* Demo GIF */}
+          <div className="rounded-xl border border-border overflow-hidden shadow-lg">
+            <img
+              src="/landing/trendpulse-demo-generation.gif"
+              alt="Demo do TrendPulse gerando conteúdo"
+              className="w-full"
+            />
           </div>
         </div>
       </section>
