@@ -3029,6 +3029,7 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
                 templateSetId: defaultTsId,
                 backgroundOnly: pipeBackgroundOnly,
                 illustrationMode: pipeVisualStyle === "ai_illustration" || pipeVisualStyle === "ai_illustration_titled",
+                contentStyle: pipeContentStyle || null,
                 platform: resolvedPlatform,
                 allSlides: allSlideContent.map((s: any, i: number) => ({
                   role: i === 0 ? "cover" : (i === totalSlidesInContent - 1 ? "cta" : "content"),

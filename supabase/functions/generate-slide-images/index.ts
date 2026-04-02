@@ -58,6 +58,7 @@ serve(async (req) => {
       language: requestLanguage,
       backgroundOnly, // when true, generate background without any text
       illustrationMode, // when true, generate illustrative scene (not text-heavy design)
+      contentStyle, // "quote" = phrase/citation style (elegant, lowercase, with quotes)
       platform: requestPlatform,
       allSlides: requestAllSlides, // all slides data for narrative context in carousels
     } = await req.json();
@@ -116,7 +117,7 @@ serve(async (req) => {
       // Choose prompt based on mode
       const prompt = isBgOnly
         ? buildBackgroundOnlyPrompt(slide, slideIndex || 0, totalSlides || 1, null, contentFormat, platform, null, null, galleryStyle.name, language)
-        : buildPrompt(slide, slideIndex || 0, totalSlides || 1, null, undefined, undefined, contentFormat, platform, null, null, galleryStyle.name, language, null, requestAllSlides);
+        : buildPrompt(slide, slideIndex || 0, totalSlides || 1, null, undefined, undefined, contentFormat, platform, null, null, galleryStyle.name, language, null, requestAllSlides, contentStyle);
       contentParts.push({ type: "text", text: prompt });
 
       const result = await generateImage(contentParts);
@@ -309,7 +310,7 @@ Do NOT create a graphic design with large text. Create a PHOTOGRAPHIC SCENE abou
     } else if (isBgOnly) {
       prompt = buildBackgroundOnlyPrompt(slide, slideIndex || 0, totalSlides || 1, brandInfo, contentFormat, platform, rules, visualSignature, templateSetName, language, brandInfo?.visual_preferences);
     } else {
-      prompt = buildPrompt(slide, slideIndex || 0, totalSlides || 1, brandInfo, undefined, undefined, contentFormat, platform, rules, visualSignature, templateSetName, language, brandInfo?.visual_preferences, requestAllSlides);
+      prompt = buildPrompt(slide, slideIndex || 0, totalSlides || 1, brandInfo, undefined, undefined, contentFormat, platform, rules, visualSignature, templateSetName, language, brandInfo?.visual_preferences, requestAllSlides, contentStyle);
     }
     contentParts.push({ type: "text", text: prompt });
 
@@ -724,6 +725,7 @@ function buildPrompt(
   language?: string,
   visualPreferences?: any,
   allSlides?: any[],
+  contentStyle?: string | null,
 ): string {
   const headline = slide.headline || "";
   const body = slide.body || "";
@@ -752,7 +754,7 @@ function buildPrompt(
     if (rules?.body_in_card === true) parts.push("O texto principal deve estar dentro de um card/caixa.");
     if (rules?.body_in_card === false) parts.push("Texto direto sobre o fundo, SEM card.");
     if (rules?.inner_frame === true) parts.push("Use moldura interna decorativa.");
-    if (rules?.uppercase_headlines === true) parts.push("Headlines em CAIXA ALTA.");
+    if (rules?.uppercase_headlines === true && contentStyle !== "quote") parts.push("Headlines em CAIXA ALTA.");
     if (visualSignature?.primary_bg_mode) parts.push(`Fundo: ${visualSignature.primary_bg_mode}.`);
     if (visualSignature?.card_style && visualSignature.card_style !== "none") parts.push(`Estilo de card: ${visualSignature.card_style}.`);
     if (visualSignature?.decorative_shape && visualSignature.decorative_shape !== "none") parts.push(`Forma decorativa: ${visualSignature.decorative_shape}.`);
@@ -879,6 +881,21 @@ ${carouselRoles[role] || carouselRoles.content}
 - O post deve entregar VALOR VISUAL IMEDIATO — quem vê deve entender a mensagem em 2 segundos.
 - Design equilibrado entre visual e texto.`;
     textBlock = `---HEADLINE---\n${imageHeadline}\n${imageBody ? `---BODY---\n${imageBody}\n` : ""}---FIM DO TEXTO---`;
+  }
+
+  // Quote/phrase style override — elegant design with proper casing, quotes, and author
+  if (contentStyle === "quote") {
+    const authorLine = body && body.startsWith("—") ? body : "";
+    formatDesignNote = `DESIGN ESTILO FRASE/CITAÇÃO — elegante e minimalista.
+- A frase deve estar entre ASPAS tipográficas elegantes (" ").
+- Texto em caixa NORMAL (lowercase/sentence case) — NÃO use CAPS LOCK nem ALL UPPERCASE.
+- Tipografia elegante e sofisticada — fonte serifada ou manuscrita é ideal.
+- Fundo com visual profissional e sofisticado que complementa a frase.
+${authorLine ? `- O autor "${authorLine}" deve aparecer ABAIXO da frase em texto MENOR e mais leve (peso regular, não bold).` : ""}
+- Layout CENTRALIZADO — frase no centro ou centro-inferior da imagem.
+- Estilo de post de coaching/liderança profissional — inspiracional e clean.
+- MENOS é MAIS — sem excesso de elementos visuais. O foco é a FRASE.`;
+    textBlock = `---FRASE---\n"${imageHeadline}"\n${authorLine ? `---AUTOR---\n${authorLine}\n` : ""}---FIM DO TEXTO---`;
   }
 
   // Add narrative context for carousel/document slides
