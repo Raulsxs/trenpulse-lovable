@@ -103,6 +103,8 @@ function buildSlideElement(
   // Text colors: dark text for LinkedIn documents (light bg), white for everything else (dark scrim)
   const textColor = isLinkedInDocument ? "#1a1a2e" : "#ffffff";
   const textColorSecondary = isLinkedInDocument ? "rgba(26,26,46,0.85)" : "rgba(255,255,255,0.95)";
+  // photo_overlay: use accent color for headline if brand has one, otherwise white
+  const photoOverlayHeadlineColor = isPhotoOverlay && accentColor && accentColor !== "#667eea" ? "#ffffff" : textColor;
 
   // Max width — match frontend SlideBgOverlayRenderer: use overlayStyle or default 90%
   // Satori wraps text wider than browsers, so we subtract 6% for parity
@@ -133,7 +135,7 @@ function buildSlideElement(
   // photo_overlay: override headline to bottom area (lower third layout)
   if (isPhotoOverlay) {
     const isVertical = h > w;
-    pos.headline = { x: 6, y: isVertical ? 72 : 65 };
+    pos.headline = { x: 6, y: isVertical ? 70 : 62 };
     pos.footer = { x: 6, y: isVertical ? 92 : 90 };
   }
 
@@ -189,7 +191,7 @@ function buildSlideElement(
           width: w,
           height: h,
           backgroundImage:
-            "linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.0) 45%, rgba(0,0,0,0.25) 65%, rgba(0,0,0,0.75) 100%)",
+            "linear-gradient(180deg, rgba(0,0,0,0.0) 0%, rgba(0,0,0,0.0) 50%, rgba(0,0,0,0.2) 70%, rgba(0,0,0,0.65) 100%)",
         },
       }),
     );
@@ -227,28 +229,74 @@ function buildSlideElement(
 
   // Headline — fontWeight 800 to match frontend SlideBgOverlayRenderer
   if (headline) {
-    children.push(
-      posBlock(
-        pos.headline,
-        Math.round(w * getBlockMaxWidth("headline") / 100),
-        React.createElement(
-          "div",
-          {
-            style: {
-              color: textColor,
-              fontFamily: brandSnapshot?.fonts?.headings || "Inter",
-              fontSize: headlineFontSize,
-              fontWeight: 800,
-              lineHeight: 1.15,
-              letterSpacing: "-0.02em",
-              display: "flex",
-              wordBreak: "break-word" as any,
+    if (isPhotoOverlay) {
+      // photo_overlay: professional "lower third" headline with accent bar
+      children.push(
+        posBlock(
+          pos.headline,
+          Math.round(w * getBlockMaxWidth("headline") / 100),
+          React.createElement(
+            "div",
+            {
+              style: {
+                display: "flex",
+                flexDirection: "column",
+                gap: 12,
+              },
             },
-          },
-          headline,
+            // Accent bar (brand color)
+            React.createElement("div", {
+              style: {
+                width: 48,
+                height: 4,
+                backgroundColor: accentColor,
+                borderRadius: 2,
+              },
+            }),
+            // Headline text
+            React.createElement(
+              "div",
+              {
+                style: {
+                  color: "#ffffff",
+                  fontFamily: brandSnapshot?.fonts?.headings || "Inter",
+                  fontSize: headlineFontSize,
+                  fontWeight: 700,
+                  lineHeight: 1.2,
+                  letterSpacing: "-0.01em",
+                  display: "flex",
+                  wordBreak: "break-word" as any,
+                },
+              },
+              headline,
+            ),
+          ),
         ),
-      ),
-    );
+      );
+    } else {
+      children.push(
+        posBlock(
+          pos.headline,
+          Math.round(w * getBlockMaxWidth("headline") / 100),
+          React.createElement(
+            "div",
+            {
+              style: {
+                color: textColor,
+                fontFamily: brandSnapshot?.fonts?.headings || "Inter",
+                fontSize: headlineFontSize,
+                fontWeight: 800,
+                lineHeight: 1.15,
+                letterSpacing: "-0.02em",
+                display: "flex",
+                wordBreak: "break-word" as any,
+              },
+            },
+            headline,
+          ),
+        ),
+      );
+    }
   }
 
   // Body
@@ -451,8 +499,10 @@ Deno.serve(async (req) => {
 
   try {
     const { slides, brand_snapshot, content_id, dimensions, slide_offset, platform, content_type, visual_style } = await req.json();
-    const w = Math.min(Math.max(Number(dimensions?.width) || 1080, 720), 1200);
-    const h = Math.min(Math.max(Number(dimensions?.height) || 1080, 627), 1920);
+    const maxW = visual_style === "photo_overlay" ? 1440 : 1200;
+    const maxH = visual_style === "photo_overlay" ? 2160 : 1920;
+    const w = Math.min(Math.max(Number(dimensions?.width) || 1080, 720), maxW);
+    const h = Math.min(Math.max(Number(dimensions?.height) || 1080, 627), maxH);
     const isLinkedInDocument = platform === "linkedin" && content_type === "document";
     const isPhotoOverlay = visual_style === "photo_overlay";
     const offset = Number(slide_offset) || 0;

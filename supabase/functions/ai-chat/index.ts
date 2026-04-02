@@ -1101,6 +1101,78 @@ Mensagem do usuário: "${message}"`;
 
         if (sourceUrl) genBody.sourceUrl = sourceUrl;
 
+        // ── PHOTO_OVERLAY FAST PATH ──
+        // When user provides their own phrase + photo_overlay, skip Gemini entirely.
+        // Use the phrase as-is as headline, pick brand photo, render composite.
+        if (gcVisualStyle === "photo_overlay" && sourceText && sourceText.trim().length > 0 && !sourceUrl) {
+          console.log("[ai-chat] photo_overlay fast path — skipping generate-content, using literal phrase");
+          const userPhrase = (extractedContent || sourceText).trim();
+          const numSlides = slideCount || 1;
+
+          // Build slides with user's phrase as headline (no body, no bullets)
+          const directSlides = [];
+          for (let i = 0; i < numSlides; i++) {
+            directSlides.push({
+              headline: i === 0 ? userPhrase : "",
+              body: "",
+              bullets: [],
+              footer: "",
+              overlay: { headline: userPhrase, body: "", bullets: [], footer: "" },
+            });
+          }
+
+          // Build a simple caption from the phrase
+          const nicheHashtags = niche !== "geral" ? ` #${niche.replace(/\s+/g, "").toLowerCase()}` : "";
+          const directCaption = `${userPhrase}${nicheHashtags}`;
+
+          const directContent = {
+            title: userPhrase,
+            caption: directCaption,
+            hashtags: [],
+            slides: directSlides,
+            platform: gcPlatform || "instagram",
+            visualMode: "brand_guided",
+          };
+
+          // Persist directly
+          let contentId = await persistGeneratedContent({
+            generatedContent: directContent,
+            fallbackTitle: userPhrase,
+            contentType: mappedContentType as "post" | "carousel" | "story" | "document" | "article",
+            brandId: resolvedBrandId,
+            templateSetId: templateId || null,
+            visualMode: "brand_guided",
+            platform: gcPlatform || "instagram",
+          });
+
+          if (!contentId) {
+            replyOverride = "Tive um problema ao salvar o conteúdo. Tente novamente.";
+            break;
+          }
+
+          // Run brand photo pipeline (fetches brand photo + renders composite)
+          if (resolvedBrandId) {
+            await runStudioImagePipelineWithSoftTimeout({
+              supabaseUrl,
+              authHeader: authHeader!,
+              supabaseAnonKey,
+              contentId,
+              slides: directSlides,
+              brandId: resolvedBrandId,
+              contentType: mappedContentType,
+              visualStyle: "photo_overlay",
+            });
+          }
+
+          replyOverride = "✅ Pronto! Sua foto com a frase foi gerada 👇";
+          actionResult = {
+            content_id: contentId,
+            content_type: mappedContentType,
+            platform: gcPlatform || "instagram",
+          };
+          break;
+        }
+
         console.log("[ai-chat] GERAR_CONTEUDO calling generate-content:", JSON.stringify({ contentType: mappedContentType, brandId: resolvedBrandId, contentStyle: mappedContentStyle, slideCount, backgroundMode, visualMode }));
 
         try {
