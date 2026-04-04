@@ -11,8 +11,8 @@ const RESULTS = [
   {
     platform: "instagram",
     type: "Post",
-    imageUrl: "https://qdmhqxpazffmaxleyzxs.supabase.co/storage/v1/object/public/generated-images/ai-slides/1a74cfb0-901e-43f5-9234-62eba821153b/slide-0-1774996162912.png",
-    caption: "Um erro de publicação no npm expôs parte do código-fonte do Claude Code.",
+    imageUrl: "https://qdmhqxpazffmaxleyzxs.supabase.co/storage/v1/object/public/generated-images/ai-slides/2ba03aab-666c-45d1-95b8-e2dc7723d0ad/slide-0-1775249665858.png",
+    caption: "Agentes de IA dominam o desenvolvimento — escrevem, testam e fazem deploy sozinhos.",
   },
   {
     platform: "instagram",

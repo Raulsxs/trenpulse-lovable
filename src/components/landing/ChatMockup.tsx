@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Send, Sparkles } from "lucide-react";
+import { Send } from "lucide-react";
 
 const MESSAGES = [
-  { role: "user", text: "5 dicas para melhorar o sono", delay: 0 },
+  { role: "user", text: "Agentes de IA no desenvolvimento", delay: 0 },
   { role: "assistant", text: "Analisando o tema... 🔍", delay: 1200, transient: true },
   { role: "assistant", text: "✅ Conteúdo gerado! Confira abaixo 👇", delay: 2800 },
 ];
@@ -13,7 +13,7 @@ export function ChatMockup() {
   const [showCard, setShowCard] = useState(false);
   const [typing, setTyping] = useState(false);
   const [inputText, setInputText] = useState("");
-  const fullInput = "5 dicas para melhorar o sono";
+  const fullInput = "Agentes de IA no desenvolvimento";
 
   useEffect(() => {
     // Type the input first
@@ -107,12 +107,14 @@ export function ChatMockup() {
                 className="bg-gradient-to-br from-primary/10 to-accent/10 border border-primary/20 rounded-lg p-3"
               >
                 <div className="flex gap-3">
-                  <div className="w-16 h-16 rounded-md bg-gradient-to-br from-blue-500/80 to-purple-500/80 flex-shrink-0 flex items-center justify-center">
-                    <Sparkles className="w-6 h-6 text-white" />
-                  </div>
+                  <img
+                    src="https://qdmhqxpazffmaxleyzxs.supabase.co/storage/v1/object/public/generated-images/ai-slides/2ba03aab-666c-45d1-95b8-e2dc7723d0ad/slide-0-1775249665858.png"
+                    alt="Post gerado"
+                    className="w-16 h-16 rounded-md object-cover flex-shrink-0"
+                  />
                   <div className="flex-1 min-w-0">
                     <div className="text-xs font-medium text-primary mb-1">Post • Instagram</div>
-                    <div className="text-sm font-semibold text-foreground leading-tight">5 Hábitos Noturnos que Transformam seu Sono</div>
+                    <div className="text-sm font-semibold text-foreground leading-tight">Agentes de IA dominam o desenvolvimento em 2025</div>
                     <div className="text-xs text-muted-foreground mt-1">1 slide • Pronto para publicar</div>
                   </div>
                 </div>
