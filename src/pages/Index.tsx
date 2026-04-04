@@ -9,6 +9,7 @@ import { HowItWorks } from "@/components/landing/HowItWorks";
 import { FeatureShowcase } from "@/components/landing/FeatureShowcase";
 import { ResultGallery } from "@/components/landing/ResultGallery";
 import { PricingSection } from "@/components/landing/PricingSection";
+import { DemoScenes } from "@/components/landing/DemoScenes";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -204,16 +205,9 @@ const Index = () => {
         <div className="container mx-auto max-w-4xl">
           <SectionHeader
             title="Veja em ação"
-            subtitle="Do tema ao post pronto em menos de 30 segundos"
+            subtitle="4 formas de criar conteúdo profissional em segundos"
           />
-          {/* Demo GIF */}
-          <div className="rounded-xl border border-border overflow-hidden shadow-lg">
-            <img
-              src="/landing/trendpulse-demo-generation.gif"
-              alt="Demo do TrendPulse gerando conteúdo"
-              className="w-full"
-            />
-          </div>
+          <DemoScenes />
         </div>
       </section>
 
