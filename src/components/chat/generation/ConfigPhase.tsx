@@ -375,6 +375,7 @@ export default function ConfigPhase({ configStep, flow, userId, onSelect, onCanc
         "Como quer o visual?",
         <div className="flex flex-col gap-2">
           <button
+            key="ai_full_design"
             className="flex items-start gap-3 p-3 rounded-xl border border-primary bg-primary/5 text-left transition-all"
             onClick={() => onSelect("visualStyle", "ai_full_design")}
           >
@@ -386,6 +387,7 @@ export default function ConfigPhase({ configStep, flow, userId, onSelect, onCanc
           </button>
           {hasStyleExamples && (
             <button
+              key="ai_background"
               className="flex items-start gap-3 p-3 rounded-xl border border-border hover:border-primary/50 text-left transition-all"
               onClick={() => onSelect("visualStyle", "ai_background")}
             >
@@ -398,6 +400,7 @@ export default function ConfigPhase({ configStep, flow, userId, onSelect, onCanc
           )}
           {hasPhotoBackgrounds && (
             <button
+              key="photo_overlay"
               className="flex items-start gap-3 p-3 rounded-xl border border-border hover:border-primary/50 text-left transition-all"
               onClick={() => onSelect("visualStyle", "photo_overlay")}
             >
@@ -409,6 +412,7 @@ export default function ConfigPhase({ configStep, flow, userId, onSelect, onCanc
             </button>
           )}
           <button
+            key="ai_illustration"
             className="flex items-start gap-3 p-3 rounded-xl border border-border hover:border-primary/50 text-left transition-all"
             onClick={() => onSelect("visualStyle", "ai_illustration")}
           >
@@ -419,6 +423,7 @@ export default function ConfigPhase({ configStep, flow, userId, onSelect, onCanc
             </div>
           </button>
           <button
+            key="template_clean"
             className="flex items-start gap-3 p-3 rounded-xl border border-border hover:border-primary/50 text-left transition-all"
             onClick={() => onSelect("visualStyle", "template_clean")}
           >

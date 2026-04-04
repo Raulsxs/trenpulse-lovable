@@ -723,6 +723,10 @@ serve(async (req) => {
       sourceBlock = `══════ CONTEÚDO COMPLETO DA FONTE (use como base principal) ══════\n${fullContent.substring(0, 12000)}\n══════ FIM DO CONTEÚDO COMPLETO ══════`;
     } else if (manualBriefing && (manualBriefing.headline || manualBriefing.body || manualBriefing.notes)) {
       const parts: string[] = ["══════ BRIEFING MANUAL (use como base principal) ══════"];
+      // Always include the user's topic as the primary direction
+      if (trend.title && trend.title !== "Conteúdo" && trend.title !== "Conteúdo solicitado pelo usuário") {
+        parts.push(`TEMA DO CONTEÚDO (PRIORIDADE MÁXIMA): "${trend.title}"\nO conteúdo DEVE ser sobre este tema. NÃO substitua pelo nicho do negócio.`);
+      }
       if (manualBriefing.headline) parts.push(`Headline sugerida: ${manualBriefing.headline}`);
       if (manualBriefing.body) parts.push(`Corpo/contexto: ${manualBriefing.body}`);
       if (manualBriefing.bullets && manualBriefing.bullets.length > 0) parts.push(`Pontos-chave:\n${manualBriefing.bullets.filter(Boolean).map(b => `  • ${b}`).join("\n")}`);

@@ -980,7 +980,7 @@ export default function ChatWindow() {
       genFlow.setLoading(true, "Documentos demoram um pouco mais... 📄");
     }, 50000);
 
-    // 90s frontend timeout — Lovable edge functions have ~50s CPU limit, wall-time can be longer due to I/O
+    // 120s frontend timeout — edge functions can take up to 90s on backend + network latency
     let didTimeout = false;
     const flowTimeout = setTimeout(() => {
       didTimeout = true;
@@ -989,7 +989,7 @@ export default function ChatWindow() {
         role: "assistant",
         content: "A geração demorou mais que o esperado. Tente novamente — se o problema persistir, tente com um texto mais curto.",
       }]);
-    }, 90000);
+    }, 120000);
 
     const clearTimers = () => {
       clearTimeout(progressTimer1);
