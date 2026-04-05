@@ -46,6 +46,97 @@ const PHASE_MESSAGES = [
 
 const PHASE_THRESHOLDS = [0, 30, 90, 150];
 
+// Separate component to avoid IIFE reconciliation issues with React DOM
+function ActionCardPreview({
+  slideData, composedImageUrls, isRegeneratingImage, isPolling,
+  pollingTimedOut, generationFailed, generationPhase, generationMetadata,
+  brandSnapshot, containerWidth, effectivePlatform, contentType, contentId, navigate,
+}: {
+  slideData: any; composedImageUrls: string[] | null; isRegeneratingImage: boolean;
+  isPolling: boolean; pollingTimedOut: boolean; generationFailed: boolean;
+  generationPhase: number; generationMetadata: any; brandSnapshot: any;
+  containerWidth: number; effectivePlatform: string; contentType: string;
+  contentId: string; navigate: (path: string) => void;
+}) {
+  // Compute whether we have a renderable image
+  const hasComposed = !!composedImageUrls?.[0];
+  const hasRenderableImage = hasComposed
+    || (slideData?.render_mode === "ai_full_design" || slideData?.render_mode === "template_clean"
+      ? Boolean(slideData?.background_image_url || slideData?.image_url)
+      : Boolean(slideData?.image_url || slideData?.background_image_url));
+  const showImage = hasRenderableImage && !isRegeneratingImage;
+
+  if (showImage && slideData) {
+    const dims = getContentDimensions(effectivePlatform, contentType);
+    const scale = containerWidth / dims.width;
+    const renderImageUrl = slideData.background_image_url || slideData.image_url;
+    const composedUrl = composedImageUrls?.[0];
+    const isFullDesign = slideData.render_mode === "ai_full_design";
+    const showAsFinishedImage = isFullDesign || !!composedUrl;
+    const displayUrl = composedUrl || renderImageUrl;
+    const isIllustrationTitled = generationMetadata?.visual_style === "ai_illustration_titled";
+
+    return (
+      <div style={{ width: containerWidth, height: dims.height * scale, overflow: "hidden" }}>
+        {showAsFinishedImage ? (
+          <img src={displayUrl} alt="" style={{ width: containerWidth, height: dims.height * scale, objectFit: "cover" }} />
+        ) : (
+          <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: dims.width, height: dims.height }}>
+            <SlideBgOverlayRenderer
+              backgroundImageUrl={renderImageUrl}
+              overlay={{
+                headline: slideData.overlay?.headline || slideData.headline,
+                body: isIllustrationTitled ? "" : (slideData.overlay?.body || slideData.body),
+                bullets: isIllustrationTitled ? [] : (slideData.overlay?.bullets || slideData.bullets),
+                footer: slideData.overlay?.footer,
+              }}
+              overlayStyle={slideData.overlay_style}
+              overlayPositions={slideData.overlay_positions}
+              dimensions={dims}
+              role={slideData.role}
+              slideIndex={0}
+              totalSlides={1}
+              brandSnapshot={brandSnapshot ? { palette: brandSnapshot.palette, fonts: brandSnapshot.fonts } : null}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (isPolling || isRegeneratingImage) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 py-16">
+        <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        <span className="text-xs text-muted-foreground animate-pulse transition-all duration-300">
+          {isRegeneratingImage ? "Gerando nova imagem... 🎨" : (PHASE_MESSAGES[generationPhase] || PHASE_MESSAGES[0])}
+        </span>
+      </div>
+    );
+  }
+
+  if (pollingTimedOut || generationFailed) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-3 p-4 py-12">
+        <span className="text-xs text-muted-foreground text-center leading-relaxed">
+          {pollingTimedOut ? "A geração está demorando mais que o normal." : "A geração deste preview não foi concluída."}
+          <br />Clique abaixo para acompanhar ou excluir o conteúdo.
+        </span>
+        <Button size="sm" variant="outline" className="text-xs" onClick={(e) => { e.stopPropagation(); navigate(`/content/${contentId}`); }}>
+          <ExternalLink className="w-3 h-3" /> Ver no Studio
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col items-center justify-center gap-2 py-16">
+      <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+      <span className="text-xs text-muted-foreground animate-pulse">Carregando preview...</span>
+    </div>
+  );
+}
+
 export default function ActionCard({
   contentId,
   contentType,
@@ -543,91 +634,22 @@ export default function ActionCard({
             onClick={() => navigate(`/content/${contentId}`)}
             title="Clique para ver no Studio"
           >
-            {((() => {
-              // Show image when ANY renderable source is available
-              if (composedImageUrls?.[0]) return true;
-              if (slideData?.render_mode === "ai_full_design" || slideData?.render_mode === "template_clean") {
-                return Boolean(slideData?.background_image_url || slideData?.image_url);
-              }
-              // For compose/illustration modes: check if slide has image_url (set by Phase 3)
-              return Boolean(slideData?.image_url || slideData?.background_image_url);
-            })() && !isRegeneratingImage) ? (() => {
-              const dims = getContentDimensions(effectivePlatform, contentType);
-              const scale = containerWidth / dims.width;
-              const renderImageUrl = slideData.background_image_url || slideData.image_url;
-              // Prioritize composed image (from auto-composition pipeline) over raw background
-              const composedUrl = composedImageUrls?.[0];
-              const isFullDesign = slideData.render_mode === "ai_full_design";
-              const showAsFinishedImage = isFullDesign || !!composedUrl;
-              const displayUrl = composedUrl || renderImageUrl;
-
-              return (
-                <div style={{ width: containerWidth, height: dims.height * scale, overflow: "hidden" }}>
-                  {showAsFinishedImage ? (
-                    <img
-                      src={displayUrl}
-                      alt=""
-                      style={{ width: containerWidth, height: dims.height * scale, objectFit: "cover" }}
-                    />
-                  ) : (() => {
-                    const isIllustrationTitled = generationMetadata?.visual_style === "ai_illustration_titled";
-                    return (
-                    <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: dims.width, height: dims.height }}>
-                      <SlideBgOverlayRenderer
-                        backgroundImageUrl={renderImageUrl}
-                        overlay={{
-                          headline: slideData.overlay?.headline || slideData.headline,
-                          body: isIllustrationTitled ? "" : (slideData.overlay?.body || slideData.body),
-                          bullets: isIllustrationTitled ? [] : (slideData.overlay?.bullets || slideData.bullets),
-                          footer: slideData.overlay?.footer,
-                        }}
-                        overlayStyle={slideData.overlay_style}
-                        overlayPositions={slideData.overlay_positions}
-                        dimensions={dims}
-                        role={slideData.role}
-                        slideIndex={0}
-                        totalSlides={1}
-                        brandSnapshot={brandSnapshot ? {
-                          palette: brandSnapshot.palette,
-                          fonts: brandSnapshot.fonts,
-                        } : null}
-                      />
-                    </div>
-                    );
-                  })()}
-                </div>
-              );
-            })() : isPolling || isRegeneratingImage ? (
-              <div className="flex flex-col items-center justify-center gap-2 py-16">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                <span className="text-xs text-muted-foreground animate-pulse transition-all duration-300">
-                  {isRegeneratingImage ? "Gerando nova imagem... 🎨" : (PHASE_MESSAGES[generationPhase] || PHASE_MESSAGES[0])}
-                </span>
-              </div>
-            ) : pollingTimedOut || generationFailed ? (
-              <div className="flex flex-col items-center justify-center gap-3 p-4 py-12">
-                <span className="text-xs text-muted-foreground text-center leading-relaxed">
-                  {pollingTimedOut
-                    ? "A geração está demorando mais que o normal."
-                    : "A geração deste preview não foi concluída."}
-                  <br />Clique abaixo para acompanhar ou excluir o conteúdo.
-                </span>
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="text-xs"
-                  onClick={(e) => { e.stopPropagation(); navigate(`/content/${contentId}`); }}
-                >
-                  <ExternalLink className="w-3 h-3" />
-                  Ver no Studio
-                </Button>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center gap-2 py-16">
-                <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
-                <span className="text-xs text-muted-foreground animate-pulse">Carregando preview...</span>
-              </div>
-            )}
+            <ActionCardPreview
+              slideData={slideData}
+              composedImageUrls={composedImageUrls}
+              isRegeneratingImage={isRegeneratingImage}
+              isPolling={isPolling}
+              pollingTimedOut={pollingTimedOut}
+              generationFailed={generationFailed}
+              generationPhase={generationPhase}
+              generationMetadata={generationMetadata}
+              brandSnapshot={brandSnapshot}
+              containerWidth={containerWidth}
+              effectivePlatform={effectivePlatform}
+              contentType={contentType}
+              contentId={contentId}
+              navigate={navigate}
+            />
           </div>
         </div>
 
