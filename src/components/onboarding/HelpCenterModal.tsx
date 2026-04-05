@@ -2,7 +2,8 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
-import { HelpCircle, Palette, Wand2, MessageSquare, Share2, CalendarDays, LayoutDashboard, FileText, Sparkles } from "lucide-react";
+import { HelpCircle, Palette, Wand2, MessageSquare, Share2, CalendarDays, LayoutDashboard, FileText, Sparkles, Play, BookOpen } from "lucide-react";
+import { HelpTutorials } from "./HelpTutorials";
 
 interface HelpSection {
   id: string;
@@ -149,6 +150,8 @@ interface HelpCenterModalProps {
 }
 
 export default function HelpCenterModal({ open, onOpenChange }: HelpCenterModalProps) {
+  const [tab, setTab] = useState<"tutorials" | "faq">("tutorials");
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
@@ -162,29 +165,57 @@ export default function HelpCenterModal({ open, onOpenChange }: HelpCenterModalP
           </p>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto pr-1 -mr-1 space-y-2">
-          {HELP_SECTIONS.map((section) => (
-            <div key={section.id} className="rounded-xl border border-border overflow-hidden">
-              <div className="flex items-center gap-3 px-4 py-3 bg-muted/50">
-                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <section.icon className="w-4 h-4 text-primary" />
+        {/* Tabs */}
+        <div className="flex gap-1 bg-muted/50 rounded-lg p-1">
+          <button
+            onClick={() => setTab("tutorials")}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-all ${
+              tab === "tutorials" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Play className="w-4 h-4" />
+            Tutoriais
+          </button>
+          <button
+            onClick={() => setTab("faq")}
+            className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-md text-sm font-medium transition-all ${
+              tab === "faq" ? "bg-background shadow-sm text-foreground" : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            Perguntas Frequentes
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto pr-1 -mr-1">
+          {tab === "tutorials" ? (
+            <HelpTutorials />
+          ) : (
+            <div className="space-y-2">
+              {HELP_SECTIONS.map((section) => (
+                <div key={section.id} className="rounded-xl border border-border overflow-hidden">
+                  <div className="flex items-center gap-3 px-4 py-3 bg-muted/50">
+                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <section.icon className="w-4 h-4 text-primary" />
+                    </div>
+                    <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>
+                  </div>
+                  <Accordion type="multiple" className="px-2">
+                    {section.items.map((item, idx) => (
+                      <AccordionItem key={idx} value={`${section.id}-${idx}`} className="border-border/50">
+                        <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:no-underline">
+                          {item.question}
+                        </AccordionTrigger>
+                        <AccordionContent className="text-sm text-muted-foreground leading-relaxed px-2 pb-3">
+                          {item.answer}
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
                 </div>
-                <h3 className="text-sm font-semibold text-foreground">{section.title}</h3>
-              </div>
-              <Accordion type="multiple" className="px-2">
-                {section.items.map((item, idx) => (
-                  <AccordionItem key={idx} value={`${section.id}-${idx}`} className="border-border/50">
-                    <AccordionTrigger className="text-sm font-medium py-3 px-2 hover:no-underline">
-                      {item.question}
-                    </AccordionTrigger>
-                    <AccordionContent className="text-sm text-muted-foreground leading-relaxed px-2 pb-3">
-                      {item.answer}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+              ))}
             </div>
-          ))}
+          )}
         </div>
       </DialogContent>
     </Dialog>
