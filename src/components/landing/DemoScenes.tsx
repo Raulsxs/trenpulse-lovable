@@ -126,7 +126,7 @@ function ContentCard({ imageUrl, imageContent, title, type = "Post", platform = 
       className="border border-border/60 rounded-xl overflow-hidden bg-card"
     >
       {/* Image area */}
-      <div className="aspect-[4/3] relative overflow-hidden bg-muted/30">
+      <div className="aspect-square relative overflow-hidden bg-muted/30">
         {imageUrl && <img src={imageUrl} alt={title} className="w-full h-full object-cover" />}
         {imageContent}
       </div>
@@ -511,8 +511,8 @@ export function DemoScenes() {
         ))}
       </div>
 
-      {/* Scene container - bigger, with chat-like frame */}
-      <div className="max-w-2xl mx-auto">
+      {/* Scene container - large, with chat-like frame */}
+      <div className="max-w-3xl mx-auto">
         <div className="bg-card border border-border rounded-2xl shadow-xl overflow-hidden">
           {/* Chat header */}
           <div className="bg-muted/40 border-b border-border px-5 py-3 flex items-center justify-between">
@@ -532,7 +532,7 @@ export function DemoScenes() {
           </div>
 
           {/* Chat body */}
-          <div className="p-5 min-h-[420px] max-h-[500px] overflow-hidden">
+          <div className="p-6 min-h-[520px] overflow-y-auto">
             <AnimatePresence mode="wait">
               <motion.div
                 key={activeScene}
