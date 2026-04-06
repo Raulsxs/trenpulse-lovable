@@ -163,6 +163,8 @@ export default function ActionCard({
 
   // Slide data for client-side rendering (same component as studio)
   const [slideData, setSlideData] = useState<any>(null);
+  const [allSlides, setAllSlides] = useState<any[]>([]);
+  const [currentSlideIndex, setCurrentSlideIndex] = useState(0);
   const [brandSnapshot, setBrandSnapshot] = useState<any>(null);
   const [generationMetadata, setGenerationMetadata] = useState<any>(null);
   const [composedImageUrls, setComposedImageUrls] = useState<string[] | null>(null);
@@ -235,7 +237,8 @@ export default function ActionCard({
         }
 
         if (!cancelled && data?.slides?.[0]) {
-          const slide = data.slides[0] as any;
+          const slides = data.slides as any[];
+          const slide = slides[0];
 
           // Track when content was created
           if (data.created_at && !contentCreatedAt) {
@@ -243,6 +246,7 @@ export default function ActionCard({
           }
 
           // Always update slideData with latest
+          setAllSlides(slides);
           setSlideData(slide);
           setBrandSnapshot(data.brand_snapshot);
           if (data.generation_metadata) setGenerationMetadata(data.generation_metadata);
@@ -630,13 +634,13 @@ export default function ActionCard({
         {/* Client-side preview — SAME renderer as Studio for pixel-perfect match */}
         <div className="p-3 pb-0" ref={previewContainerRef}>
           <div
-            className="overflow-hidden rounded-lg bg-muted relative cursor-pointer hover:brightness-[0.97] transition-all"
+            className="overflow-hidden rounded-lg bg-muted relative group cursor-pointer hover:brightness-[0.97] transition-all"
             onClick={() => navigate(`/content/${contentId}`)}
             title="Clique para ver no Studio"
           >
             <ActionCardPreview
-              slideData={slideData}
-              composedImageUrls={composedImageUrls}
+              slideData={allSlides[currentSlideIndex] || slideData}
+              composedImageUrls={composedImageUrls ? [composedImageUrls[currentSlideIndex] || composedImageUrls[0]].filter(Boolean) : null}
               isRegeneratingImage={isRegeneratingImage}
               isPolling={isPolling}
               pollingTimedOut={pollingTimedOut}
@@ -650,6 +654,39 @@ export default function ActionCard({
               contentId={contentId}
               navigate={navigate}
             />
+            {/* Carousel navigation arrows */}
+            {allSlides.length > 1 && !isPolling && !isRegeneratingImage && (
+              <>
+                {currentSlideIndex > 0 && (
+                  <button
+                    className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                    onClick={(e) => { e.stopPropagation(); setCurrentSlideIndex(i => i - 1); }}
+                  >
+                    ‹
+                  </button>
+                )}
+                {currentSlideIndex < allSlides.length - 1 && (
+                  <button
+                    className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                    onClick={(e) => { e.stopPropagation(); setCurrentSlideIndex(i => i + 1); }}
+                  >
+                    ›
+                  </button>
+                )}
+                {/* Slide dots indicator */}
+                <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 z-10">
+                  {allSlides.map((_, i) => (
+                    <button
+                      key={i}
+                      className={`w-1.5 h-1.5 rounded-full transition-all ${
+                        i === currentSlideIndex ? "bg-white w-3" : "bg-white/50"
+                      }`}
+                      onClick={(e) => { e.stopPropagation(); setCurrentSlideIndex(i); }}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
 
