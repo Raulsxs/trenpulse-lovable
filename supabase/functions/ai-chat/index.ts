@@ -2903,6 +2903,9 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
           }
         };
 
+        // Set reply so it doesn't fall through to CONVERSA_LIVRE AI call
+        replyOverride = "⏳ Gerando imagem do conteúdo...";
+
         // Fire-and-forget the pipeline — respond immediately
         (async () => {
           try {
@@ -3191,18 +3194,31 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
             const firstSlide = (finalGc?.slides as any[])?.[0];
             const previewUrl = finalGc?.image_urls?.[0] || firstSlide?.background_image_url || null;
 
-            // Don't include content_id in action_result to avoid duplicate ActionCard
-            // The original ActionCard already exists and will update via Realtime/polling
-            await svcPipe.from("chat_messages").insert({
-              user_id: userId,
-              role: "assistant",
-              content: "✅ Imagem gerada! Confira o resultado acima.",
-              intent: "PIPELINE_DONE",
-              metadata: {
-                pipeline_content_id: pipeContentId, // for reference only, not for ActionCard
-              },
-            });
-            console.log('[PIPELINE_BACKGROUND] DONE');
+            // Only emit PIPELINE_DONE if image_urls was actually saved
+            if (finalGc?.image_urls && finalGc.image_urls.length > 0) {
+              await svcPipe.from("chat_messages").insert({
+                user_id: userId,
+                role: "assistant",
+                content: "✅ Imagem gerada! Confira o resultado acima.",
+                intent: "PIPELINE_DONE",
+                metadata: {
+                  pipeline_content_id: pipeContentId,
+                },
+              });
+              console.log('[PIPELINE_BACKGROUND] DONE — image_urls saved');
+            } else {
+              console.warn(`[PIPELINE_BACKGROUND] DONE but image_urls is empty for ${pipeContentId}`);
+              await svcPipe.from("chat_messages").insert({
+                user_id: userId,
+                role: "assistant",
+                content: "⚠️ A geração da imagem não foi concluída. Tente clicar em 'Nova imagem' para tentar novamente.",
+                intent: "PIPELINE_DONE",
+                metadata: {
+                  pipeline_content_id: pipeContentId,
+                  image_failed: true,
+                },
+              });
+            }
           } catch (e: any) {
             console.error('[PIPELINE_BACKGROUND] fatal error:', e.message);
             // Notify user of failure via chat
@@ -4050,7 +4066,7 @@ Mensagem: "${message}"` }],
       ];
 
       const aiResponse = await aiGatewayFetch({
-          model: "google/gemini-3-flash-preview",
+          model: "openrouter/minimax-m-25",
           messages: aiMessages,
         });
 
