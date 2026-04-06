@@ -16,12 +16,23 @@ import {
   CalendarDays,
   MessageSquare,
   BarChart3,
+  UserPlus,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpCenterTrigger } from "@/components/onboarding/HelpCenterModal";
 
 const BADGE_DEPLOY_DATE = "2026-03-10";
 const BADGE_DURATION_DAYS = 30;
+
+const SAVED_ACCOUNTS_KEY = "tp_saved_accounts";
+
+interface SavedAccount {
+  userId: string;
+  email: string;
+  name: string;
+  accessToken: string;
+  refreshToken: string;
+}
 
 // Primary: what 90% of users need daily
 const primaryItems = [
@@ -46,6 +57,9 @@ const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const [showNewBadge, setShowNewBadge] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const { usage } = useSubscription();
 
   useEffect(() => {
@@ -58,6 +72,30 @@ const Sidebar = () => {
     }
   }, []);
 
+  useEffect(() => {
+    const loadAndSaveCurrentAccount = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const userId = session.user.id;
+      const email = session.user.email || "";
+      const name = session.user.user_metadata?.name || email.split("@")[0];
+
+      setCurrentUserId(userId);
+
+      const stored: SavedAccount[] = (() => {
+        try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
+      })();
+
+      const idx = stored.findIndex(a => a.userId === userId);
+      const account: SavedAccount = { userId, email, name, accessToken: session.access_token, refreshToken: session.refresh_token };
+      if (idx >= 0) stored[idx] = account; else stored.push(account);
+      localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(stored));
+      setSavedAccounts(stored);
+    };
+    loadAndSaveCurrentAccount();
+  }, []);
+
   const handleDismissBadge = () => {
     localStorage.setItem("assistente-ia-badge-dismissed", "true");
     setShowNewBadge(false);
@@ -68,8 +106,35 @@ const Sidebar = () => {
     if (error) {
       toast.error("Erro ao sair");
     } else {
+      // Remove current account from saved accounts list
+      const updated = savedAccounts.filter(a => a.userId !== currentUserId);
+      localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updated));
       toast.success("Você saiu da conta");
       navigate("/auth");
+    }
+  };
+
+  const handleAddAccount = async () => {
+    // Current session already saved in useEffect — just sign out and go to login
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
+
+  const handleSwitchAccount = async (account: SavedAccount) => {
+    try {
+      const { error } = await supabase.auth.setSession({
+        access_token: account.accessToken,
+        refresh_token: account.refreshToken,
+      });
+      if (error) throw error;
+      toast.success(`Trocado para ${account.name}`);
+      navigate("/chat");
+      window.location.reload();
+    } catch {
+      toast.error("Sessão expirada. Faça login novamente.");
+      const updated = savedAccounts.filter(a => a.userId !== account.userId);
+      localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updated));
+      setSavedAccounts(updated);
     }
   };
 
@@ -227,16 +292,75 @@ const Sidebar = () => {
       </div>
 
       {/* Footer */}
-      <div className="shrink-0 p-4 border-t border-sidebar-border space-y-1 bg-sidebar-background/95">
-        <HelpCenterTrigger />
-        <Button
-          variant="ghost"
-          onClick={handleLogout}
-          className="w-full justify-start gap-3 px-4 py-3 h-auto text-sm text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive"
-        >
-          <LogOut className="w-5 h-5" />
-          Sair
-        </Button>
+      <div className="shrink-0 border-t border-sidebar-border bg-sidebar-background/95">
+        {/* Saved accounts switcher */}
+        {savedAccounts.filter(a => a.userId !== currentUserId).length > 0 && (
+          <div className="px-3 pt-3 pb-2 border-b border-sidebar-border/50 space-y-1">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40 px-1 mb-1">Contas salvas</p>
+            {savedAccounts.filter(a => a.userId !== currentUserId).map(account => (
+              <button
+                key={account.userId}
+                onClick={() => handleSwitchAccount(account)}
+                className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground transition-all"
+              >
+                <div className="w-7 h-7 rounded-full bg-sidebar-primary/20 flex items-center justify-center flex-shrink-0">
+                  <span className="text-xs font-semibold text-sidebar-primary">
+                    {account.name[0].toUpperCase()}
+                  </span>
+                </div>
+                <div className="min-w-0 text-left">
+                  <p className="text-xs font-medium truncate">{account.name}</p>
+                  <p className="text-[10px] text-sidebar-foreground/50 truncate">{account.email}</p>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="p-4 space-y-1">
+          <HelpCenterTrigger />
+          <Button
+            variant="ghost"
+            onClick={handleAddAccount}
+            className="w-full justify-start gap-3 px-4 py-3 h-auto text-sm text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+          >
+            <UserPlus className="w-5 h-5" />
+            Adicionar outra conta
+          </Button>
+
+          {showLogoutConfirm ? (
+            <div className="px-2 py-2 rounded-lg bg-destructive/10 border border-destructive/20">
+              <p className="text-xs text-destructive font-medium mb-2 px-1">Você realmente deseja sair?</p>
+              <div className="flex gap-2">
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  onClick={handleLogout}
+                  className="flex-1 h-7 text-xs"
+                >
+                  Sair
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowLogoutConfirm(false)}
+                  className="flex-1 h-7 text-xs"
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button
+              variant="ghost"
+              onClick={() => setShowLogoutConfirm(true)}
+              className="w-full justify-start gap-3 px-4 py-3 h-auto text-sm text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive"
+            >
+              <LogOut className="w-5 h-5" />
+              Sair
+            </Button>
+          )}
+        </div>
       </div>
     </aside>
   );
