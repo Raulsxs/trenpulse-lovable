@@ -963,10 +963,18 @@ Mensagem do usuário: "${message}"`;
           } catch { }
 
           try {
-            const articleResp = await fetch(resolvedUrl, {
-              headers: { "User-Agent": "TrendPulse/1.0 (content-generator)" },
-              redirect: "follow",
-            });
+            const articleCtrl = new AbortController();
+            const articleTimer = setTimeout(() => articleCtrl.abort(), 12000);
+            let articleResp: Response;
+            try {
+              articleResp = await fetch(resolvedUrl, {
+                headers: { "User-Agent": "TrendPulse/1.0 (content-generator)" },
+                redirect: "follow",
+                signal: articleCtrl.signal,
+              });
+            } finally {
+              clearTimeout(articleTimer);
+            }
             if (articleResp.ok) {
               const html = await articleResp.text();
               const textContent = html
