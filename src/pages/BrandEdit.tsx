@@ -37,10 +37,20 @@ export default function BrandEdit() {
     dont_rules: "",
     default_visual_style: null as string | null,
     creation_mode: null as string | null,
+    visual_preferences: {
+      phone_mockup: null as boolean | null,
+      body_in_card: null as boolean | null,
+      inner_frame: null as boolean | null,
+      waves: null as boolean | null,
+      abstract_elements: null as boolean | null,
+      preferred_bg_mode: null as string | null,
+      custom_notes: "",
+    },
   });
 
   useEffect(() => {
     if (brand) {
+      const vp = (brand as any).visual_preferences || {};
       setFormData({
         name: brand.name,
         visual_tone: brand.visual_tone || "clean",
@@ -50,6 +60,15 @@ export default function BrandEdit() {
         dont_rules: brand.dont_rules || "",
         default_visual_style: (brand as any).default_visual_style || null,
         creation_mode: (brand as any).creation_mode || null,
+        visual_preferences: {
+          phone_mockup: vp.phone_mockup ?? null,
+          body_in_card: vp.body_in_card ?? null,
+          inner_frame: vp.inner_frame ?? null,
+          waves: vp.waves ?? null,
+          abstract_elements: vp.abstract_elements ?? null,
+          preferred_bg_mode: vp.preferred_bg_mode || null,
+          custom_notes: vp.custom_notes || "",
+        },
       });
     }
   }, [brand]);
@@ -174,14 +193,18 @@ export default function BrandEdit() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label>Fonte Títulos</Label>
-                    <Input value={formData.fonts.headings} onChange={(e) => setFormData({ ...formData, fonts: { ...formData.fonts, headings: e.target.value } })} placeholder="Inter" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Fonte Corpo</Label>
-                    <Input value={formData.fonts.body} onChange={(e) => setFormData({ ...formData, fonts: { ...formData.fonts, body: e.target.value } })} placeholder="Inter" />
+                <div className="space-y-2">
+                  <Label>Fontes</Label>
+                  <p className="text-xs text-muted-foreground">Usadas nos textos sobrepostos nas imagens. Ex: Inter, Montserrat, Playfair Display, Poppins.</p>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Títulos (headlines)</Label>
+                      <Input value={formData.fonts.headings} onChange={(e) => setFormData({ ...formData, fonts: { ...formData.fonts, headings: e.target.value } })} placeholder="Inter" />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs text-muted-foreground">Corpo (body text)</Label>
+                      <Input value={formData.fonts.body} onChange={(e) => setFormData({ ...formData, fonts: { ...formData.fonts, body: e.target.value } })} placeholder="Inter" />
+                    </div>
                   </div>
                 </div>
 
@@ -245,13 +268,67 @@ export default function BrandEdit() {
 
                 <div className="border-t border-border pt-4 space-y-4">
                   <div className="space-y-2">
-                    <Label>Regras para a IA (O que fazer)</Label>
-                    <Textarea value={formData.do_rules} onChange={(e) => setFormData({ ...formData, do_rules: e.target.value })} placeholder="Ex: Usar linguagem informal, incluir dados estatísticos, sempre mencionar o nome da marca..." rows={3} />
+                    <Label>✅ O que a IA DEVE fazer nos conteúdos</Label>
+                    <p className="text-xs text-muted-foreground">Regras que a IA vai seguir ao gerar textos e imagens para esta marca.</p>
+                    <Textarea value={formData.do_rules} onChange={(e) => setFormData({ ...formData, do_rules: e.target.value })} placeholder={"Exemplos:\n• Usar linguagem informal e próxima\n• Sempre incluir dados e estatísticas\n• Mencionar o nome da marca nos slides\n• Usar emojis com moderação\n• Headlines curtos e impactantes (máx 60 caracteres)"} rows={4} />
                   </div>
 
                   <div className="space-y-2">
-                    <Label>Regras para a IA (O que evitar)</Label>
-                    <Textarea value={formData.dont_rules} onChange={(e) => setFormData({ ...formData, dont_rules: e.target.value })} placeholder="Ex: Não usar jargões técnicos, evitar textos longos, não usar emojis em excesso..." rows={3} />
+                    <Label>🚫 O que a IA NÃO deve fazer</Label>
+                    <p className="text-xs text-muted-foreground">Regras do que evitar — a IA não vai fazer nada desta lista.</p>
+                    <Textarea value={formData.dont_rules} onChange={(e) => setFormData({ ...formData, dont_rules: e.target.value })} placeholder={"Exemplos:\n• Não usar jargões técnicos\n• Não fazer textos longos demais\n• Não usar emojis em excesso\n• Não mencionar concorrentes\n• Não usar CAPS LOCK nos headlines"} rows={4} />
+                  </div>
+                </div>
+
+                {/* Visual Preferences */}
+                <div className="border-t border-border pt-4 space-y-4">
+                  <div>
+                    <Label>🎨 Preferências visuais das imagens</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Controle como a IA gera as imagens. Essas preferências são aplicadas automaticamente em toda geração.</p>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <VisualPrefToggle
+                      label="Mockup de celular"
+                      description="Incluir mockup de celular nas imagens"
+                      value={formData.visual_preferences.phone_mockup}
+                      onChange={(v) => setFormData({ ...formData, visual_preferences: { ...formData.visual_preferences, phone_mockup: v } })}
+                    />
+                    <VisualPrefToggle
+                      label="Texto em card/caixa"
+                      description="Colocar texto dentro de cards com fundo"
+                      value={formData.visual_preferences.body_in_card}
+                      onChange={(v) => setFormData({ ...formData, visual_preferences: { ...formData.visual_preferences, body_in_card: v } })}
+                    />
+                    <VisualPrefToggle
+                      label="Moldura decorativa"
+                      description="Usar moldura/borda interna decorativa"
+                      value={formData.visual_preferences.inner_frame}
+                      onChange={(v) => setFormData({ ...formData, visual_preferences: { ...formData.visual_preferences, inner_frame: v } })}
+                    />
+                    <VisualPrefToggle
+                      label="Ondas/curvas"
+                      description="Elementos ondulados ou curvos no design"
+                      value={formData.visual_preferences.waves}
+                      onChange={(v) => setFormData({ ...formData, visual_preferences: { ...formData.visual_preferences, waves: v } })}
+                    />
+                    <VisualPrefToggle
+                      label="Formas abstratas"
+                      description="Formas geométricas e abstratas como decoração"
+                      value={formData.visual_preferences.abstract_elements}
+                      onChange={(v) => setFormData({ ...formData, visual_preferences: { ...formData.visual_preferences, abstract_elements: v } })}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label>📝 Instruções extras para a IA (imagens)</Label>
+                    <p className="text-xs text-muted-foreground">Texto livre que será enviado ao gerador de imagens. Use para descrever o estilo que você quer.</p>
+                    <Textarea
+                      value={formData.visual_preferences.custom_notes}
+                      onChange={(e) => setFormData({ ...formData, visual_preferences: { ...formData.visual_preferences, custom_notes: e.target.value } })}
+                      placeholder={"Exemplos:\n• Estilo minimalista, fundo escuro com detalhes dourados\n• Sempre usar degradê azul para roxo\n• Preferir fotos reais ao invés de ilustrações\n• Headlines sempre na parte inferior da imagem"}
+                      rows={4}
+                    />
                   </div>
                 </div>
 
@@ -368,5 +445,38 @@ export default function BrandEdit() {
         </Tabs>
       </div>
     </DashboardLayout>
+  );
+}
+
+function VisualPrefToggle({ label, description, value, onChange }: {
+  label: string; description: string; value: boolean | null; onChange: (v: boolean | null) => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        // Cycle: null (não definido) → true (sim) → false (não) → null
+        if (value === null) onChange(true);
+        else if (value === true) onChange(false);
+        else onChange(null);
+      }}
+      className={`flex items-start gap-2 p-3 rounded-lg border text-left transition-all ${
+        value === true
+          ? "border-green-500/50 bg-green-500/5"
+          : value === false
+            ? "border-red-500/30 bg-red-500/5"
+            : "border-border/60 hover:border-border"
+      }`}
+    >
+      <span className="text-sm mt-0.5">
+        {value === true ? "✅" : value === false ? "🚫" : "➖"}
+      </span>
+      <div>
+        <p className={`text-xs font-medium ${value === true ? "text-green-700" : value === false ? "text-red-600" : "text-muted-foreground"}`}>
+          {label}
+        </p>
+        <p className="text-[10px] text-muted-foreground leading-relaxed">{description}</p>
+      </div>
+    </button>
   );
 }
