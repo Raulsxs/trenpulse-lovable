@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import SmartNudge from "./SmartNudge";
 import type { GenerationDefaultsData } from "./GenerationDefaults";
+import { useNotification } from "@/hooks/useNotification";
 
 interface ActionResult {
   content_id?: string;
@@ -92,6 +93,7 @@ function getGreeting(): string {
 
 export default function ChatWindow() {
   const navigate = useNavigate();
+  const { requestPermission, notify } = useNotification();
   const [messages, setMessages] = useState<Message[]>([]);
   const [isSending, setIsSending] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
@@ -1069,6 +1071,9 @@ export default function ChatWindow() {
           ? toast.loading(`Gerando imagens: slide 1 de ${slideIds.length}...`, { duration: Infinity })
           : toast.loading("Gerando imagem do conteúdo...", { duration: Infinity });
 
+        // Ask for browser notification permission as user starts generation
+        requestPermission();
+
         (async () => {
           let completed = 0;
           let failed = 0;
@@ -1101,8 +1106,18 @@ export default function ChatWindow() {
               ? `Todas as ${completed} imagens foram geradas! 🎨`
               : "Imagem gerada com sucesso! 🎨"
             );
+            notify(
+              "TrendPulse — Conteúdo pronto! 🎨",
+              isMultiSlide
+                ? `Suas ${completed} imagens foram geradas. Clique para ver.`
+                : "Sua imagem foi gerada. Clique para ver."
+            );
           } else if (completed > 0) {
             toast.warning(`${completed} de ${slideIds.length} imagens geradas. ${failed} falharam.`);
+            notify(
+              "TrendPulse — Geração parcial",
+              `${completed} de ${slideIds.length} imagens prontas. ${failed} falharam.`
+            );
           } else {
             toast.error("Erro ao gerar imagens. Tente novamente.");
           }
