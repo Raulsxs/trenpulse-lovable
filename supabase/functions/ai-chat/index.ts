@@ -410,7 +410,10 @@ Responda APENAS com a imagem gerada.`;
         console.log("[ai-chat] GENERATE: calling generate-slide-images");
         let imageUrl: string | null = null;
         try {
+          const genController = new AbortController();
+          const genTimer = setTimeout(() => genController.abort(), 60000);
           const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-slide-images`, {
+            signal: genController.signal,
             method: "POST",
             headers: internalHeaders,
             body: JSON.stringify({
@@ -419,21 +422,24 @@ Responda APENAS com a imagem gerada.`;
               totalSlides: 1,
               contentFormat: format,
               platform,
+              backgroundOnly: false,
               customPrompt: imagePrompt,
               brandId: requestBrandId || null,
               referenceImageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
             }),
           });
 
+          clearTimeout(genTimer);
           if (genResp.ok) {
             const genData = await genResp.json();
             imageUrl = genData.imageUrl || genData.bgImageUrl || null;
             console.log("[ai-chat] GENERATE: image generated:", imageUrl ? "yes" : "no");
           } else {
-            console.error("[ai-chat] GENERATE: generate-slide-images failed:", genResp.status);
+            const errText = await genResp.text().catch(() => "");
+            console.error("[ai-chat] GENERATE: generate-slide-images failed:", genResp.status, errText.substring(0, 200));
           }
         } catch (genErr: any) {
-          console.error("[ai-chat] GENERATE: generate-slide-images error:", genErr?.message);
+          console.error("[ai-chat] GENERATE: generate-slide-images error:", genErr?.name === "AbortError" ? "timeout (60s)" : genErr?.message);
         }
 
         // 7. Generate caption with minimax
@@ -702,6 +708,7 @@ Responda APENAS com a imagem gerada.`;
                 totalSlides: slides.length,
                 contentFormat: format,
                 platform,
+                backgroundOnly: false,
                 customPrompt: slidePrompt,
                 brandId: requestBrandId || null,
                 referenceImageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
@@ -856,6 +863,7 @@ Responda APENAS com a imagem editada.`;
               totalSlides: 1,
               contentFormat: existingFormat,
               platform: existingPlatform,
+              backgroundOnly: false,
               customPrompt: editPrompt,
               referenceImageUrls: currentImage ? [currentImage] : undefined,
               brandId: existing.brand_id,

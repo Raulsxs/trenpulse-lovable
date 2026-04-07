@@ -71,7 +71,8 @@ serve(async (req) => {
     const language = requestLanguage || "pt-BR";
     // backgroundOnly: true = generate only background (text rendered by frontend overlay)
     // backgroundOnly: false = generate complete image with text (ai_full_design mode)
-    const isBgOnly = backgroundOnly !== false;
+    // customPrompt always means full design (user expects complete image)
+    const isBgOnly = customPrompt ? false : (backgroundOnly !== false);
 
     console.log(`[generate-slide-images] mode=${isBgOnly ? "BACKGROUND-ONLY" : "FULL-DESIGN"}, slideIndex=${slideIndex}, platform=${platform}, contentFormat=${contentFormat}, backgroundOnly=${backgroundOnly}`);
 
