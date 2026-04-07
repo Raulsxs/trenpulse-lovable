@@ -686,6 +686,9 @@ serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    // Internal edge function calls use service_role to avoid JWT expiry during long operations
+    const internalServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const internalHeaders = { Authorization: `Bearer ${internalServiceKey}`, "Content-Type": "application/json", apikey: supabaseAnonKey };
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
@@ -1193,10 +1196,7 @@ Mensagem do usuário: "${message}"`;
         try {
           const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-content`, {
             method: "POST",
-            headers: {
-              Authorization: authHeader,
-              "Content-Type": "application/json",
-              apikey: supabaseAnonKey,
+            headers: internalHeaders,
             },
             body: JSON.stringify(genBody),
           });
@@ -1538,10 +1538,7 @@ Mensagem do usuário: "${message}"`;
 
           const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-content`, {
             method: "POST",
-            headers: {
-              Authorization: authHeader,
-              "Content-Type": "application/json",
-              apikey: supabaseAnonKey,
+            headers: internalHeaders,
             },
             body: JSON.stringify(genBody),
           });
@@ -1931,7 +1928,7 @@ Regras:
           // Call generate-content with the original source but new platform/format
           const adaptResp = await fetch(`${supabaseUrl}/functions/v1/generate-content`, {
             method: "POST",
-            headers: { Authorization: authHeader!, "Content-Type": "application/json", apikey: supabaseAnonKey },
+            headers: internalHeaders,
             body: JSON.stringify({
               trend: {
                 title: original.title,
@@ -2016,7 +2013,7 @@ Regras:
               try {
                 await fetch(`${supabaseUrl}/functions/v1/scrape-trends`, {
                   method: "POST",
-                  headers: { Authorization: authHeader!, "Content-Type": "application/json", apikey: supabaseAnonKey },
+                  headers: internalHeaders,
                   body: JSON.stringify({}),
                 });
                 // Re-fetch after scraping
@@ -2184,7 +2181,7 @@ Varie os estilos. Retorne APENAS o JSON.`;
             try {
               const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-content`, {
                 method: "POST",
-                headers: { Authorization: authHeader!, "Content-Type": "application/json", apikey: supabaseAnonKey },
+                headers: internalHeaders,
                 body: JSON.stringify({
                   trend: { title: item.title, description: item.title, theme: niche, keywords: topics },
                   contentType: "post",
@@ -2574,7 +2571,7 @@ REGRAS:
           try {
             genResp = await fetch(`${supabaseUrl}/functions/v1/generate-content`, {
               method: "POST",
-              headers: { Authorization: authHeader!, "Content-Type": "application/json", apikey: supabaseAnonKey },
+              headers: internalHeaders,
               body: JSON.stringify({
                 trend: {
                   title: isQuoteInit ? extractedContentInit : extractedContentInit || "Conteúdo",
@@ -2736,7 +2733,7 @@ REGRAS:
         const { slideId, contentId: bgContentId, visualMode: bgVisualMode, backgroundMode: bgMode, templateId: bgTemplateId, uploadedImageUrl: bgUploadUrl } = generationParams;
         const serviceKeyBg = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
         const svcBg = createClient(supabaseUrl, serviceKeyBg);
-        const headers = { Authorization: authHeader!, "Content-Type": "application/json", apikey: supabaseAnonKey };
+        const headers = internalHeaders;
         const callFn = async (fn: string, body: any) => {
           const controller = new AbortController();
           const timer = setTimeout(() => controller.abort(), 120000);
@@ -2886,7 +2883,7 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
         console.log(`[PIPELINE_BACKGROUND] visualStyle=${pipeVisualStyle}, backgroundOnly=${pipeBackgroundOnly}, platform=${pipePlatform}, contentStyle=${pipeContentStyle}`);
         const serviceKeyPipe = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
         const svcPipe = createClient(supabaseUrl, serviceKeyPipe);
-        const headersPipe = { Authorization: authHeader!, "Content-Type": "application/json", apikey: supabaseAnonKey };
+        const headersPipe = internalHeaders;
 
         const callFnPipe = async (fn: string, body: any, timeoutMs = 90000) => {
           const controller = new AbortController();
@@ -3870,7 +3867,7 @@ Responda APENAS em JSON: {"headline":"título impactante (máx 60 chars)","body"
         }
 
         const svcAnalyze = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-        const analyzeHeaders = { Authorization: authHeader!, "Content-Type": "application/json", apikey: supabaseAnonKey };
+        const analyzeHeaders = internalHeaders;
 
         let templateCount = 0;
         let analyzeOk = false;
