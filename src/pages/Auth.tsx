@@ -61,8 +61,12 @@ const Auth = () => {
       if (error) throw error;
       window.location.href = "/chat";
     } catch {
-      toast.error("Sessão expirada. Faça login novamente.");
-      const updated = savedAccounts.filter(a => a.userId !== account.userId);
+      toast.error("Sessão expirada. Faça login novamente na conta desejada.");
+      // Read fresh from localStorage to avoid stale state
+      const stored: SavedAccount[] = (() => {
+        try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
+      })();
+      const updated = stored.filter(a => a.userId !== account.userId);
       localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updated));
       setSavedAccounts(updated);
       if (updated.length === 0) setMode("login");

@@ -137,6 +137,23 @@ const Sidebar = () => {
   };
 
   const handleSwitchAccount = async (account: SavedAccount) => {
+    // Snapshot current session before switching so we can restore on failure
+    const { data: { session: originalSession } } = await supabase.auth.getSession();
+
+    // Ensure current user is persisted in saved accounts before we leave
+    if (originalSession) {
+      const uid = originalSession.user.id;
+      const em = originalSession.user.email || "";
+      const nm = originalSession.user.user_metadata?.name || em.split("@")[0];
+      const stored: SavedAccount[] = (() => {
+        try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
+      })();
+      const idx = stored.findIndex(a => a.userId === uid);
+      const cur: SavedAccount = { userId: uid, email: em, name: nm, accessToken: originalSession.access_token, refreshToken: originalSession.refresh_token };
+      if (idx >= 0) stored[idx] = cur; else stored.push(cur);
+      localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(stored));
+    }
+
     try {
       const { error } = await supabase.auth.setSession({
         access_token: account.accessToken,
@@ -146,8 +163,25 @@ const Sidebar = () => {
       toast.success(`Trocado para ${account.name}`);
       window.location.href = "/chat";
     } catch {
-      toast.error("Sessão expirada. Faça login novamente.");
-      const updated = savedAccounts.filter(a => a.userId !== account.userId);
+      // setSession may have wiped the original session — restore it
+      if (originalSession) {
+        try {
+          await supabase.auth.setSession({
+            access_token: originalSession.access_token,
+            refresh_token: originalSession.refresh_token,
+          });
+        } catch {
+          // Original session also gone — send to picker with both accounts visible
+          window.location.href = "/auth";
+          return;
+        }
+      }
+      toast.error("Sessão expirada. Faça login novamente na conta desejada.");
+      // Remove only the stale account from the list (read fresh from storage)
+      const stored: SavedAccount[] = (() => {
+        try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
+      })();
+      const updated = stored.filter(a => a.userId !== account.userId);
       localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updated));
       setSavedAccounts(updated);
     }
