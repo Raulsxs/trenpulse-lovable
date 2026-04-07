@@ -13,8 +13,7 @@ import { useBrands, useUpdateBrand } from "@/hooks/useStudio";
 import { VISUAL_TONES } from "@/types/studio";
 import { ArrowLeft, Plus, X, Save, Loader2 } from "lucide-react";
 import BrandExamples from "@/components/studio/BrandExamples";
-import TemplateSetsSection from "@/components/studio/TemplateSetsSection";
-import SavedBackgroundTemplates from "@/components/studio/SavedBackgroundTemplates";
+// TemplateSetsSection and SavedBackgroundTemplates removed in simplification
 import BrandPhotoBackgrounds from "@/components/studio/BrandPhotoBackgrounds";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -141,9 +140,8 @@ export default function BrandEdit() {
         <Tabs defaultValue="identity" className="w-full">
           <TabsList className="flex-wrap">
             <TabsTrigger value="identity">Identidade</TabsTrigger>
-            <TabsTrigger value="generation">Geração</TabsTrigger>
+            <TabsTrigger value="generation">Regras para IA</TabsTrigger>
             <TabsTrigger value="images">Imagens</TabsTrigger>
-            <TabsTrigger value="styles">Estilos</TabsTrigger>
           </TabsList>
 
           {/* ── Tab 1: Identidade — nome, cores, fontes, tom visual ── */}
@@ -208,34 +206,6 @@ export default function BrandEdit() {
                   </div>
                 </div>
 
-                <div className="space-y-2">
-                  <Label>Tipo de marca</Label>
-                  <p className="text-xs text-muted-foreground">Define como a IA usa as imagens dessa marca na geração.</p>
-                  <Select
-                    value={formData.creation_mode || "style_copy"}
-                    onValueChange={(value) => {
-                      const autoDefault: Record<string, string | null> = {
-                        photo_backgrounds: "photo_overlay",
-                        style_copy: "ai_background",
-                        inspired: "ai_background",
-                        from_scratch: null,
-                      };
-                      setFormData({
-                        ...formData,
-                        creation_mode: value,
-                        default_visual_style: autoDefault[value] ?? formData.default_visual_style,
-                      });
-                    }}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="style_copy">🎨 Copiar estilo — IA replica seu estilo visual</SelectItem>
-                      <SelectItem value="photo_backgrounds">📸 Fotos pessoais — suas fotos como fundo</SelectItem>
-                      <SelectItem value="inspired">🔍 Inspirado — IA se inspira nas referências</SelectItem>
-                      <SelectItem value="from_scratch">✨ Do zero — sem referências visuais</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
               </CardContent>
             </Card>
           </TabsContent>
@@ -244,29 +214,7 @@ export default function BrandEdit() {
           <TabsContent value="generation">
             <Card>
               <CardContent className="space-y-4 pt-6">
-                <div className="space-y-3">
-                  <div>
-                    <Label>Modo visual padrão</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      Define como os posts são gerados por padrão. Se definido, pula a pergunta "Como quer o visual?" no chat.
-                    </p>
-                  </div>
-                  <Select
-                    value={formData.default_visual_style || "ask"}
-                    onValueChange={(value) => setFormData({ ...formData, default_visual_style: value === "ask" ? null : value })}
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ask">Perguntar sempre</SelectItem>
-                      <SelectItem value="ai_full_design">✨ Design completo por IA — imagem pronta com texto</SelectItem>
-                      <SelectItem value="ai_background">🖼️ Visual da marca + texto — background fiel ao estilo</SelectItem>
-                      <SelectItem value="photo_overlay">📸 Foto pessoal + texto — sua foto como fundo</SelectItem>
-                      <SelectItem value="template_clean">🎨 Só texto — cores da marca, sem imagem</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="border-t border-border pt-4 space-y-4">
+                <div className="space-y-4">
                   <div className="space-y-2">
                     <Label>✅ O que a IA DEVE fazer nos conteúdos</Label>
                     <p className="text-xs text-muted-foreground">Regras que a IA vai seguir ao gerar textos e imagens para esta marca.</p>
@@ -332,20 +280,6 @@ export default function BrandEdit() {
                   </div>
                 </div>
 
-                {/* Style Guide Preview */}
-                {(brand as any).style_guide && (
-                  <div className="border-t border-border pt-4 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-medium">Style Guide (gerado pela IA)</h4>
-                      <Badge variant="secondary" className="text-[10px]">
-                        v{(brand as any).style_guide_version || 1}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Preset detectado: <strong>{(brand as any).style_guide?.style_preset}</strong>
-                    </p>
-                  </div>
-                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -403,45 +337,6 @@ export default function BrandEdit() {
             </div>
           </TabsContent>
 
-          {/* ── Tab 4: Estilos — template sets + backgrounds ── */}
-          <TabsContent value="styles">
-            <div className="space-y-6">
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="space-y-1 mb-4">
-                    <h3 className="text-sm font-semibold">Estilos de conteúdo</h3>
-                    <p className="text-xs text-muted-foreground">
-                      Templates gerados pela IA a partir das suas referências visuais.
-                    </p>
-                  </div>
-                  <TemplateSetsSection
-                    brandId={brand.id}
-                    brandName={brand.name}
-                    defaultTemplateSetId={(brand as any).default_template_set_id || null}
-                    templateSetsDirty={(brand as any).template_sets_dirty || false}
-                    templateSetsDirtyCount={(brand as any).template_sets_dirty_count || 0}
-                    templateSetsStatus={(brand as any).template_sets_status || "idle"}
-                    brandPalette={(brand as any).palette}
-                    brandFonts={(brand as any).fonts}
-                    brandVisualTone={(brand as any).visual_tone}
-                    brandLogoUrl={(brand as any).logo_url}
-                  />
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="space-y-1 mb-4">
-                    <h3 className="text-sm font-semibold">Backgrounds salvos</h3>
-                    <p className="text-xs text-muted-foreground">
-                      Fundos gerados que você salvou para reusar em novos conteúdos.
-                    </p>
-                  </div>
-                  <SavedBackgroundTemplates brandId={brand.id} />
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
         </Tabs>
       </div>
     </DashboardLayout>
