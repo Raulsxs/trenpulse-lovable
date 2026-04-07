@@ -59,6 +59,8 @@ serve(async (req) => {
       backgroundOnly, // when true, generate background without any text
       illustrationMode, // when true, generate illustrative scene (not text-heavy design)
       contentStyle, // "quote" = phrase/citation style (elegant, lowercase, with quotes)
+      customPrompt, // pre-built prompt from ai-chat (bypasses buildPrompt)
+      referenceImageUrls: externalReferenceUrls, // brand reference image URLs from ai-chat
       platform: requestPlatform,
       allSlides: requestAllSlides, // all slides data for narrative context in carousels
     } = await req.json();
@@ -186,9 +188,9 @@ serve(async (req) => {
 
     const strictTemplateCategoryLock = Boolean(templateSetId && resolvedCategoryId);
 
-    let referenceImageUrls: string[] = [];
+    let referenceImageUrls: string[] = externalReferenceUrls || [];
     let referenceExampleIds: string[] = [];
-    let fallbackLevel = 0;
+    let fallbackLevel = externalReferenceUrls?.length ? 1 : 0;
 
     if (brandId && resolvedCategoryId) {
       const { data: catExactTypeExamples } = await supabase
@@ -282,7 +284,11 @@ serve(async (req) => {
 
     // Choose prompt based on mode
     let prompt: string;
-    if (illustrationMode) {
+    if (customPrompt) {
+      // Pre-built prompt from ai-chat — use directly (includes brand context, user topic, etc.)
+      prompt = customPrompt;
+      console.log(`[generate-slide-images] Using customPrompt (${customPrompt.length} chars)`);
+    } else if (illustrationMode) {
       const topic = slide.headline || slide.body || "professional content";
       const brandColorHint = brandInfo?.palette?.length
         ? `Incorporate these brand colors subtly: ${brandInfo.palette.slice(0, 3).map((c: any) => typeof c === "string" ? c : c.hex).join(", ")}.`
