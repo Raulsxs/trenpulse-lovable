@@ -4,14 +4,11 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
-import GenerationFlowStep from "./GenerationFlowStep";
 import BrandAnalysisLoader from "./BrandAnalysisLoader";
-import { useGenerationFlow } from "@/hooks/useGenerationFlow";
 import { Sparkles, ArrowDown, X, MessageSquarePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import SmartNudge from "./SmartNudge";
-import type { GenerationDefaultsData } from "./GenerationDefaults";
 import { useNotification } from "@/hooks/useNotification";
 
 interface ActionResult {
@@ -73,15 +70,14 @@ const buildCompletionMsg = (data: { name?: string; handle?: string; niche?: stri
     `💡 **Dica rápida:** você pode me enviar links de notícias ou artigos e eu transformo em post, carrossel ou story automaticamente. Experimente colar um link aqui!`;
 };
 
-const QUICK_SUGGESTIONS = [
-  "✨ Criar conteúdo",
-  "📸 Criar um post",
-  "🎠 Criar um carrossel",
-  "📱 Criar um story",
-  "🔗 Tenho um link",
+const QUICK_ACTIONS = [
+  { emoji: "📷", label: "Post", template: "Crie um post para Instagram sobre: " },
+  { emoji: "🎠", label: "Carrossel", template: "Crie um carrossel de 5 slides sobre: " },
+  { emoji: "📱", label: "Story", template: "Crie um story para Instagram sobre: " },
+  { emoji: "💬", label: "Frase", template: "Crie uma imagem com a frase: " },
+  { emoji: "🔗", label: "Link", template: "Crie um post baseado neste link: " },
+  { emoji: "💼", label: "LinkedIn", template: "Crie um post para LinkedIn sobre: " },
 ];
-
-const GENERATION_PATTERNS = /\b(cri(?:a|e|ar)|gerar?|fa(?:z|ça|zer)|quero\s+um|fazer?\s+um|preciso\s+de\s+um)\b.*\b(post|carrossel|carousel|story|stories|conteúdo|conteudo)\b/i;
 
 function getGreeting(): string {
   const hour = new Date().getHours();
@@ -104,15 +100,13 @@ export default function ChatWindow() {
   const [cronBanner, setCronBanner] = useState<Message | null>(null);
   const [brandCreationStep, setBrandCreationStep] = useState<number | null>(null);
   const [nudgeContext, setNudgeContext] = useState({ hasBrand: true, hasSocialConnection: true, contentCount: 0 });
-  const [generationDefaults, setGenerationDefaults] = useState<GenerationDefaultsData>({
-    defaultBrandId: null, defaultBrandName: null, defaultPlatform: null,
-    defaultContentStyle: "news", defaultFormat: null,
-  });
+  const [brands, setBrands] = useState<Array<{ id: string; name: string }>>([]);
+  const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
+  const [prefillText, setPrefillText] = useState("");
+  const [prefillKey, setPrefillKey] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasLoadedHistory = useRef(false);
   const lastActiveContentId = useRef<string | null>(null);
-
-  const genFlow = useGenerationFlow();
 
   // Scroll tracking
   const handleScroll = useCallback(() => {
@@ -128,6 +122,14 @@ export default function ChatWindow() {
     setShowScrollBtn(false);
   }, []);
 
+  // ── Load user's brands ──
+  useEffect(() => {
+    if (!userId) return;
+    supabase.from("brands").select("id, name").eq("owner_user_id", userId)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => { if (data) setBrands(data); });
+  }, [userId]);
+
   // ── Nudge context — check if user has brand + social connection ──
   useEffect(() => {
     if (!userId) return;
@@ -136,9 +138,9 @@ export default function ChatWindow() {
       supabase.from("instagram_connections").select("id").eq("user_id", userId).eq("is_active", true).limit(1),
       supabase.from("linkedin_connections").select("id").eq("user_id", userId).eq("is_active", true).limit(1),
       supabase.from("generated_contents").select("id").eq("user_id", userId).limit(1),
-    ]).then(([brands, ig, li, contents]) => {
+    ]).then(([brandsResult, ig, li, contents]) => {
       setNudgeContext({
-        hasBrand: (brands.data?.length || 0) > 0,
+        hasBrand: (brandsResult.data?.length || 0) > 0,
         hasSocialConnection: (ig.data?.length || 0) > 0 || (li.data?.length || 0) > 0,
         contentCount: contents.data?.length || 0,
       });
@@ -161,12 +163,6 @@ export default function ChatWindow() {
         .select("onboarding_done, onboarding_step, extra_context")
         .eq("user_id", uid)
         .maybeSingle();
-
-      // Load generation defaults from extra_context
-      const savedDefaults = (ctx?.extra_context as any)?.generation_defaults;
-      if (savedDefaults) {
-        setGenerationDefaults((prev) => ({ ...prev, ...savedDefaults }));
-      }
 
       if (!ctx || !ctx.onboarding_done) {
         // Page onboarding (/onboarding) handles this now — skip chat onboarding
@@ -352,6 +348,10 @@ export default function ChatWindow() {
                 },
               ]);
               setBrandCreationStep(null);
+              // Reload brands list after brand creation
+              supabase.from("brands").select("id, name").eq("owner_user_id", userId)
+                .order("created_at", { ascending: false })
+                .then(({ data }) => { if (data) setBrands(data); });
               toast.success('Marca criada com sucesso! 🎨');
             }
 
@@ -430,7 +430,7 @@ export default function ChatWindow() {
     } else {
       setShowScrollBtn(true);
     }
-  }, [messages, genFlow.flow.phase, genFlow.flow.configStep, isAtBottom, scrollToBottom]);
+  }, [messages, isAtBottom, scrollToBottom]);
 
   // ── Onboarding helpers ──
   const extractNameFromText = useCallback((text: string): string => {
@@ -567,624 +567,6 @@ export default function ChatWindow() {
     }
   }, [userId]);
 
-  // ══════ CONFIG PHASE HANDLER ══════
-  const handleConfigSelect = useCallback(async (key: string, value: any) => {
-    const { flow, updateFlow, setConfigStep, setPhase, setLoading } = genFlow;
-
-    switch (key) {
-      case "platform":
-        updateFlow({ platform: value });
-        if (flow.contentType) {
-          setConfigStep("brand");
-        } else {
-          setConfigStep("content_type");
-        }
-        break;
-      case "contentType":
-        updateFlow({ contentType: value });
-        setConfigStep("brand");
-        break;
-      case "brand_auto": {
-        const brandMeta = value;
-        updateFlow({
-          brandId: brandMeta.id,
-          brandName: brandMeta.name,
-          brandCreationMode: brandMeta.creation_mode || null,
-          brandDefaultVisualStyle: brandMeta.default_visual_style || null,
-        });
-        // Determine next step based on source + brand default
-        // sourceUrl (link) OR meaningful sourceText (>= 15 chars) skips source_input
-        const hasSourceAuto = flow.sourceUrl || (flow.sourceText && flow.sourceText.length >= 15);
-        // Content style comes from defaults (no more asking)
-        if (!flow.contentStyle) updateFlow({ contentStyle: (generationDefaults.defaultContentStyle as any) || "news" });
-        if (!hasSourceAuto) {
-          // No real source → ask for it
-          setConfigStep("source_input");
-        } else {
-          // If brand has a default visual style, skip visual_style step
-          if (brandMeta.default_visual_style) {
-            updateFlow({ visualStyle: brandMeta.default_visual_style });
-            // photo_overlay needs photo source selection
-            if (brandMeta.default_visual_style === "photo_overlay") {
-              setConfigStep("photo_source");
-            } else if (brandMeta.default_visual_style === "template_clean") {
-              const ct = flow.contentType;
-              if (ct === "carousel" || ct === "document") {
-                setConfigStep("slide_count");
-              } else {
-                startGeneration({ visualStyle: brandMeta.default_visual_style });
-                return;
-              }
-            } else if (brandMeta.default_visual_style === "ai_full_design") {
-              const ct = flow.contentType;
-              if (ct === "carousel" || ct === "document") {
-                setConfigStep("slide_count");
-              } else {
-                startGeneration({ visualStyle: brandMeta.default_visual_style });
-                return;
-              }
-            } else {
-              // ai_background — proceed to source_input or visual generation
-              const ct = flow.contentType;
-              if (ct === "carousel" || ct === "document") {
-                setConfigStep("slide_count");
-              } else {
-                setConfigStep("background_mode");
-              }
-            }
-          } else {
-            setConfigStep("visual_style");
-          }
-        }
-        break;
-      }
-      case "brandId": {
-        const brandObj = typeof value === "string" ? { id: value } : value;
-        updateFlow({
-          brandId: brandObj.id,
-          brandName: brandObj.name || null,
-          brandCreationMode: brandObj.creation_mode || null,
-          brandDefaultVisualStyle: brandObj.default_visual_style || null,
-        });
-        const hasSourceBrand = flow.sourceUrl || (flow.sourceText && flow.sourceText.length >= 15);
-        if (hasSourceBrand) {
-          if (!flow.contentStyle) updateFlow({ contentStyle: "news" });
-          // If brand has default visual style, skip the question
-          if (brandObj.default_visual_style) {
-            updateFlow({ visualStyle: brandObj.default_visual_style });
-            if (brandObj.default_visual_style === "photo_overlay") {
-              setConfigStep("photo_source");
-            } else if (brandObj.default_visual_style === "template_clean" || brandObj.default_visual_style === "ai_full_design") {
-              const ct = flow.contentType;
-              if (ct === "carousel" || ct === "document") {
-                setConfigStep("slide_count");
-              } else {
-                startGeneration({ visualStyle: brandObj.default_visual_style });
-                return;
-              }
-            } else {
-              const ct = flow.contentType;
-              if (ct === "carousel" || ct === "document") {
-                setConfigStep("slide_count");
-              } else {
-                setConfigStep("background_mode");
-              }
-            }
-          } else {
-            setConfigStep("visual_style");
-          }
-        } else {
-          // No real source → ask for it (content style comes from defaults)
-          if (!flow.contentStyle) updateFlow({ contentStyle: (generationDefaults.defaultContentStyle as any) || "news" });
-          setConfigStep("source_input");
-        }
-        break;
-      }
-      case "brand_skip":
-        // Explicitly set brandId to "none" so backend doesn't auto-resolve
-        updateFlow({ brandId: "none", brandName: null });
-        if (!flow.contentStyle) updateFlow({ contentStyle: (generationDefaults.defaultContentStyle as any) || "news" });
-        if (flow.sourceUrl || (flow.sourceText && flow.sourceText.length >= 15)) {
-          if (!flow.contentStyle) updateFlow({ contentStyle: "news" });
-          setConfigStep("visual_style");
-        } else {
-          setConfigStep("source_input");
-        }
-        break;
-      case "contentStyle": {
-        updateFlow({ contentStyle: value });
-        // Check if we need source text input
-        const hasUrlCS = flow.sourceUrl || (flow.sourceText && /https?:\/\/[^\s]+/.test(flow.sourceText));
-        const isButtonTextCS = !flow.sourceText || flow.sourceText.length < 20
-          || /^[\p{Emoji}\s]*(criar|gerar|fazer|quero|preciso|me |um |uma |novo|nova)\s/iu.test(flow.sourceText.trim());
-        const hasRealSourceCS = hasUrlCS || (flow.sourceText && flow.sourceText.length >= 20 && !isButtonTextCS);
-
-        // Always ask for source input unless user already pasted a real URL or long text
-        if (value === "quote" || !hasRealSourceCS) {
-          setConfigStep("source_input");
-        } else {
-          // Has real source — check if brand has visual style default
-          const brandDefaultCS = flow.brandDefaultVisualStyle;
-          if (brandDefaultCS) {
-            updateFlow({ visualStyle: brandDefaultCS as any });
-            if (brandDefaultCS === "photo_overlay") {
-              setConfigStep("photo_source");
-            } else if (brandDefaultCS === "template_clean" || brandDefaultCS === "ai_full_design") {
-              const ctCS = flow.contentType;
-              if (ctCS === "carousel" || ctCS === "document") {
-                setConfigStep("slide_count");
-              } else {
-                startGeneration({ contentStyle: value, visualStyle: brandDefaultCS });
-                return;
-              }
-            } else {
-              const ctCS = flow.contentType;
-              if (ctCS === "carousel" || ctCS === "document") {
-                setConfigStep("slide_count");
-              } else {
-                setConfigStep("background_mode");
-              }
-            }
-          } else {
-            setConfigStep("visual_style");
-          }
-        }
-        break;
-      }
-      case "source_mode": {
-        // User chose how to provide content source
-        if (value === "link") {
-          setConfigStep("source_link");
-        } else if (value === "suggest") {
-          // Hide the 3 options immediately by moving to a non-visible step
-          setConfigStep("source_write");
-          // Fire content suggestions — show as quick reply options
-          (async () => {
-            try {
-              setMessages((prev) => [...prev, { role: "assistant", content: "Buscando sugestões para o seu nicho... 💡", isLoading: true }]);
-              const { data } = await supabase.functions.invoke("ai-chat", {
-                body: { message: "SUGERIR_CONTEUDO", intent_hint: "SUGERIR_CONTEUDO" },
-              });
-              // Remove loading message
-              setMessages((prev) => prev.filter((m) => !m.isLoading));
-
-              const suggestions = data?.action_result?.suggestions || [];
-              const reply = data?.reply || "";
-              if (suggestions.length > 0) {
-                setMessages((prev) => [...prev, {
-                  role: "assistant",
-                  content: (reply || "Escolha um tema para o seu conteúdo:") + "\n\n_Clique numa sugestão ou digite seu próprio tema abaixo._",
-                  quickReplies: suggestions.map((s: any) => `📝 ${s.title}`),
-                }]);
-                // Hide the wizard text field — suggestions are in the chat as quickReplies
-                // User clicks a suggestion → handleQuickReply routes to sourceInput
-                setConfigStep("suggestions_pending");
-              } else if (reply) {
-                setMessages((prev) => [...prev, { role: "assistant", content: reply }]);
-                setConfigStep("source_write");
-              } else {
-                setMessages((prev) => [...prev, { role: "assistant", content: "Descreva o tema do conteúdo:" }]);
-                setConfigStep("source_write");
-              }
-            } catch {
-              setMessages((prev) => prev.filter((m) => !m.isLoading));
-              setMessages((prev) => [...prev, { role: "assistant", content: "Descreva o tema do conteúdo:" }]);
-              setConfigStep("source_write");
-            }
-          })();
-        } else {
-          // write from scratch — ask if it's a phrase or a topic
-          setConfigStep("source_type");
-        }
-        break;
-      }
-
-      case "source_type": {
-        if (value === "phrase") {
-          updateFlow({ contentStyle: "quote" });
-          setConfigStep("source_phrase");
-        } else {
-          // topic — go to normal write field
-          setConfigStep("source_write");
-        }
-        break;
-      }
-
-      case "sourceInput": {
-        // Detect if the user pasted a URL — set as sourceUrl so the backend fetches the article
-        const sourceUrlMatch = value.match(/https?:\/\/[^\s]+/);
-        if (sourceUrlMatch) {
-          const cleanText = value.replace(sourceUrlMatch[0], "").trim();
-          updateFlow({ sourceUrl: sourceUrlMatch[0], sourceText: cleanText || undefined });
-        } else {
-          // Detect if the provided text is a quote/phrase and update contentStyle
-          // Only detect as quote if it genuinely looks like a phrase to be used literally
-          // NOT if it starts with action verbs (crie, gere, faça, etc.) — those are instructions, not quotes
-          const trimmedVal = value.trim();
-          const startsWithAction = /^(cri[ea]|ger[ea]|fa[çz]a|quero|preciso|pode|me\s|um\s|sobre\s)/i.test(trimmedVal);
-          const looksLikeQuote = !startsWithAction && (
-            /^(seguinte\s+)?frase/i.test(trimmedVal) ||
-            /^["'"'«]/.test(trimmedVal) ||
-            /["'"'»]$/.test(trimmedVal)
-          );
-          if (looksLikeQuote && flow.contentStyle !== "quote") {
-            updateFlow({ sourceText: value, contentStyle: "quote" });
-          } else {
-            updateFlow({ sourceText: value });
-          }
-        }
-        // If brand already has default visual style, skip visual_style step
-        const brandDefault = flow.brandDefaultVisualStyle;
-        if (brandDefault) {
-          updateFlow({ visualStyle: brandDefault as any });
-          if (brandDefault === "photo_overlay") {
-            const ctSrc = flow.contentType;
-            if (ctSrc === "carousel" || ctSrc === "document") {
-              setConfigStep("slide_count");
-            } else {
-              setConfigStep("photo_source");
-            }
-          } else if (brandDefault === "template_clean" || brandDefault === "ai_full_design" || brandDefault === "ai_illustration") {
-            const ctSrc = flow.contentType;
-            if (ctSrc === "carousel" || ctSrc === "document") {
-              setConfigStep("slide_count");
-            } else {
-              startGeneration({ sourceText: value, visualStyle: brandDefault });
-              return;
-            }
-          } else {
-            // ai_background
-            const ctSrc = flow.contentType;
-            if (ctSrc === "carousel" || ctSrc === "document") {
-              setConfigStep("slide_count");
-            } else {
-              setConfigStep("background_mode");
-            }
-          }
-        } else {
-          setConfigStep("visual_style");
-        }
-        break;
-      }
-      case "illustration_title": {
-        // "with_title" = illustration bg + title overlay (pipeBackgroundOnly=true)
-        // "no_title" = pure illustration, image IS the final (pipeBackgroundOnly=false)
-        const illustrationWithTitle = value === "with_title";
-        updateFlow({
-          visualStyle: illustrationWithTitle ? "ai_illustration_titled" : "ai_illustration",
-        });
-        const ctIllust = flow.contentType;
-        if (ctIllust === "carousel" || ctIllust === "document") {
-          setConfigStep("slide_count");
-        } else {
-          startGeneration({
-            visualStyle: illustrationWithTitle ? "ai_illustration_titled" : "ai_illustration",
-          });
-          return;
-        }
-        break;
-      }
-
-      case "visualStyle": {
-        updateFlow({ visualStyle: value });
-        const ctAfterVisual = flow.contentType;
-        if (value === "ai_illustration") {
-          // Ask if user wants title on the illustration
-          setConfigStep("illustration_title");
-        } else if (value === "template_clean" || value === "ai_full_design") {
-          if (ctAfterVisual === "carousel" || ctAfterVisual === "document") {
-            setConfigStep("slide_count");
-          } else {
-            startGeneration({ visualStyle: value });
-            return;
-          }
-        } else if (value === "photo_overlay") {
-          // Photo overlay — need to select photo source
-          if (ctAfterVisual === "carousel" || ctAfterVisual === "document") {
-            setConfigStep("slide_count");
-          } else {
-            setConfigStep("photo_source");
-          }
-        } else {
-          // ai_background mode — proceed to slide count or background mode
-          if (ctAfterVisual === "carousel" || ctAfterVisual === "document") {
-            setConfigStep("slide_count");
-          } else {
-            setConfigStep("background_mode");
-          }
-        }
-        break;
-      }
-      case "slideCount": {
-        const sc = value === "auto" ? null : parseInt(value);
-        updateFlow({ slideCount: sc });
-        const vs = flow.visualStyle;
-        if (vs === "template_clean" || vs === "ai_full_design") {
-          startGeneration({ slideCount: sc, visualStyle: vs });
-          return;
-        }
-        if (vs === "photo_overlay") {
-          setConfigStep("photo_source");
-        } else {
-          setConfigStep("background_mode");
-        }
-        break;
-      }
-      case "backgroundMode":
-        updateFlow({ backgroundMode: value });
-        if (value === "saved_template") {
-          setConfigStep("background_template_pick");
-        } else if (value === "user_upload") {
-          setConfigStep("upload_image");
-        } else {
-          // ai_generate → start generation with brand_guided default (skip fidelity question)
-          startGeneration({ backgroundMode: value, visualMode: "brand_guided", visualStyle: genFlow.flow.visualStyle || undefined });
-          return;
-        }
-        break;
-      case "templateId":
-        updateFlow({ templateId: value, backgroundMode: "saved_template" });
-        startGeneration({ templateId: value, backgroundMode: "saved_template", visualStyle: genFlow.flow.visualStyle || undefined });
-        break;
-      case "photoSource":
-        if (value === "brand_photos") {
-          // Use brand's background photos — start generation with photo_overlay mode
-          startGeneration({ visualStyle: "photo_overlay", backgroundMode: "brand_photos", visualMode: "brand_guided" });
-          return;
-        } else if (value === "upload") {
-          // Upload a new photo
-          setConfigStep("upload_image");
-        }
-        break;
-      case "upload_file":
-        // Handle file upload
-        await handleFileUpload(value);
-        break;
-    }
-  }, [genFlow]);
-
-  // ── File upload handler ──
-  const handleFileUpload = useCallback(async (file: File) => {
-    if (!userId) return;
-    genFlow.setLoading(true, "Enviando arquivo...");
-    try {
-      const ext = file.name.split(".").pop() || "png";
-      const path = `${userId}/${Date.now()}.${ext}`;
-      const { error } = await supabase.storage.from("content-images").upload(path, file, { contentType: file.type });
-      if (error) throw error;
-      const { data: urlData } = supabase.storage.from("content-images").getPublicUrl(path);
-      genFlow.updateFlow({ uploadedImageUrl: urlData.publicUrl });
-      startGeneration({ uploadedImageUrl: urlData.publicUrl });
-    } catch (err) {
-      console.error("[ChatWindow] Upload error:", err);
-      toast.error("Erro ao enviar arquivo");
-      genFlow.setLoading(false);
-    }
-  }, [userId, genFlow]);
-
-  // ══════ PHASE TRANSITIONS ══════
-
-  // Start generation: config → fire async pipeline → show ActionCard immediately
-  const startGeneration = useCallback(async (overrides?: Partial<typeof genFlow.flow>) => {
-    if (!userId) return;
-    const flow = { ...genFlow.flow, ...overrides };
-    genFlow.setPhase("background");
-    genFlow.setLoading(true, "Analisando o conteúdo... 🔍");
-
-    // Progressive feedback timers
-    const progressTimer1 = setTimeout(() => {
-      genFlow.setLoading(true, "Gerando estrutura dos slides... ✍️");
-    }, 10000);
-    const progressTimer2 = setTimeout(() => {
-      genFlow.setLoading(true, "Quase lá... ⏳");
-    }, 25000);
-    const progressTimer3 = setTimeout(() => {
-      genFlow.setLoading(true, "Documentos demoram um pouco mais... 📄");
-    }, 50000);
-
-    // 120s frontend timeout — edge functions can take up to 90s on backend + network latency
-    let didTimeout = false;
-    const flowTimeout = setTimeout(() => {
-      didTimeout = true;
-      genFlow.resetFlow();
-      setMessages((prev) => [...prev, {
-        role: "assistant",
-        content: "A geração demorou mais que o esperado. Tente novamente — se o problema persistir, tente com um texto mais curto.",
-      }]);
-    }, 120000);
-
-    const clearTimers = () => {
-      clearTimeout(progressTimer1);
-      clearTimeout(progressTimer2);
-      clearTimeout(progressTimer3);
-      clearTimeout(flowTimeout);
-    };
-
-    try {
-      const { data, error } = await supabase.functions.invoke("ai-chat", {
-        body: {
-          message: "INICIAR_GERACAO",
-          intent_hint: "INICIAR_GERACAO",
-          generationParams: {
-            platform: flow.platform,
-            contentType: flow.contentType,
-            brandId: flow.brandId,
-            contentStyle: flow.contentStyle,
-            slideCount: flow.slideCount,
-            backgroundMode: flow.backgroundMode,
-            visualMode: flow.visualMode,
-            visualStyle: flow.visualStyle || (flow.backgroundMode === "brand_photos" ? "photo_overlay" : "ai_full_design"),
-            templateId: flow.templateId,
-            uploadedImageUrl: flow.uploadedImageUrl,
-            sourceUrl: flow.sourceUrl,
-            sourceText: flow.sourceText,
-          },
-        },
-      });
-
-      clearTimers();
-      if (didTimeout) return;
-
-      if (error) throw error;
-
-      console.log('[ChatWindow] INICIAR_GERACAO response:', JSON.stringify(data));
-
-      // Check if server returned an error message instead of content
-      if (data?.reply && !data?.action_result?.generation_result && !data?.action_result?.content_id) {
-        // Server returned a reply without generation — show it as message
-        setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
-        genFlow.resetFlow();
-        return;
-      }
-
-      const result = data?.action_result?.generation_result || data?.generation_result;
-      const contentId = result?.contentId || data?.action_result?.content_id;
-      if (!contentId) throw new Error("No contentId returned");
-
-      const slides = result?.slides || [];
-
-      // Fire pipeline in background — one call PER SLIDE sequentially.
-      // Each generate-slide-images takes 30-50s (fits in 60s edge function limit).
-      // Sending all slides in one call causes the parent function to timeout at 60s
-      // before all slides complete, losing Phase 3 (image_urls update).
-      // Without a brand, default to illustration mode (no brand refs to replicate)
-      const vs = flow.visualStyle || (flow.backgroundMode === "brand_photos" ? "photo_overlay" : flow.brandId ? "ai_full_design" : "ai_illustration");
-      const slideIds = slides.map((s: any) => s.id);
-      const pipelineParams = {
-        contentId,
-        backgroundMode: (vs === "ai_full_design" || vs === "ai_illustration" || vs === "ai_illustration_titled") ? "ai_generate" : vs === "photo_overlay" ? (flow.backgroundMode || "brand_photos") : flow.backgroundMode,
-        templateId: flow.templateId,
-        uploadedImageUrl: flow.uploadedImageUrl,
-        visualMode: flow.visualMode || "brand_guided",
-        visualStyle: vs,
-        contentStyle: flow.contentStyle,
-        platform: flow.platform,
-        ...((vs === "ai_full_design" || vs === "ai_illustration") ? { backgroundOnly: false } : {}),
-      };
-
-      if (vs !== "template_clean" && slideIds.length > 0) {
-        // Fire sequentially: one PIPELINE_BACKGROUND call per slide
-        // Each call handles 1 slide → fits in 60s timeout
-        // Show persistent progress toast so user can navigate freely
-        const isMultiSlide = slideIds.length > 1;
-        const toastId = isMultiSlide
-          ? toast.loading(`Gerando imagens: slide 1 de ${slideIds.length}...`, { duration: Infinity })
-          : toast.loading("Gerando imagem do conteúdo...", { duration: Infinity });
-
-        // Ask for browser notification permission as user starts generation
-        requestPermission();
-
-        (async () => {
-          let completed = 0;
-          let failed = 0;
-          for (let i = 0; i < slideIds.length; i++) {
-            try {
-              console.log(`[pipeline] slide ${i + 1}/${slideIds.length}: ${slideIds[i]}`);
-              if (isMultiSlide) {
-                toast.loading(`Gerando imagens: slide ${i + 1} de ${slideIds.length}...`, { id: toastId });
-              }
-              await supabase.functions.invoke('ai-chat', {
-                body: {
-                  message: 'PIPELINE_BACKGROUND',
-                  intent_hint: 'PIPELINE_BACKGROUND',
-                  generationParams: {
-                    ...pipelineParams,
-                    slides: [slideIds[i]],
-                  }
-                }
-              });
-              completed++;
-            } catch (err) {
-              console.error(`[pipeline] slide ${i + 1} error:`, err);
-              failed++;
-            }
-          }
-          // Final status toast
-          toast.dismiss(toastId);
-          if (failed === 0) {
-            toast.success(isMultiSlide
-              ? `Todas as ${completed} imagens foram geradas! 🎨`
-              : "Imagem gerada com sucesso! 🎨"
-            );
-            notify(
-              "TrendPulse — Conteúdo pronto! 🎨",
-              isMultiSlide
-                ? `Suas ${completed} imagens foram geradas. Clique para ver.`
-                : "Sua imagem foi gerada. Clique para ver."
-            );
-          } else if (completed > 0) {
-            toast.warning(`${completed} de ${slideIds.length} imagens geradas. ${failed} falharam.`);
-            notify(
-              "TrendPulse — Geração parcial",
-              `${completed} de ${slideIds.length} imagens prontas. ${failed} falharam.`
-            );
-          } else {
-            toast.error("Erro ao gerar imagens. Tente novamente.");
-          }
-        })();
-      }
-      // template_clean: no pipeline needed — SlideTemplateRenderer handles it
-
-      // Track last active content
-      lastActiveContentId.current = contentId;
-
-      // Show ActionCard immediately with skeleton (no image yet)
-      const hasBrand = !!flow.brandId;
-      const brandHint = hasBrand ? "" : "\n\n💡 _Dica: crie sua marca no chat (\"criar minha marca\") para personalizar cores e fontes._";
-      const modeMessages: Record<string, string> = {
-        template_clean: "✅ Conteúdo criado! Usando as cores da sua marca como fundo.",
-        ai_background: "✅ Conteúdo criado! Gerando visual da marca + texto... 🖼️\n\n_Resultado pronto para publicar. Clique para editar se quiser._",
-        photo_overlay: "✅ Conteúdo criado! Montando sua foto + texto... 📸\n\n_Resultado pronto para publicar. Clique para editar se quiser._",
-        ai_full_design: "✅ Conteúdo criado! Gerando imagem completa com texto... 🎨\n\n_O resultado final já vem pronto para publicar._",
-      };
-      const actionMsg: Message = {
-        role: "assistant",
-        content: (modeMessages[vs] || modeMessages.ai_full_design) + brandHint,
-        actionResult: {
-          content_id: contentId,
-          content_type: flow.contentType as any,
-          platform: flow.platform || "instagram",
-          preview_image_url: undefined,
-          headline: slides[0]?.headline || slides[0]?.slide_text || undefined,
-        },
-      };
-      setMessages((prev) => [...prev, actionMsg]);
-
-      // Persist to chat_messages
-      try {
-        await supabase.from("chat_messages").insert([{
-          user_id: userId,
-          role: "assistant",
-          content: "✅ Conteúdo criado! A imagem está sendo gerada... 🎨",
-          intent: "INICIAR_GERACAO",
-          metadata: {
-            action_result: {
-              content_id: contentId,
-              content_type: flow.contentType,
-            },
-          },
-        }]);
-      } catch (saveErr) {
-        console.error("[ChatWindow] Error saving generation message:", saveErr);
-      }
-
-      genFlow.resetFlow();
-    } catch (err: any) {
-      clearTimers();
-      if (didTimeout) return;
-      console.error("[ChatWindow] startGeneration error:", err);
-      const userFriendlyMsg = err?.message?.includes("contentId")
-        ? "A geração demorou mais que o esperado. Tente novamente — às vezes o servidor precisa de um segundo aquecimento."
-        : `Tive um problema ao gerar o conteúdo. Tente novamente em alguns instantes.`;
-      setMessages((prev) => [...prev, {
-        role: "assistant",
-        content: `${userFriendlyMsg} 🙏`,
-      }]);
-      genFlow.resetFlow();
-      genFlow.setError("Erro ao iniciar geração. Tente novamente.");
-    }
-  }, [userId, genFlow]);
-
   // ── Brand image upload handler ──
   const handleBrandImageUpload = useCallback(async (files: File[]) => {
     if (!userId) return;
@@ -1241,10 +623,8 @@ export default function ChatWindow() {
   }, [userId, messages]);
 
 
-
-
   // ══════ CHAT SEND ══════
-  const handleSend = useCallback(async (text: string, opts?: { skipUrlDetection?: boolean }) => {
+  const handleSend = useCallback(async (text: string) => {
     if (!userId || isSending) return;
 
     // 1. FIRST: Check if brand creation flow is active — takes priority over everything
@@ -1311,34 +691,7 @@ export default function ChatWindow() {
       return;
     }
 
-    // 2. If generation flow is active, handle cancel or feed source_input
-    if (genFlow.isActive) {
-      const cancelWords = /\b(cancel|cancelar|parar|sair|não|voltar)\b/i;
-      if (cancelWords.test(text)) {
-        genFlow.resetFlow();
-        setMessages((prev) => [...prev,
-          { role: "user", content: text },
-          { role: "assistant", content: "Ok, criação cancelada. Como posso ajudar?" },
-        ]);
-        return;
-      }
-      // If we're at source_input step, treat the message as the source text
-      const currentStep = genFlow.flow.configStep;
-      console.log("[ChatWindow] Flow active, configStep=", currentStep, "phase=", genFlow.flow.phase, "text=", text.substring(0, 50));
-      if (currentStep === "source_input" || currentStep === "source_write" || currentStep === "source_link" || currentStep === "suggestions_pending") {
-        setMessages((prev) => [...prev, { role: "user", content: text }]);
-        // Strip emoji prefix if present (from suggestion quick replies)
-        const cleanText = text.replace(/^[\p{Emoji}\s]+/u, "").trim() || text;
-        handleConfigSelect("sourceInput", cleanText);
-        return;
-      }
-      setMessages((prev) => [...prev,
-        { role: "user", content: text },
-        { role: "assistant", content: "Você está no meio de uma criação. Quer **cancelar** e fazer outra coisa, ou continuar escolhendo as opções acima?" },
-      ]);
-      return;
-    }
-
+    // 2. Normal chat flow — send message with brandId, backend handles everything
     setIsSending(true);
     const now = formatTime(new Date().toISOString());
     const userMsg: Message = { role: "user", content: text, timestamp: now };
@@ -1382,190 +735,23 @@ export default function ChatWindow() {
       return;
     }
 
-    // ── Detect generation intent → smart routing ──
-    const urlMatch = opts?.skipUrlDetection ? null : text.match(/https?:\/\/[^\s]+/);
-    const wantsGeneration = GENERATION_PATTERNS.test(text);
-
-    if ((urlMatch || wantsGeneration) && !brandCreationStep && !genFlow.isActive) {
-      const textLower = text.toLowerCase();
-
-      // Detect platform from message — fall back to user's default
-      const detectedFromText = textLower.includes("linkedin") ? "linkedin"
-        : textLower.includes("instagram") || textLower.includes("insta") ? "instagram"
-        : null;
-      const detectedPlatform = detectedFromText || generationDefaults.defaultPlatform || null;
-
-      // Detect format from message — fall back to user's default, otherwise null (will ask)
-      const explicitFormat = /\b(post|publicação)\b/i.test(textLower);
-      const formatFromText = textLower.includes("carrossel") || textLower.includes("carousel") ? "carousel"
-        : textLower.includes("story") || textLower.includes("stories") ? "story"
-        : textLower.includes("document") || textLower.includes("documento") ? "document"
-        : explicitFormat ? "post"
-        : null;
-      const detectedFormat = formatFromText || (generationDefaults.defaultFormat as any) || null;
-
-      // Smart topic extraction — understands natural language requests
-      const extractTopic = (msg: string): string => {
-        let topic = msg;
-        // Remove command prefixes
-        topic = topic.replace(/^[\p{Emoji}\s]*/u, "");
-        topic = topic.replace(/^(quero|preciso|pode|gostaria de|vou|vamos)\s+(criar|gerar|fazer|montar)\s+(um|uma|o|a)?\s*/i, "");
-        topic = topic.replace(/^(cri[ae]|ger[ae]|fa[zç]a?|monte)\s+(um|uma|o|a)?\s*/i, "");
-        // Remove format words
-        topic = topic.replace(/\b(post|carrossel|carousel|story|stories|documento|artigo|conteúdo|conteudo|publicação)\b\s*/gi, "");
-        // Remove platform words
-        topic = topic.replace(/\b(para|pro|pra|no|na|do|da)\s+(o\s+)?(instagram|insta|linkedin)\b/gi, "");
-        topic = topic.replace(/\b(instagram|insta|linkedin)\b/gi, "");
-        // Remove connector words left over
-        topic = topic.replace(/^(sobre|com\s+mensagem|com\s+tema|com\s+o\s+tema|a\s+partir\s+de|baseado\s+em|com)\s+/i, "");
-        // Remove quotes around topic
-        topic = topic.replace(/^['"""'']+|['"""'']+$/g, "");
-        return topic.trim();
-      };
-
-      const extractedTopic = extractTopic(text);
-      const hasUrl = !!urlMatch;
-      // Topic must be meaningful — reject generic placeholders like "uma frase", "algo", "um tema"
-      const genericTopicPatterns = /^(uma?\s+(frase|tema|post|texto|coisa|conteúdo|ideia|exemplo)|algo|isso|aqui|nada)$/i;
-      const hasExtractedTopic = extractedTopic.length >= 10 && !genericTopicPatterns.test(extractedTopic);
-      const hasSource = hasUrl || hasExtractedTopic;
-
-      // Detect content style: message hint > user default > fallback "news"
-      const styleFromText = /\b(frase|citação|citacao|quote|pensamento|reflexão|reflexao)\b/i.test(textLower) ? "quote"
-        : /\b(dica|tip|truque|hack)\b/i.test(textLower) ? "tip"
-        : /\b(curiosidade|sabia\s+que|você\s+sabia)\b/i.test(textLower) ? "curiosity"
-        : null;
-      const detectedStyle = styleFromText || generationDefaults.defaultContentStyle || "news";
-
-      // Use extracted topic as sourceText (cleaner than raw message)
-      const sourceText = hasUrl ? text : (hasExtractedTopic ? extractedTopic : text);
-
-      console.log(`[ChatWindow] Generation detected: topic="${extractedTopic}", platform=${detectedPlatform}, format=${detectedFormat}, hasSource=${hasSource}, style=${detectedStyle}, defaultBrand=${generationDefaults.defaultBrandId}`);
-
-      // MODE 0 (NEW): Defaults cover everything → generate DIRECTLY, no wizard
-      const hasDefaults = generationDefaults.defaultPlatform && generationDefaults.defaultBrandId;
-      if (hasSource && hasDefaults) {
-        const finalPlatform = detectedPlatform || generationDefaults.defaultPlatform!;
-        const finalFormat = detectedFormat || (generationDefaults.defaultFormat as any) || "post";
-        const finalBrandId = generationDefaults.defaultBrandId!;
-        const finalBrandName = generationDefaults.defaultBrandName || "";
-        const platformLabel = finalPlatform === "linkedin" ? "LinkedIn" : "Instagram";
-
-        console.log(`[ChatWindow] MODE 0 (direct): ${platformLabel} ${finalFormat}, brand=${finalBrandId.substring(0,8)}`);
-        setMessages((prev) => [...prev, {
-          role: "assistant",
-          content: `Gerando ${finalFormat} para ${platformLabel}... 🚀`,
-        }]);
-
-        // Start generation directly — no wizard steps
-        genFlow.startFlow({
-          sourceUrl: urlMatch?.[0] || undefined,
-          sourceText: hasUrl ? undefined : sourceText,
-          platform: finalPlatform,
-          contentType: finalFormat,
-          contentStyle: detectedStyle as any,
-          brandId: finalBrandId,
-          brandName: finalBrandName,
-        });
-        startGeneration({
-          sourceUrl: urlMatch?.[0] || undefined,
-          sourceText: hasUrl ? undefined : sourceText,
-          platform: finalPlatform,
-          contentType: finalFormat,
-          contentStyle: detectedStyle as any,
-          brandId: finalBrandId,
-          brandName: finalBrandName,
-          visualStyle: "ai_full_design",
-        });
-        setIsSending(false);
-        return;
-      }
-
-      // MODE 1: Has platform + source → ask brand (or content_type if format unknown)
-      if (hasSource && detectedPlatform) {
-        genFlow.startFlow({
-          sourceUrl: urlMatch?.[0] || undefined,
-          sourceText: sourceText,
-          platform: detectedPlatform,
-          contentType: detectedFormat as any || undefined,
-          contentStyle: detectedStyle as any,
-        });
-        const formatLabel = detectedFormat || "conteúdo";
-        console.log(`[ChatWindow] MODE 1: has platform+source, format=${detectedFormat || 'unknown'}`);
-        setMessages((prev) => [...prev, {
-          role: "assistant",
-          content: hasUrl
-            ? `Recebi o link! 🔗 ${detectedPlatform === "linkedin" ? "LinkedIn" : "Instagram"} · ${formatLabel}.`
-            : `Ótimo! ${detectedPlatform === "linkedin" ? "LinkedIn" : "Instagram"} · ${formatLabel}.`,
-        }]);
-        // If format not detected, ask content_type; otherwise go to brand
-        genFlow.setConfigStep(detectedFormat ? "brand" : "content_type");
-        setIsSending(false);
-        return;
-      }
-
-      // MODE 2: Has source but no platform → ask platform first
-      if (hasSource && !detectedPlatform) {
-        genFlow.startFlow({
-          sourceUrl: urlMatch?.[0] || undefined,
-          sourceText: sourceText,
-          contentType: detectedFormat as any || undefined,
-          contentStyle: detectedStyle as any,
-        });
-        console.log('[ChatWindow] MODE 2: has source, asking platform');
-        setMessages((prev) => [...prev, {
-          role: "assistant",
-          content: hasUrl
-            ? "Recebi o link! 🔗 Para qual plataforma?"
-            : "Ótimo! Para qual plataforma?",
-        }]);
-        setIsSending(false);
-        return;
-      }
-
-      // MODE 3: No real source text — start wizard but preserve detected platform/contentType/style
-      genFlow.startFlow({
-        sourceUrl: urlMatch?.[0] || undefined,
-        sourceText: undefined, // no valid source — will ask in source_input step
-        platform: detectedPlatform || undefined,
-        contentType: detectedFormat as any || undefined,
-        contentStyle: (detectedStyle !== "news" ? detectedStyle : undefined) as any,
-      });
-      console.log(`[ChatWindow] MODE 3: no source, platform=${detectedPlatform}, format=${detectedFormat}, style=${detectedStyle}`);
-      const platformLabel3 = detectedPlatform === "linkedin" ? "LinkedIn" : detectedPlatform === "instagram" ? "Instagram" : null;
-      const formatLabel3 = detectedFormat || null;
-      const contextHint = platformLabel3 && formatLabel3
-        ? `${platformLabel3} · ${formatLabel3}. `
-        : platformLabel3 ? `${platformLabel3}. ` : "";
-      setMessages((prev) => [...prev, {
-        role: "assistant",
-        content: `${contextHint}Vamos criar seu conteúdo! 🎨`,
-      }]);
-      setIsSending(false);
-      return;
-    }
-
-    // Check if this looks like a text edit request
-    const EDIT_PATTERNS = /\b(muda|troca|substitui|altera|edita|ajusta|deixa|torna|faz|coloca|põe|mais\s+(curto|longo|informal|formal|direto))\b/i;
-    const isEditRequest = EDIT_PATTERNS.test(text) && lastActiveContentId.current;
-
-    // Normal chat flow
+    // Show loading indicator
     setMessages((prev) => [...prev, { role: "assistant", content: "", isLoading: true }]);
 
     try {
       // Send only text content in history — no action_result metadata to avoid context contamination
-      const history = messages.slice(-6).map((m) => ({
+      const recentHistory = messages.slice(-6).map((m) => ({
         role: m.role,
         content: m.content,
       }));
 
-      const body: any = { message: text, history };
-      if (isEditRequest) {
-        body.intent_hint = "EDITAR_TEXTO";
-        body.generationParams = { contentId: lastActiveContentId.current };
-      }
-
-      const { data, error } = await supabase.functions.invoke("ai-chat", { body });
+      const { data, error } = await supabase.functions.invoke("ai-chat", {
+        body: {
+          message: text,
+          brandId: selectedBrandId || null,
+          history: recentHistory,
+        },
+      });
       if (error) throw error;
 
       // Verificar brand creation step na resposta
@@ -1634,21 +820,12 @@ export default function ChatWindow() {
     } finally {
       setIsSending(false);
     }
-  }, [userId, isSending, messages, onboardingStep, processOnboardingAnswer, genFlow]);
+  }, [userId, isSending, messages, onboardingStep, processOnboardingAnswer, brandCreationStep, selectedBrandId]);
 
   const handleQuickReply = useCallback((text: string) => {
-    // If we're in source_write or source_link step, treat quick reply as source input
-    const currentStep = genFlow.flow.configStep;
-    if (genFlow.isActive && (currentStep === "source_write" || currentStep === "source_link" || currentStep === "suggestions_pending")) {
-      // Strip emoji prefix if present (e.g., "📝 Título da sugestão" → "Título da sugestão")
-      const cleanText = text.replace(/^[\p{Emoji}\s]+/u, "").trim();
-      handleConfigSelect("sourceInput", cleanText);
-      // Add user message to chat
-      setMessages((prev) => [...prev, { role: "user", content: text }]);
-      return;
-    }
     handleSend(text);
-  }, [handleSend, genFlow.flow.configStep, genFlow.isActive, handleConfigSelect]);
+  }, [handleSend]);
+
   const handleRetry = useCallback((retryText: string) => {
     setMessages((prev) => prev.filter((m) => !m.isRetryable));
     handleSend(retryText);
@@ -1657,12 +834,16 @@ export default function ChatWindow() {
   const handleNewChat = useCallback(() => {
     setMessages([]);
     setBrandCreationStep(null);
-    genFlow.resetFlow();
     hasLoadedHistory.current = true; // prevent re-loading old history
     // Persist conversation boundary so navigating away and back doesn't reload old messages
     localStorage.setItem("tp_conversation_since", new Date().toISOString());
     toast.success("Nova conversa iniciada!");
-  }, [genFlow]);
+  }, []);
+
+  const handleQuickAction = useCallback((template: string) => {
+    setPrefillText(template);
+    setPrefillKey((k) => k + 1);
+  }, []);
 
   if (!onboardingChecked) {
     return (
@@ -1674,7 +855,7 @@ export default function ChatWindow() {
 
   return (
     <div className="flex flex-col h-full min-h-0 relative bg-background">
-      {/* Empty spacer for top — new chat moved to input area */}
+      {/* Cron banner */}
       {cronBanner && (
         <div className="sticky top-0 z-20 mx-4 mt-2 rounded-xl border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/30 px-4 py-3 animate-in fade-in slide-in-from-top-2">
           <div className="flex items-center justify-between mb-1">
@@ -1724,13 +905,13 @@ export default function ChatWindow() {
                 Cole um link, descreva um tema, ou escolha abaixo para começar.
               </p>
               <div className="flex flex-wrap justify-center gap-2 max-w-lg">
-                {QUICK_SUGGESTIONS.map((s) => (
+                {QUICK_ACTIONS.map((action) => (
                   <button
-                    key={s}
-                    className="border border-border/60 bg-background text-foreground/80 rounded-xl px-4 py-2 text-[13px] hover:bg-primary/5 hover:border-primary/30 hover:text-foreground transition-all duration-200 cursor-pointer"
-                    onClick={() => handleSend(s)}
+                    key={action.label}
+                    className="border border-border/60 bg-background text-foreground/80 rounded-xl px-4 py-2 text-[13px] hover:bg-primary/5 hover:border-primary/30 hover:text-foreground transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                    onClick={() => handleQuickAction(action.template)}
                   >
-                    {s}
+                    {action.emoji} {action.label}
                   </button>
                 ))}
               </div>
@@ -1763,35 +944,6 @@ export default function ChatWindow() {
               ))}
               {/* Brand analysis loading indicator */}
               {brandCreationStep === 4 && <BrandAnalysisLoader />}
-              {/* Generation flow UI (config only) */}
-              {genFlow.isActive && userId && (
-                <GenerationFlowStep
-                  flow={genFlow.flow}
-                  userId={userId}
-                  onConfigSelect={handleConfigSelect}
-                  onCancel={genFlow.resetFlow}
-                  onBack={() => {
-                    const hasSourcePreset = genFlow.flow.sourceUrl || (genFlow.flow.sourceText && genFlow.flow.sourceText.length >= 10);
-                    const stepOrder: Record<string, string> = {
-                      content_type: "platform",
-                      brand: hasSourcePreset ? "platform" : "content_type",
-                      source_input: "brand",
-                      source_link: "source_input",
-                      source_write: "source_input",
-                      suggestions_pending: "source_input",
-                      visual_style: "source_input",
-                      illustration_title: "visual_style",
-                      slide_count: "visual_style",
-                      background_mode: "visual_style",
-                      background_template_pick: "background_mode",
-                      upload_image: "background_mode",
-                      photo_source: "visual_style",
-                    };
-                    const prev = stepOrder[genFlow.flow.configStep];
-                    if (prev) genFlow.setConfigStep(prev as any);
-                  }}
-                />
-              )}
             </>
           )}
         </div>
@@ -1811,15 +963,16 @@ export default function ChatWindow() {
         </div>
       )}
 
-      {!genFlow.isActive && onboardingStep == null && (
+      {/* Quick action pills above input */}
+      {onboardingStep == null && (
         <div className="flex flex-wrap gap-1.5 px-4 py-2 border-t border-border/30 justify-center">
-          {QUICK_SUGGESTIONS.map((s) => (
+          {QUICK_ACTIONS.map((action) => (
             <button
-              key={s}
-              onClick={() => handleSend(s)}
+              key={action.label}
+              onClick={() => handleQuickAction(action.template)}
               className="text-[11px] px-3 py-1 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150"
             >
-              {s}
+              {action.emoji} {action.label}
             </button>
           ))}
           <button onClick={() => handleSend('Quero criar uma nova marca')}
@@ -1835,10 +988,13 @@ export default function ChatWindow() {
         disabled={isSending}
         showImageUpload={brandCreationStep === 1 || brandCreationStep === 3}
         userId={userId || undefined}
-        generationDefaults={generationDefaults}
-        onDefaultsChange={setGenerationDefaults}
         onNewChat={handleNewChat}
         hasMessages={messages.length > 0}
+        brands={brands}
+        selectedBrandId={selectedBrandId}
+        onBrandSelect={setSelectedBrandId}
+        prefillText={prefillText}
+        prefillKey={prefillKey}
         placeholder={
           onboardingStep != null
             ? "Digite sua resposta..."
@@ -1848,9 +1004,7 @@ export default function ChatWindow() {
                 ? "Escolha uma opção acima..."
                 : brandCreationStep === 3
                   ? "Envie imagens ou digite 'pronto'..."
-                  : genFlow.isActive
-                    ? "Escolha uma opção acima ou digite 'cancelar'"
-                    : "Cole um link ou descreva o conteúdo..."
+                  : "Cole um link ou descreva o conteúdo..."
         }
       />
     </div>
