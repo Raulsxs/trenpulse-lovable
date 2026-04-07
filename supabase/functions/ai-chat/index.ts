@@ -127,12 +127,14 @@ serve(async (req) => {
     // Service-role client (for internal operations)
     const svc = createClient(supabaseUrl, internalServiceKey);
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+    const token = authHeader.replace("Bearer ", "");
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
+      return new Response(JSON.stringify({ error: "Unauthorized", message: "Invalid JWT" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const user = { id: claimsData.claims.sub as string, email: claimsData.claims.email as string };
     const userId = user.id;
 
     // ── persistGeneratedContent helper ──
