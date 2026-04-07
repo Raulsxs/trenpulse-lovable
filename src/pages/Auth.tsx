@@ -23,10 +23,12 @@ const Auth = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const isSignupTab = searchParams.get("tab") === "signup";
+  const emailParam = searchParams.get("email") || "";
+  const isSessionExpired = searchParams.get("expired") === "1";
   const defaultTab = isSignupTab ? "signup" : "login";
   const [isLoading, setIsLoading] = useState(false);
   const [loadingAccountId, setLoadingAccountId] = useState<string | null>(null);
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(emailParam);
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
   const [mode, setMode] = useState<"accounts" | "login" | "forgot">("login");
@@ -35,6 +37,11 @@ const Auth = () => {
   const [showSignupPassword, setShowSignupPassword] = useState(false);
 
   useEffect(() => {
+    // If redirected here due to expired session, go straight to login form
+    if (emailParam && isSessionExpired) {
+      setMode("login");
+      return;
+    }
     const stored: SavedAccount[] = (() => {
       try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
     })();
@@ -42,7 +49,7 @@ const Auth = () => {
     if (stored.length > 0 && !isSignupTab) {
       setMode("accounts");
     }
-  }, [isSignupTab]);
+  }, [isSignupTab, emailParam, isSessionExpired]);
 
   const handleGoogleLogin = async () => {
     await supabase.auth.signInWithOAuth({
@@ -61,15 +68,13 @@ const Auth = () => {
       if (error) throw error;
       window.location.href = "/chat";
     } catch {
-      toast.error("Sessão expirada. Faça login novamente na conta desejada.");
-      // Read fresh from localStorage to avoid stale state
+      // Token expired/rotated — go to login form pre-filled with this email
       const stored: SavedAccount[] = (() => {
         try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
       })();
       const updated = stored.filter(a => a.userId !== account.userId);
       localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updated));
-      setSavedAccounts(updated);
-      if (updated.length === 0) setMode("login");
+      window.location.href = `/auth?email=${encodeURIComponent(account.email)}&expired=1`;
     } finally {
       setLoadingAccountId(null);
     }
@@ -324,10 +329,21 @@ const Auth = () => {
             ) : (
               <>
                 <CardHeader className="text-center pb-2">
-                  <CardTitle className="text-2xl font-heading">Bem-vindo</CardTitle>
-                  <CardDescription>Acesse sua conta ou crie uma nova</CardDescription>
+                  <CardTitle className="text-2xl font-heading">
+                    {isSessionExpired && emailParam ? "Sessão expirada" : "Bem-vindo"}
+                  </CardTitle>
+                  <CardDescription>
+                    {isSessionExpired && emailParam
+                      ? "Sua sessão expirou. Entre com sua senha para continuar."
+                      : "Acesse sua conta ou crie uma nova"}
+                  </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {isSessionExpired && emailParam && (
+                    <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+                      <span className="font-medium">{emailParam}</span>
+                    </div>
+                  )}
                   <GoogleButton />
                   <div className="relative">
                     <div className="absolute inset-0 flex items-center">

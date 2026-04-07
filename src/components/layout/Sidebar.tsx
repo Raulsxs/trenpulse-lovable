@@ -163,27 +163,36 @@ const Sidebar = () => {
       toast.success(`Trocado para ${account.name}`);
       window.location.href = "/chat";
     } catch {
-      // setSession may have wiped the original session — restore it
+      // setSession may have wiped the original session — try to restore it
+      let sessionRestored = false;
       if (originalSession) {
         try {
           await supabase.auth.setSession({
             access_token: originalSession.access_token,
             refresh_token: originalSession.refresh_token,
           });
+          sessionRestored = true;
         } catch {
-          // Original session also gone — send to picker with both accounts visible
-          window.location.href = "/auth";
-          return;
+          // original session also gone
         }
       }
-      toast.error("Sessão expirada. Faça login novamente na conta desejada.");
-      // Remove only the stale account from the list (read fresh from storage)
+
+      // Remove stale account from list
       const stored: SavedAccount[] = (() => {
         try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
       })();
       const updated = stored.filter(a => a.userId !== account.userId);
       localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updated));
+
+      if (!sessionRestored) {
+        // Both sessions gone — go to login pre-filled for the target account
+        window.location.href = `/auth?email=${encodeURIComponent(account.email)}&expired=1`;
+        return;
+      }
+
+      // Still on current session — redirect to login pre-filled for target account
       setSavedAccounts(updated);
+      navigate(`/auth?email=${encodeURIComponent(account.email)}&expired=1`);
     }
   };
 
