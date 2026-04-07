@@ -155,11 +155,27 @@ const Sidebar = () => {
     }
 
     try {
-      const { error } = await supabase.auth.setSession({
+      const { data: { session: newSession }, error } = await supabase.auth.setSession({
         access_token: account.accessToken,
         refresh_token: account.refreshToken,
       });
       if (error) throw error;
+
+      // Persist rotated tokens BEFORE navigating — window.location.href unloads the page
+      // before onAuthStateChange fires, so we must save synchronously here.
+      if (newSession) {
+        const uid = newSession.user.id;
+        const em = newSession.user.email || "";
+        const nm = newSession.user.user_metadata?.name || em.split("@")[0];
+        const stored: SavedAccount[] = (() => {
+          try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
+        })();
+        const idx = stored.findIndex(a => a.userId === uid);
+        const acct: SavedAccount = { userId: uid, email: em, name: nm, accessToken: newSession.access_token, refreshToken: newSession.refresh_token };
+        if (idx >= 0) stored[idx] = acct; else stored.push(acct);
+        localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(stored));
+      }
+
       toast.success(`Trocado para ${account.name}`);
       window.location.href = "/chat";
     } catch {

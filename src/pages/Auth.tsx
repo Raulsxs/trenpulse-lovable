@@ -61,11 +61,26 @@ const Auth = () => {
   const handleSwitchAccount = async (account: SavedAccount) => {
     setLoadingAccountId(account.userId);
     try {
-      const { error } = await supabase.auth.setSession({
+      const { data: { session: newSession }, error } = await supabase.auth.setSession({
         access_token: account.accessToken,
         refresh_token: account.refreshToken,
       });
       if (error) throw error;
+
+      // Persist rotated tokens BEFORE navigating — page unload races onAuthStateChange
+      if (newSession) {
+        const uid = newSession.user.id;
+        const em = newSession.user.email || "";
+        const nm = newSession.user.user_metadata?.name || em.split("@")[0];
+        const stored: SavedAccount[] = (() => {
+          try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
+        })();
+        const idx = stored.findIndex(a => a.userId === uid);
+        const acct: SavedAccount = { userId: uid, email: em, name: nm, accessToken: newSession.access_token, refreshToken: newSession.refresh_token };
+        if (idx >= 0) stored[idx] = acct; else stored.push(acct);
+        localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(stored));
+      }
+
       window.location.href = "/chat";
     } catch {
       // Token expired/rotated — go to login form pre-filled with this email
@@ -113,10 +128,24 @@ const Auth = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { data: { session }, error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
-      toast.success("Login realizado com sucesso!");
-      navigate("/dashboard");
+
+      // Save tokens immediately so multi-account switcher has fresh tokens right away
+      if (session) {
+        const uid = session.user.id;
+        const em = session.user.email || "";
+        const nm = session.user.user_metadata?.name || em.split("@")[0];
+        const stored: SavedAccount[] = (() => {
+          try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
+        })();
+        const idx = stored.findIndex(a => a.userId === uid);
+        const acct: SavedAccount = { userId: uid, email: em, name: nm, accessToken: session.access_token, refreshToken: session.refresh_token };
+        if (idx >= 0) stored[idx] = acct; else stored.push(acct);
+        localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(stored));
+      }
+
+      navigate("/chat");
     } catch (error: any) {
       toast.error(error.message || "Erro ao fazer login");
     } finally {
