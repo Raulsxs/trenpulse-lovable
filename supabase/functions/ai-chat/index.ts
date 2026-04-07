@@ -1197,7 +1197,6 @@ Mensagem do usuário: "${message}"`;
           const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-content`, {
             method: "POST",
             headers: internalHeaders,
-            },
             body: JSON.stringify(genBody),
           });
 
@@ -1539,7 +1538,6 @@ Mensagem do usuário: "${message}"`;
           const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-content`, {
             method: "POST",
             headers: internalHeaders,
-            },
             body: JSON.stringify(genBody),
           });
 
