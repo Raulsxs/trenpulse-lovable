@@ -73,27 +73,31 @@ const Sidebar = () => {
   }, []);
 
   useEffect(() => {
-    const loadAndSaveCurrentAccount = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+    const saveSession = (session: { user: { id: string; email?: string; user_metadata?: { name?: string } }; access_token: string; refresh_token: string } | null) => {
       if (!session) return;
-
       const userId = session.user.id;
       const email = session.user.email || "";
       const name = session.user.user_metadata?.name || email.split("@")[0];
-
       setCurrentUserId(userId);
-
       const stored: SavedAccount[] = (() => {
         try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
       })();
-
       const idx = stored.findIndex(a => a.userId === userId);
       const account: SavedAccount = { userId, email, name, accessToken: session.access_token, refreshToken: session.refresh_token };
       if (idx >= 0) stored[idx] = account; else stored.push(account);
       localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(stored));
       setSavedAccounts(stored);
     };
-    loadAndSaveCurrentAccount();
+
+    supabase.auth.getSession().then(({ data: { session } }) => saveSession(session));
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "TOKEN_REFRESHED" || event === "SIGNED_IN") {
+        saveSession(session);
+      }
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
   const handleDismissBadge = () => {
@@ -115,8 +119,20 @@ const Sidebar = () => {
   };
 
   const handleAddAccount = async () => {
-    // Current session already saved in useEffect — just sign out and go to login
-    await supabase.auth.signOut();
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session) {
+      const userId = session.user.id;
+      const email = session.user.email || "";
+      const name = session.user.user_metadata?.name || email.split("@")[0];
+      const stored: SavedAccount[] = (() => {
+        try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
+      })();
+      const idx = stored.findIndex(a => a.userId === userId);
+      const account: SavedAccount = { userId, email, name, accessToken: session.access_token, refreshToken: session.refresh_token };
+      if (idx >= 0) stored[idx] = account; else stored.push(account);
+      localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(stored));
+    }
+    await supabase.auth.signOut({ scope: "local" });
     navigate("/auth");
   };
 
@@ -128,8 +144,7 @@ const Sidebar = () => {
       });
       if (error) throw error;
       toast.success(`Trocado para ${account.name}`);
-      navigate("/chat");
-      window.location.reload();
+      window.location.href = "/chat";
     } catch {
       toast.error("Sessão expirada. Faça login novamente.");
       const updated = savedAccounts.filter(a => a.userId !== account.userId);

@@ -14,6 +14,7 @@ import { DemoScenes } from "@/components/landing/DemoScenes";
 const Index = () => {
   const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
+  const [leaving, setLeaving] = useState(false);
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -26,6 +27,16 @@ const Index = () => {
     checkAuth();
   }, [navigate]);
 
+  const goToSignup = () => {
+    setLeaving(true);
+    setTimeout(() => navigate("/auth?tab=signup"), 350);
+  };
+
+  const goToLogin = () => {
+    setLeaving(true);
+    setTimeout(() => navigate("/auth"), 350);
+  };
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -36,6 +47,14 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
+      {leaving && (
+        <motion.div
+          className="fixed inset-0 z-[9999] bg-background"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.3 }}
+        />
+      )}
       {/* ── Header ── */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-md border-b border-border/50">
         <div className="container mx-auto px-6 py-3 flex items-center justify-between">
@@ -52,10 +71,10 @@ const Index = () => {
             <a href="#precos" className="hover:text-foreground transition-colors">Preços</a>
           </nav>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="sm" onClick={() => navigate("/auth")}>
+            <Button variant="ghost" size="sm" onClick={goToLogin}>
               Entrar
             </Button>
-            <Button size="sm" onClick={() => navigate("/auth")} className="gap-1.5">
+            <Button size="sm" onClick={goToSignup} className="gap-1.5">
               Começar Grátis
               <ArrowRight className="w-4 h-4" />
             </Button>
@@ -92,7 +111,7 @@ const Index = () => {
               </p>
 
               <div className="flex flex-col sm:flex-row gap-3">
-                <Button size="lg" className="gap-2 text-base px-6" onClick={() => navigate("/auth")}>
+                <Button size="lg" className="gap-2 text-base px-6" onClick={goToSignup}>
                   Criar Conta Grátis
                   <ArrowRight className="w-5 h-5" />
                 </Button>
@@ -241,7 +260,7 @@ const Index = () => {
               size="lg"
               variant="secondary"
               className="text-lg px-8 gap-2"
-              onClick={() => navigate("/auth")}
+              onClick={goToSignup}
             >
               Começar Agora — É Grátis
               <ArrowRight className="w-5 h-5" />
