@@ -779,9 +779,11 @@ export default function ChatWindow() {
             || slides[0]?.background_image_url
             || slides[0]?.image_url
             || actionResult.preview_image_url;
+          // Prefer the AI-generated slide headline over content.title (which is the raw user prompt)
+          const slideHeadline = slides[0]?.headline || slides[0]?.slide_text || slides[0]?.overlay?.headline;
           actionResult = {
             ...actionResult,
-            headline: content.title || actionResult.headline,
+            headline: slideHeadline || actionResult.headline,
             preview_image_url: previewUrl,
           };
         }
