@@ -26,7 +26,7 @@ const HELP_SECTIONS: HelpSection[] = [
       {
         question: "Como criar uma Marca?",
         answer:
-          "Vá ao Assistente IA (chat) e digite \"criar minha marca\". O assistente vai guiar você passo a passo: escolha um nome, envie 3 a 8 exemplos de posts que representem seu estilo visual, e a IA analisa automaticamente cores, fontes e tom para montar sua identidade. Você também pode criar manualmente pelo Brand Kit no menu lateral.",
+          "Vá ao Assistente IA (chat) e clique em '🎨 Nova marca' ou digite \"criar minha marca\". O assistente vai pedir o nome da marca e exemplos de posts do seu estilo — a IA analisa automaticamente cores, fontes e tom. Você também pode criar e editar marcas manualmente pelo Brand Kit no menu lateral.",
       },
       {
         question: "Posso ter mais de uma Marca?",
@@ -43,22 +43,32 @@ const HELP_SECTIONS: HelpSection[] = [
       {
         question: "Como gerar conteúdo com IA?",
         answer:
-          "No Assistente IA (chat), cole um link de artigo, descreva um tema ou selecione uma tendência do Dashboard. Depois escolha: plataforma (Instagram ou LinkedIn), formato (Post, Carrossel, Story ou Documento), estilo editorial (Notícia, Dica, Frase, Educativo, Curiosidade) e a marca. A IA gera textos e imagens automaticamente!",
+          "No Assistente IA (chat), cole um link de artigo ou descreva o tema do conteúdo. O assistente abre um assistente visual de criação onde você escolhe: plataforma (Instagram ou LinkedIn), formato (Post, Carrossel, Story ou Documento), de onde vem o conteúdo (link, sugestões ou escrever do zero), estilo visual e a marca. A IA gera textos e imagens automaticamente!",
+      },
+      {
+        question: "Como funciona o assistente de criação?",
+        answer:
+          "Ao iniciar uma criação, um assistente visual aparece abaixo do chat guiando você nas escolhas: 1) Plataforma → 2) Formato → 3) Marca → 4) Fonte do conteúdo (link, sugestões automáticas ou escrever do zero) → 5) Estilo visual → Geração. Você pode voltar em qualquer etapa ou cancelar.",
+      },
+      {
+        question: "Posso usar um link para gerar conteúdo?",
+        answer:
+          "Sim! Cole um link no chat junto ao seu pedido. Exemplo: 'crie um post sobre este artigo: https://...' O assistente extrai automaticamente o conteúdo do link e usa como base para a geração. Você também pode escolher 'Colar um link' dentro do assistente de criação.",
       },
       {
         question: "Quais formatos posso gerar?",
         answer:
-          "Post único (1 slide), Carrossel (múltiplos slides, de 3 a 12), Story (formato vertical) e Documento LinkedIn (slides em formato documento). Cada formato tem templates visuais específicos.",
+          "Post único (1 slide), Carrossel (múltiplos slides, de 3 a 12), Story (formato vertical 9:16) e Documento LinkedIn (slides em formato 4:5). Cada formato tem dimensões e estilos visuais específicos.",
       },
       {
         question: "Posso editar o conteúdo depois de gerar?",
         answer:
-          "Sim! Após a geração, você pode editar textos diretamente nos slides, trocar imagens de fundo, ajustar posições, regenerar apenas o texto ou apenas a imagem, e até refazer tudo. Use os botões 'Novo texto', 'Nova imagem' ou 'Ajustar texto' no card de ações.",
+          "Sim! Após a geração, use os botões no card de ações: 'Novo texto' para regenerar apenas o texto, 'Nova imagem' para regenerar apenas a imagem, 'Refazer tudo' para começar do zero, ou 'Studio' para editar manualmente textos e elementos visuais.",
       },
       {
-        question: "O que são os modos visuais?",
+        question: "O que são os estilos visuais?",
         answer:
-          "Ao gerar conteúdo, você escolhe como as imagens de fundo serão criadas: 'IA' (gerada por inteligência artificial), 'Fundo Salvo' (usa templates de fundo que você salvou anteriormente) ou 'Upload' (você envia sua própria imagem). No modo IA, há ainda a opção de fidelidade: 'Fiel à marca' segue rigorosamente sua identidade, e 'Livre' permite mais liberdade criativa.",
+          "Ao gerar conteúdo, você escolhe como as imagens serão criadas: 'IA — Design completo' (IA cria a imagem inteira com texto), 'IA — Ilustração' (cena fotorrealista sem texto pesado), 'Fundo de marca' (background gerado pela IA com texto sobreposto), 'Template limpo' (cores da sua marca como fundo com texto) ou 'Suas fotos' (fotos da marca como fundo).",
       },
     ],
   },
@@ -70,12 +80,22 @@ const HELP_SECTIONS: HelpSection[] = [
       {
         question: "O que posso fazer no chat?",
         answer:
-          "O Assistente IA é o coração da plataforma. Você pode: criar marcas, gerar conteúdos, pedir sugestões de temas, tirar dúvidas sobre marketing digital e muito mais. Basta digitar naturalmente o que deseja e o assistente entende e executa.",
+          "O Assistente IA é o coração da plataforma. Você pode: criar marcas, gerar conteúdos, pedir sugestões de temas, tirar dúvidas sobre marketing digital e muito mais. Cole um link, descreva um tema ou use os atalhos rápidos abaixo do chat para começar.",
+      },
+      {
+        question: "Como usar os atalhos rápidos?",
+        answer:
+          "Na barra abaixo do chat há atalhos para '✨ Criar conteúdo', '📸 Criar um post', '🎠 Criar um carrossel', '📱 Criar um story', '🔗 Tenho um link' e '🎨 Nova marca'. Clique em qualquer um para iniciar o assistente de criação já com o formato pré-selecionado.",
       },
       {
         question: "Posso enviar imagens no chat?",
         answer:
-          "Sim! Você pode enviar imagens como exemplos de estilo para criar marcas, ou como referência visual para a geração de conteúdos. Basta clicar no ícone de anexo ou arrastar a imagem para o chat.",
+          "Sim! Durante a criação de uma marca, o chat habilita o botão de imagem para você enviar exemplos do seu estilo visual. Basta clicar no ícone de imagem que aparece no campo de mensagem.",
+      },
+      {
+        question: "O que é o modo de geração rápida (⚙️)?",
+        answer:
+          "Clique no ícone ⚙️ ao lado do campo de mensagem para configurar uma plataforma e marca padrão. Com isso configurado, basta descrever o tema no chat e a IA gera o conteúdo direto, sem precisar passar pelo assistente de criação.",
       },
     ],
   },

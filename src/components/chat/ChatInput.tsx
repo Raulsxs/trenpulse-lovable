@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, KeyboardEvent, useMemo } from "react";
-import { Send, Loader2, Link, ImagePlus, MessageSquarePlus, Tag, X } from "lucide-react";
+import { Send, Loader2, ImagePlus, MessageSquarePlus, Tag, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface ChatInputProps {
@@ -17,8 +17,6 @@ interface ChatInputProps {
   prefillText?: string;
   prefillKey?: number;
 }
-
-const URL_REGEX = /https?:\/\/[^\s]+/;
 
 export default function ChatInput({ onSend, onFilesSelected, disabled, placeholder = "Cole um link ou descreva o conteúdo...", showImageUpload, userId, onNewChat, hasMessages, brands, selectedBrandId, onBrandSelect, prefillText, prefillKey }: ChatInputProps) {
   const [value, setValue] = useState("");
@@ -55,9 +53,6 @@ export default function ChatInput({ onSend, onFilesSelected, disabled, placehold
     }
   }, [showBrandDropdown]);
 
-  const hasUrl = useMemo(() => URL_REGEX.test(value), [value]);
-  const detectedUrl = useMemo(() => value.match(URL_REGEX)?.[0] || "", [value]);
-
   const selectedBrand = useMemo(() => {
     if (!selectedBrandId || !brands) return null;
     return brands.find((b) => b.id === selectedBrandId) || null;
@@ -68,20 +63,6 @@ export default function ChatInput({ onSend, onFilesSelected, disabled, placehold
     if (!trimmed || disabled) return;
     onSend(trimmed);
     setValue("");
-  };
-
-  const [linkPlatform, setLinkPlatform] = useState<string | null>(null);
-
-  const handleLinkPlatform = (platform: string) => {
-    setLinkPlatform(platform);
-  };
-
-  const handleLinkAction = (type: string) => {
-    if (!detectedUrl || disabled) return;
-    const platform = linkPlatform || "instagram";
-    onSend(`Cria um ${type} para ${platform} a partir deste link: ${detectedUrl}`);
-    setValue("");
-    setLinkPlatform(null);
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -115,58 +96,6 @@ export default function ChatInput({ onSend, onFilesSelected, disabled, placehold
                 <X className="w-3 h-3" />
               </button>
             </span>
-          </div>
-        )}
-
-        {/* URL detection banner */}
-        {hasUrl && (
-          <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-2.5 animate-in fade-in slide-in-from-bottom-2 duration-300">
-            <div className="flex items-center gap-1.5 mb-2">
-              <Link className="w-3.5 h-3.5 text-primary" />
-              <span className="text-xs font-medium text-foreground">
-                {!linkPlatform ? "Link detectado — para qual plataforma?" : `${linkPlatform === "linkedin" ? "LinkedIn" : "Instagram"} — que tipo de conteúdo?`}
-              </span>
-            </div>
-            <div className="flex gap-1.5">
-              {!linkPlatform ? (
-                <>
-                  {[
-                    { emoji: "📸", label: "Instagram", platform: "instagram" },
-                    { emoji: "💼", label: "LinkedIn", platform: "linkedin" },
-                  ].map((item) => (
-                    <button
-                      key={item.platform}
-                      onClick={() => handleLinkPlatform(item.platform)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-background border border-border/60 hover:border-primary/40 hover:bg-primary/5 transition-all duration-150"
-                    >
-                      <span>{item.emoji}</span>
-                      {item.label}
-                    </button>
-                  ))}
-                </>
-              ) : (
-                (linkPlatform === "linkedin"
-                  ? [
-                      { emoji: "📷", label: "Post", type: "post" },
-                      { emoji: "📄", label: "Documento", type: "documento" },
-                      { emoji: "📰", label: "Artigo", type: "artigo" },
-                    ]
-                  : [
-                      { emoji: "📸", label: "Post", type: "post" },
-                      { emoji: "🎠", label: "Carrossel", type: "carrossel" },
-                      { emoji: "📱", label: "Story", type: "story" },
-                    ]
-                ).map((item) => (
-                  <button
-                    key={item.type}
-                    onClick={() => handleLinkAction(item.type)}
-                    className="text-xs px-3 py-1.5 rounded-lg border border-border/60 bg-background hover:bg-primary/5 hover:border-primary/40 transition-all duration-150 hover:scale-[1.02] active:scale-[0.98]"
-                  >
-                    {item.emoji} {item.label}
-                  </button>
-                ))
-              )}
-            </div>
           </div>
         )}
 
