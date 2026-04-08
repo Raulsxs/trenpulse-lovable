@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import ImageEditorModal from "@/components/ui/ImageEditorModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,6 +41,8 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
   const createCategory = useCreateBrandCategory();
 
   const [uploading, setUploading] = useState(false);
+  const [editorFile, setEditorFile] = useState<File | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [description, setDescription] = useState("");
   const [uploadType, setUploadType] = useState("post");
   const [uploadSubtype, setUploadSubtype] = useState<string>("");
@@ -64,22 +67,7 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
   const [editCategoryMode, setEditCategoryMode] = useState("auto");
   const [editCategoryId, setEditCategoryId] = useState<string>("");
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-
-    // Multi-upload for carousel
-    if (uploadType === "carousel" && files.length > 1) {
-      await handleCarouselMultiUpload(files);
-      return;
-    }
-
-    const file = files[0];
-    if (!file.type.startsWith("image/")) {
-      toast.error("Apenas imagens são aceitas");
-      return;
-    }
-
+  const doSingleUpload = async (file: File) => {
     setUploading(true);
     try {
       const fileName = `${brandId}/${Date.now()}-${file.name}`;
@@ -165,6 +153,23 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
     }
   };
 
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    // Multi-upload for carousel — skip editor (multiple files at once)
+    if (uploadType === "carousel" && files.length > 1) {
+      handleCarouselMultiUpload(files);
+      return;
+    }
+
+    const file = files[0];
+    if (!file.type.startsWith("image/")) { toast.error("Apenas imagens são aceitas"); return; }
+    if (fileInputRef.current) fileInputRef.current.value = "";
+    setEditorFile(file);
+    setEditorOpen(true);
+  };
+
   const handleDelete = async (id: string) => {
     if (confirm("Remover este exemplo?")) {
       await deleteExample.mutateAsync({ id, brandId });
@@ -229,6 +234,14 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
   const categoryName = (catId: string) => categories?.find((c: any) => c.id === catId)?.name || "";
 
   return (
+    <>
+    <ImageEditorModal
+      open={editorOpen}
+      file={editorFile}
+      onConfirm={(editedFile) => { setEditorOpen(false); setEditorFile(null); doSingleUpload(editedFile); }}
+      onCancel={() => { setEditorOpen(false); setEditorFile(null); }}
+      title="Ajustar imagem de referência"
+    />
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
@@ -557,5 +570,6 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
         </DialogContent>
       </Dialog>
     </div>
+    </>
   );
 }

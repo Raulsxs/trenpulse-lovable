@@ -5,6 +5,7 @@ import { Upload, X, Loader2, Image as ImageIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import ImageEditorModal from "@/components/ui/ImageEditorModal";
 
 interface ImageUploadProps {
   open: boolean;
@@ -17,6 +18,8 @@ const ImageUpload = ({ open, onClose, onUploadComplete }: ImageUploadProps) => {
   const [isUploading, setIsUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [editorFile, setEditorFile] = useState<File | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
@@ -50,12 +53,23 @@ const ImageUpload = ({ open, onClose, onUploadComplete }: ImageUploadProps) => {
       return;
     }
 
-    setSelectedFile(file);
+    setEditorFile(file);
+    setEditorOpen(true);
+  };
+
+  const handleEditorConfirm = (editedFile: File) => {
+    setEditorOpen(false);
+    setEditorFile(null);
+    setSelectedFile(editedFile);
     const reader = new FileReader();
-    reader.onload = (e) => {
-      setPreview(e.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    reader.onload = (e) => setPreview(e.target?.result as string);
+    reader.readAsDataURL(editedFile);
+  };
+
+  const handleEditorCancel = () => {
+    setEditorOpen(false);
+    setEditorFile(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -119,6 +133,15 @@ const ImageUpload = ({ open, onClose, onUploadComplete }: ImageUploadProps) => {
   };
 
   return (
+    <>
+    <ImageEditorModal
+      open={editorOpen}
+      file={editorFile}
+      onConfirm={handleEditorConfirm}
+      onCancel={handleEditorCancel}
+      aspectRatio={1}
+      title="Ajustar imagem"
+    />
     <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
@@ -203,6 +226,7 @@ const ImageUpload = ({ open, onClose, onUploadComplete }: ImageUploadProps) => {
         </div>
       </DialogContent>
     </Dialog>
+    </>
   );
 };
 

@@ -127,11 +127,7 @@ const Profile = () => {
     }
   };
 
-  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) { toast.error("Por favor, selecione uma imagem"); return; }
-    if (file.size > 2 * 1024 * 1024) { toast.error("A imagem deve ter no máximo 2MB"); return; }
+  const handleAvatarUpload = async (file: File) => {
 
     setUploading(true);
     try {

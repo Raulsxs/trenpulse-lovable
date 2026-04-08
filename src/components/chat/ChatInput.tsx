@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, KeyboardEvent, useMemo } from "react";
 import { Send, Loader2, ImagePlus, MessageSquarePlus, Tag, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import ImageEditorModal from "@/components/ui/ImageEditorModal";
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -21,6 +22,10 @@ interface ChatInputProps {
 export default function ChatInput({ onSend, onFilesSelected, disabled, placeholder = "Cole um link ou descreva o conteúdo...", showImageUpload, userId, onNewChat, hasMessages, brands, selectedBrandId, onBrandSelect, prefillText, prefillKey }: ChatInputProps) {
   const [value, setValue] = useState("");
   const [showBrandDropdown, setShowBrandDropdown] = useState(false);
+  const [editorQueue, setEditorQueue] = useState<File[]>([]);
+  const [editorCurrentFile, setEditorCurrentFile] = useState<File | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const pendingEditedFilesRef = useRef<File[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const brandDropdownRef = useRef<HTMLDivElement>(null);
@@ -73,14 +78,50 @@ export default function ChatInput({ onSend, onFilesSelected, disabled, placehold
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    if (files.length > 0 && onFilesSelected) {
-      onFilesSelected(files);
-    }
+    const files = Array.from(e.target.files || []).filter((f) => f.type.startsWith("image/"));
     if (e.target) e.target.value = "";
+    if (files.length === 0) return;
+
+    pendingEditedFilesRef.current = [];
+    const [first, ...rest] = files;
+    setEditorQueue(rest);
+    setEditorCurrentFile(first);
+    setEditorOpen(true);
+  };
+
+  const handleEditorAdvance = (remaining: File[], confirmed: File[]) => {
+    if (remaining.length > 0) {
+      const [next, ...rest] = remaining;
+      setEditorQueue(rest);
+      setEditorCurrentFile(next);
+    } else {
+      setEditorOpen(false);
+      setEditorCurrentFile(null);
+      setEditorQueue([]);
+      if (confirmed.length > 0 && onFilesSelected) onFilesSelected(confirmed);
+      pendingEditedFilesRef.current = [];
+    }
+  };
+
+  const handleEditorConfirm = (editedFile: File) => {
+    const updated = [...pendingEditedFilesRef.current, editedFile];
+    pendingEditedFilesRef.current = updated;
+    handleEditorAdvance(editorQueue, updated);
+  };
+
+  const handleEditorCancel = () => {
+    handleEditorAdvance(editorQueue, pendingEditedFilesRef.current);
   };
 
   return (
+    <>
+    <ImageEditorModal
+      open={editorOpen}
+      file={editorCurrentFile}
+      onConfirm={handleEditorConfirm}
+      onCancel={handleEditorCancel}
+      title="Ajustar imagem"
+    />
     <div className="border-t border-border/30 bg-gradient-to-t from-background via-background to-background/80 p-3 pb-4">
       <div className="max-w-3xl mx-auto space-y-2">
         {/* Selected brand chip */}
@@ -233,5 +274,6 @@ export default function ChatInput({ onSend, onFilesSelected, disabled, placehold
         </p>
       </div>
     </div>
+    </>
   );
 }
