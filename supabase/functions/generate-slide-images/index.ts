@@ -348,7 +348,10 @@ Do NOT create a graphic design with large text. Create a PHOTOGRAPHIC SCENE abou
         const dimLabel = isLinkedInPost ? "SQUARE 1:1 (1200x1200px)" : isLinkedInDoc ? "VERTICAL PORTRAIT 4:5 (1080x1350px)" : isStoryFormat ? "VERTICAL PORTRAIT 9:16 (1080x1920px)" : "SQUARE 1:1 (1080x1080px)";
 
         let promptText: string;
-        if (illustrationMode) {
+        if (customPrompt) {
+          // Use pre-built prompt from ai-chat directly — no dimLabel wrapping
+          promptText = customPrompt;
+        } else if (illustrationMode) {
           // Illustration mode: generate a visual scene about the topic, minimal text
           const headline = slide.headline || "";
           const body = slide.body || "";

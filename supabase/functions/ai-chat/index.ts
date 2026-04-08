@@ -392,19 +392,16 @@ Mensagem: "${message}"`;
           ? `Baseado neste artigo: ${articleContent.substring(0, 2000)}`
           : message;
 
-        const imagePrompt = `Crie uma imagem para ${format === "story" ? "story" : "post"} de ${platform === "linkedin" ? "LinkedIn" : "Instagram"} (${dims.w}x${dims.h}px).
+        const platformLabel = platform === "linkedin" ? "LinkedIn" : "Instagram";
+        const formatLabel = format === "story" ? "story" : format === "carousel" ? "carrossel" : "post";
 
-TEMA: ${userTopic}
+        const imagePrompt = `Crie uma imagem profissional para ${formatLabel} de ${platformLabel} sobre o tema abaixo.
 
-${brandContext ? `IDENTIDADE DA MARCA:\n${brandContext}\n` : ""}${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}\n` : ""}${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}\n` : ""}
-REGRAS:
-- Imagem COMPLETA com texto integrado, pronta para publicar
-- Texto legível, fonte profissional
-- Safe area: margem mínima de 80px em todas as bordas
-- NUNCA inclua URLs, QR codes, @handles inventados
-- Formato: ${dims.w}x${dims.h}px
+${userTopic}
 
-Responda APENAS com a imagem gerada.`;
+${brandContext ? `IDENTIDADE VISUAL:\n${brandContext}\n` : ""}${userCtx?.business_niche ? `Nicho do criador: ${userCtx.business_niche}. ` : ""}${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}. ` : ""}
+
+A imagem deve ter texto integrado pronta para publicar. Use tipografia profissional e legível. Não inclua URLs ou QR codes. Gere APENAS a imagem.`;
 
         // 6. Call generate-slide-images
         console.log("[ai-chat] GENERATE: calling generate-slide-images");
