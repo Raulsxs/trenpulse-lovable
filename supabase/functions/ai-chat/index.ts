@@ -354,14 +354,18 @@ Mensagem: "${message}"`;
         let brandContext = "";
         let brandSnapshot: Record<string, any> | null = null;
         let referenceImageUrls: string[] = [];
+        let isPhotoBackground = false;
+        let photoBackgroundUrls: string[] = [];
 
         if (requestBrandId && requestBrandId !== "none") {
           const { data: brand } = await svc.from("brands")
-            .select("name, palette, fonts, visual_tone, do_rules, dont_rules, visual_preferences, logo_url")
+            .select("name, palette, fonts, visual_tone, do_rules, dont_rules, visual_preferences, logo_url, creation_mode")
             .eq("id", requestBrandId).single();
 
           if (brand) {
             brandSnapshot = brand;
+            isPhotoBackground = (brand as any).creation_mode === "photo_backgrounds";
+
             const parts: string[] = [];
             parts.push(`Marca: ${brand.name}`);
             if (brand.palette?.length) {
@@ -379,10 +383,16 @@ Mensagem: "${message}"`;
             if (prefs?.custom_notes) parts.push(`Nota visual: ${prefs.custom_notes}`);
             brandContext = parts.join("\n");
 
-            // Load reference images
-            const { data: refs } = await svc.from("brand_examples")
-              .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "reference").limit(6);
-            if (refs?.length) referenceImageUrls = refs.map((r: any) => r.image_url);
+            if (isPhotoBackground) {
+              const { data: bgPhotos } = await svc.from("brand_examples")
+                .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "background").limit(6);
+              if (bgPhotos?.length) photoBackgroundUrls = bgPhotos.map((r: any) => r.image_url);
+              console.log(`[ai-chat] photo_backgrounds mode: ${photoBackgroundUrls.length} photos`);
+            } else {
+              const { data: refs } = await svc.from("brand_examples")
+                .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "reference").limit(6);
+              if (refs?.length) referenceImageUrls = refs.map((r: any) => r.image_url);
+            }
           }
         }
 
@@ -434,8 +444,35 @@ Mensagem: "${message}"`;
 
         // For quote/frase style: prompt focused ONLY on the phrase — never add niche/brand context
         const visualContext = contentStyle === "quote" ? extractVisualContext(message) : "";
-        const imagePrompt = contentStyle === "quote"
-          ? `FORMATO OBRIGATÓRIO: ${dimLabelGenerate}. A imagem DEVE ser gerada neste formato exato.
+
+        let imagePrompt: string;
+
+        if (isPhotoBackground && photoBackgroundUrls.length > 0) {
+          // ── PHOTO BACKGROUND MODE ──
+          // Send the personal photo as reference and ask Gemini to overlay text on it
+          referenceImageUrls = [photoBackgroundUrls[Math.floor(Math.random() * photoBackgroundUrls.length)]];
+          const textToOverlay = contentStyle === "quote" ? slideHeadline : userTopic;
+          imagePrompt = `FORMATO OBRIGATÓRIO: ${dimLabelGenerate}. A imagem DEVE ser gerada neste formato exato.
+
+INSTRUÇÃO PRINCIPAL: A imagem de referência anexada é uma FOTO PESSOAL REAL do criador. Você DEVE preservar esta foto exatamente como ela é — é a foto real da pessoa. NÃO gere uma pessoa diferente. NÃO altere o rosto ou corpo da pessoa na foto.
+
+Use a foto anexada como FUNDO e sobreponha o texto abaixo de forma profissional:
+
+TEXTO PARA SOBREPOR: "${textToOverlay}"
+
+REGRAS OBRIGATÓRIAS:
+- A foto da pessoa deve permanecer INTACTA e INALTERADA — é a foto real do criador
+- Adicione um gradiente sutil escuro na parte inferior para legibilidade do texto
+- O texto deve ficar na parte inferior da imagem, sobre o gradiente
+- Tipografia elegante, profissional e legível
+- Estilo de post de coaching/liderança — limpo e sofisticado
+- NÃO gere outra pessoa. NÃO altere o rosto. A foto é SAGRADA.
+- NÃO adicione logos, URLs ou QR codes`;
+
+          console.log(`[ai-chat] GENERATE: photo_background prompt, using photo: ${referenceImageUrls[0]?.substring(0, 80)}`);
+
+        } else if (contentStyle === "quote") {
+          imagePrompt = `FORMATO OBRIGATÓRIO: ${dimLabelGenerate}. A imagem DEVE ser gerada neste formato exato.
 
 Crie uma imagem artística de ${formatLabel} para ${platformLabel} com a seguinte frase em destaque visual:
 
@@ -448,8 +485,9 @@ REGRAS ABSOLUTAS — OBRIGATÓRIAS:
 - O ÚNICO texto visível na imagem é a frase "${slideHeadline}". ZERO outros textos.
 - NÃO adicione subtítulos, categorias, slogans, rótulos, nome de marca ou qualquer palavra além da frase.
 - Tipografia elegante e legível. Frase centralizada e em destaque.
-- NÃO inclua URLs, QR codes ou logotipos.`
-          : `FORMATO OBRIGATÓRIO: ${dimLabelGenerate}. A imagem DEVE ser gerada neste formato exato.
+- NÃO inclua URLs, QR codes ou logotipos.`;
+        } else {
+          imagePrompt = `FORMATO OBRIGATÓRIO: ${dimLabelGenerate}. A imagem DEVE ser gerada neste formato exato.
 
 Crie uma imagem profissional pronta para publicar como ${formatLabel} de ${platformLabel}.
 
@@ -462,6 +500,7 @@ REGRAS:
 - Use tipografia profissional, hierarquia visual clara, cores harmônicas.
 - NÃO inclua URLs, QR codes ou logotipos de terceiros.
 - Gere APENAS a imagem final, sem bordas ou mockups.`;
+        }
 
         // 6. Call generate-slide-images
         console.log("[ai-chat] GENERATE: calling generate-slide-images");
@@ -666,14 +705,18 @@ Responda APENAS em JSON:
         let brandContext = "";
         let brandSnapshot: Record<string, any> | null = null;
         let referenceImageUrls: string[] = [];
+        let isPhotoBackground = false;
+        let photoBackgroundUrls: string[] = [];
 
         if (requestBrandId && requestBrandId !== "none") {
           const { data: brand } = await svc.from("brands")
-            .select("name, palette, fonts, visual_tone, do_rules, dont_rules, visual_preferences, logo_url")
+            .select("name, palette, fonts, visual_tone, do_rules, dont_rules, visual_preferences, logo_url, creation_mode")
             .eq("id", requestBrandId).single();
 
           if (brand) {
             brandSnapshot = brand;
+            isPhotoBackground = (brand as any).creation_mode === "photo_backgrounds";
+
             const parts: string[] = [];
             parts.push(`Marca: ${brand.name}`);
             if (brand.palette?.length) {
@@ -691,10 +734,16 @@ Responda APENAS em JSON:
             if (prefs?.custom_notes) parts.push(`Nota visual: ${prefs.custom_notes}`);
             brandContext = parts.join("\n");
 
-            // Load reference images
-            const { data: refs } = await svc.from("brand_examples")
-              .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "reference").limit(6);
-            if (refs?.length) referenceImageUrls = refs.map((r: any) => r.image_url);
+            if (isPhotoBackground) {
+              const { data: bgPhotos } = await svc.from("brand_examples")
+                .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "background").limit(6);
+              if (bgPhotos?.length) photoBackgroundUrls = bgPhotos.map((r: any) => r.image_url);
+              console.log(`[ai-chat] photo_backgrounds mode: ${photoBackgroundUrls.length} photos`);
+            } else {
+              const { data: refs } = await svc.from("brand_examples")
+                .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "reference").limit(6);
+              if (refs?.length) referenceImageUrls = refs.map((r: any) => r.image_url);
+            }
           }
         }
 
