@@ -83,6 +83,8 @@ Deno.serve(async (req) => {
 
     const callbackUrl = `${supabaseUrl}/functions/v1/postforme-callback`;
 
+    // First attempt: without redirect_url_override (let PFM use their default)
+    // If PFM requires a registered callback, add it back
     const requestBody: Record<string, any> = {
       platform,
       external_id: user.id,
