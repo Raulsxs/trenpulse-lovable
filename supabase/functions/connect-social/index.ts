@@ -15,7 +15,7 @@ const SUPPORTED_PLATFORMS = [
   "pinterest", "bluesky", "threads", "youtube",
 ];
 
-// Platform-specific data required by Post for Me API
+// Platform-specific fields required by Post for Me API
 const PLATFORM_DATA: Record<string, Record<string, string>> = {
   instagram: { connection_type: "instagram" },
   linkedin: { connection_type: "personal" },
@@ -93,9 +93,9 @@ Deno.serve(async (req) => {
       permissions: ["posts"],
     };
 
-    // Add platform-specific data if required
+    // Merge platform-specific fields at top level (PFM expects connection_type at root)
     if (PLATFORM_DATA[platform]) {
-      requestBody.platform_data = PLATFORM_DATA[platform];
+      Object.assign(requestBody, PLATFORM_DATA[platform]);
     }
 
     console.log(`[connect-social] Calling PFM: platform=${platform}, userId=${user.id}`);
