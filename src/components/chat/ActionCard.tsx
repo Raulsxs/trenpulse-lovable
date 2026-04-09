@@ -933,17 +933,13 @@ export default function ActionCard({
 
           {/* Row 2: Regeneration actions */}
           <div className="flex gap-2 mb-2">
-            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={handleRegenerateText} disabled={isRegeneratingText}>
-              {isRegeneratingText ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pencil className="w-3 h-3" />}
-              Novo texto
-            </Button>
             <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={handleRegenerateImage} disabled={isRegeneratingImage}>
-              {isRegeneratingImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <ImageIcon className="w-3 h-3" />}
-              Nova imagem
+              {isRegeneratingImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pencil className="w-3 h-3" />}
+              Ajustar
             </Button>
             <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={onRegenerate}>
               <RefreshCw className="w-3 h-3" />
-              Refazer tudo
+              Refazer
             </Button>
           </div>
 
@@ -997,17 +993,42 @@ export default function ActionCard({
       <ScheduleModal open={scheduleOpen} onClose={() => setScheduleOpen(false)} onSchedule={handleSchedule} isScheduling={isScheduling} />
 
       <Dialog open={showImageEditDialog} onOpenChange={setShowImageEditDialog}>
-        <DialogContent className="max-w-sm">
+        <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
-              <ImageIcon className="w-4 h-4" />
-              O que deve ser mudado na imagem?
+              <Pencil className="w-4 h-4" />
+              O que quer ajustar?
             </DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              A IA vai usar a imagem atual como base e aplicar as mudanças que você pedir.
+            </p>
           </DialogHeader>
+
+          {/* Quick suggestions */}
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              "Texto menor",
+              "Fonte diferente",
+              "Cores mais vibrantes",
+              "Fundo mais escuro",
+              "Remover elementos extras",
+              "Mais profissional",
+              "Mais minimalista",
+            ].map((suggestion) => (
+              <button
+                key={suggestion}
+                onClick={() => setImageEditInstruction((prev) => prev ? `${prev}, ${suggestion.toLowerCase()}` : suggestion.toLowerCase())}
+                className="text-[11px] px-2.5 py-1 rounded-full border border-border/60 text-muted-foreground hover:border-primary/40 hover:text-primary hover:bg-primary/5 transition-all"
+              >
+                {suggestion}
+              </button>
+            ))}
+          </div>
+
           <Textarea
             value={imageEditInstruction}
             onChange={(e) => setImageEditInstruction(e.target.value)}
-            placeholder="Ex: mude a cor para azul, adicione mais contraste, use um fundo mais escuro..."
+            placeholder="Descreva o que quer mudar..."
             rows={3}
             className="text-sm resize-none"
             autoFocus
@@ -1020,8 +1041,8 @@ export default function ActionCard({
               Cancelar
             </Button>
             <Button size="sm" onClick={handleConfirmImageEdit} disabled={!imageEditInstruction.trim()}>
-              <ImageIcon className="w-3 h-3 mr-1" />
-              Gerar nova imagem
+              <RefreshCw className="w-3 h-3 mr-1" />
+              Regenerar
             </Button>
           </DialogFooter>
         </DialogContent>
