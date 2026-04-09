@@ -98,6 +98,34 @@ Deno.serve(async (req) => {
 
     console.log(`[connect-social] Generating OAuth URL: platform=${platform}, userId=${user.id}`);
 
+    // Platform-specific data required by Post for Me
+    const platformDataMap: Record<string, any> = {
+      instagram: { connection_type: "instagram" },
+      linkedin: { connection_type: "personal" },
+      facebook: {},
+      tiktok: {},
+      youtube: {},
+      pinterest: {},
+      threads: {},
+      x: {},
+      bluesky: {},
+    };
+
+    const requestBody: any = {
+      platform,
+      external_id: user.id,
+      redirect_url_override: callbackUrl,
+      permissions: ["posts"],
+    };
+
+    // Add platform_data if needed
+    const platformData = platformDataMap[platform];
+    if (platformData && Object.keys(platformData).length > 0) {
+      requestBody.platform_data = platformData;
+    }
+
+    console.log(`[connect-social] PFM request:`, JSON.stringify(requestBody));
+
     // Call Post for Me API to generate OAuth URL
     const pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts/auth-url", {
       method: "POST",
@@ -105,19 +133,16 @@ Deno.serve(async (req) => {
         "Authorization": `Bearer ${pfmApiKey}`,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        platform,
-        external_id: user.id, // Our user ID — returned in callback
-        redirect_url_override: callbackUrl,
-        permissions: ["posts"],
-      }),
+      body: JSON.stringify(requestBody),
     });
 
     if (!pfmResp.ok) {
       const errText = await pfmResp.text();
-      console.error(`[connect-social] PFM error: ${pfmResp.status}`, errText.substring(0, 300));
+      console.error(`[connect-social] PFM error: ${pfmResp.status}`, errText);
+      let pfmMessage = "";
+      try { pfmMessage = JSON.parse(errText)?.message || errText; } catch { pfmMessage = errText; }
       return new Response(JSON.stringify({
-        error: `Erro ao conectar ${platform}. Tente novamente.`,
+        error: `Erro ao conectar ${platform}: ${pfmMessage}`,
         detail: pfmResp.status,
       }), {
         status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
