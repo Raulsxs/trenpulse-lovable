@@ -524,6 +524,7 @@ export type Database = {
           instagram_media_id: string | null
           key_insights: string[] | null
           platform: string
+          platform_captions: Json | null
           publish_attempts: number | null
           publish_error: string | null
           published_at: string | null
@@ -554,6 +555,7 @@ export type Database = {
           instagram_media_id?: string | null
           key_insights?: string[] | null
           platform?: string
+          platform_captions?: Json | null
           publish_attempts?: number | null
           publish_error?: string | null
           published_at?: string | null
@@ -584,6 +586,7 @@ export type Database = {
           instagram_media_id?: string | null
           key_insights?: string[] | null
           platform?: string
+          platform_captions?: Json | null
           publish_attempts?: number | null
           publish_error?: string | null
           published_at?: string | null
@@ -1139,6 +1142,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      social_connections: {
+        Row: {
+          account_name: string | null
+          connected_at: string | null
+          id: string
+          pfm_account_id: string | null
+          platform: string
+          status: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          account_name?: string | null
+          connected_at?: string | null
+          id?: string
+          pfm_account_id?: string | null
+          platform: string
+          status?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          account_name?: string | null
+          connected_at?: string | null
+          id?: string
+          pfm_account_id?: string | null
+          platform?: string
+          status?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       subscription_plans: {
         Row: {

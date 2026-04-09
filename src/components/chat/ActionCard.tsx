@@ -886,9 +886,9 @@ export default function ActionCard({
                             disabled={isPublishing}
                           />
                           <div
-                            className={`w-6 h-6 rounded bg-gradient-to-br ${info.color} flex items-center justify-center text-white text-xs shrink-0`}
+                            className={`w-6 h-6 rounded ${info.bgColor} flex items-center justify-center ${info.iconColor} shrink-0`}
                           >
-                            {info.emoji}
+                            <info.icon className="w-3.5 h-3.5" />
                           </div>
                           <span className="text-xs flex-1">{info.name}</span>
                           {result && (
