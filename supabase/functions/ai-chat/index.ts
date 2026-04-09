@@ -493,8 +493,17 @@ JSON: { "title": "...", "caption": "...", "hashtags": ["#..."] }`;
                 caption = parsed.caption || "";
                 hashtags = parsed.hashtags || [];
               } catch (parseErr) {
-                console.warn("[ai-chat] GENERATE: caption JSON parse failed, using raw");
-                caption = raw.replace(/```json\n?|\n?```/g, "").trim();
+                console.warn("[ai-chat] GENERATE: caption JSON parse failed, extracting with regex");
+                const titleRx = raw.match(/"title"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+                const captionRx = raw.match(/"caption"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+                const hashRx = raw.match(/"hashtags"\s*:\s*(\[[^\]]*\])/s);
+                if (captionRx) {
+                  caption = captionRx[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+                  if (titleRx) aiTitle = titleRx[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+                  if (hashRx) { try { hashtags = JSON.parse(hashRx[1]); } catch { /* ignore */ } }
+                } else {
+                  caption = raw.replace(/```json\n?|\n?```/g, "").trim();
+                }
               }
             } else {
               caption = raw.trim();
@@ -788,7 +797,15 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
                 caption = parsed.caption || "";
                 hashtags = parsed.hashtags || [];
               } catch {
-                caption = raw.replace(/```json\n?|\n?```/g, "").trim();
+                console.warn("[ai-chat] GENERATE_CAROUSEL: caption JSON parse failed, extracting with regex");
+                const captionRx = raw.match(/"caption"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+                const hashRx = raw.match(/"hashtags"\s*:\s*(\[[^\]]*\])/s);
+                if (captionRx) {
+                  caption = captionRx[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+                  if (hashRx) { try { hashtags = JSON.parse(hashRx[1]); } catch { /* ignore */ } }
+                } else {
+                  caption = raw.replace(/```json\n?|\n?```/g, "").trim();
+                }
               }
             } else {
               caption = raw.trim();

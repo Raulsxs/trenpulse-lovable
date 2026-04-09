@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useNavigate } from "react-router-dom";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 
 interface ActionCardProps {
   contentId: string;
@@ -160,6 +162,8 @@ export default function ActionCard({
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [isRegeneratingText, setIsRegeneratingText] = useState(false);
   const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
+  const [showImageEditDialog, setShowImageEditDialog] = useState(false);
+  const [imageEditInstruction, setImageEditInstruction] = useState("");
 
   // Slide data for client-side rendering (same component as studio)
   const [slideData, setSlideData] = useState<any>(null);
@@ -573,7 +577,15 @@ export default function ActionCard({
     }
   };
 
-  const handleRegenerateImage = async () => {
+  const handleRegenerateImage = () => {
+    setImageEditInstruction("");
+    setShowImageEditDialog(true);
+  };
+
+  const handleConfirmImageEdit = async () => {
+    const instruction = imageEditInstruction.trim();
+    if (!instruction) return;
+    setShowImageEditDialog(false);
     setIsRegeneratingImage(true);
     setSlideData(null);
     try {
@@ -582,12 +594,13 @@ export default function ActionCard({
 
       await supabase.functions.invoke("ai-chat", {
         body: {
-          message: `Regenerar apenas a imagem do conteúdo ${contentId}`,
-          intent_hint: "REGENERAR_IMAGEM",
-          generationParams: { contentId, keepText: true },
+          message: instruction,
+          intent_hint: "EDIT_CONTENT",
+          editInstruction: instruction,
+          generationParams: { contentId },
         },
       });
-      // Polling will pick up the new composite URL
+      // Polling will pick up the new image once the backend updates the DB
     } catch (err: any) {
       console.error("[ActionCard] regenerate image error:", err);
       toast.error("Erro ao regenerar imagem");
@@ -782,6 +795,37 @@ export default function ActionCard({
       </Card>
 
       <ScheduleModal open={scheduleOpen} onClose={() => setScheduleOpen(false)} onSchedule={handleSchedule} isScheduling={isScheduling} />
+
+      <Dialog open={showImageEditDialog} onOpenChange={setShowImageEditDialog}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <ImageIcon className="w-4 h-4" />
+              O que deve ser mudado na imagem?
+            </DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={imageEditInstruction}
+            onChange={(e) => setImageEditInstruction(e.target.value)}
+            placeholder="Ex: mude a cor para azul, adicione mais contraste, use um fundo mais escuro..."
+            rows={3}
+            className="text-sm resize-none"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleConfirmImageEdit();
+            }}
+          />
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowImageEditDialog(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" onClick={handleConfirmImageEdit} disabled={!imageEditInstruction.trim()}>
+              <ImageIcon className="w-3 h-3 mr-1" />
+              Gerar nova imagem
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

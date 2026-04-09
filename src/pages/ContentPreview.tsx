@@ -115,6 +115,33 @@ interface GeneratedContent {
   image_urls?: string[];
 }
 
+// Strip leading command phrases from titles that were stored as raw user prompts
+function sanitizeTitle(title: string): string {
+  if (!title) return title;
+  return title
+    .replace(/^(quero|crie|gere|criar|gerar|me\s+d[eê]|fa[çc]a)\s+(um[a]?\s+)?(post|story|carrossel|imagem|conteúdo)\s+(com\s+|para\s+o\s+)?(instagram|linkedin)?\s*(sobre\s*:?\s*)?/i, "")
+    .trim();
+}
+
+// Recover caption from stored raw AI JSON (happens when JSON parse failed on the backend)
+function sanitizeCaption(raw: string): string {
+  if (!raw) return raw;
+  // If it looks like a JSON object, try to extract the caption field
+  const trimmed = raw.trim();
+  if (trimmed.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (parsed.caption) return parsed.caption;
+    } catch {
+      // Try regex extraction as fallback
+      const m = trimmed.match(/"caption"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+      if (m) return m[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+    }
+  }
+  // Replace any remaining literal \n escape sequences
+  return raw.replace(/\\n/g, "\n");
+}
+
 const ContentPreview = () => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -201,8 +228,13 @@ const ContentPreview = () => {
       if (error) throw error;
 
       const gc = data as unknown as GeneratedContent;
-      setContent(gc);
-      setEditCaption(gc.caption || "");
+      const cleanCaption = sanitizeCaption(gc.caption || "");
+      const cleanTitle = sanitizeTitle(gc.title || "");
+      const cleanContent = (cleanCaption !== gc.caption || cleanTitle !== gc.title)
+        ? { ...gc, caption: cleanCaption, title: cleanTitle }
+        : gc;
+      setContent(cleanContent);
+      setEditCaption(cleanCaption);
       setEditHashtags((gc.hashtags || []).join(" "));
       // Normalize slides: image_url is the single source of truth
       const rawSlides = (data.slides as unknown) as Slide[];
