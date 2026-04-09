@@ -77,6 +77,17 @@ function extractPhrase(msg: string): string {
   return msg;
 }
 
+// ── Helper: extract visual context from a "frase" message (e.g. "aspectos de X") ──
+function extractVisualContext(msg: string): string {
+  // "com aspectos de X com a frase" → X
+  const match = msg.match(/(?:com\s+)?aspectos?\s+de\s+([^,]+?)(?:\s+com\s+a\s+frase|\s+frase)/i);
+  if (match?.[1]) return match[1].trim();
+  // "imagem de X com a frase" → X
+  const match2 = msg.match(/imagem\s+(?:de|sobre|com)\s+([^,]+?)\s+com\s+a\s+frase/i);
+  if (match2?.[1]) return match2[1].trim();
+  return "";
+}
+
 // ── Helper: get content dimensions ──
 function getContentDimensions(platform: string, format: string): { w: number; h: number } {
   if (platform === "linkedin") {
@@ -420,7 +431,24 @@ Mensagem: "${message}"`;
           : isStoryFmt ? "VERTICAL PORTRAIT 9:16 (1080x1920px)"
           : "SQUARE 1:1 (1080x1080px)";
 
-        const imagePrompt = `FORMATO OBRIGATÓRIO: ${dimLabelGenerate}. A imagem DEVE ser gerada neste formato exato.
+        // For quote/frase style: prompt focused ONLY on the phrase — never add niche/brand context
+        const visualContext = contentStyle === "quote" ? extractVisualContext(message) : "";
+        const imagePrompt = contentStyle === "quote"
+          ? `FORMATO OBRIGATÓRIO: ${dimLabelGenerate}. A imagem DEVE ser gerada neste formato exato.
+
+Crie uma imagem artística de ${formatLabel} para ${platformLabel} com a seguinte frase em destaque visual:
+
+FRASE (único texto permitido na imagem): "${slideHeadline}"
+${visualContext ? `TEMA VISUAL DO FUNDO: ${visualContext}` : "TEMA VISUAL: fundo artístico abstrato que complementa a frase"}
+
+${brandContext ? `IDENTIDADE VISUAL (apenas cores/fontes, NÃO adicionar textos da marca):\n${brandContext}\n` : ""}
+
+REGRAS ABSOLUTAS — OBRIGATÓRIAS:
+- O ÚNICO texto visível na imagem é a frase "${slideHeadline}". ZERO outros textos.
+- NÃO adicione subtítulos, categorias, slogans, rótulos, nome de marca ou qualquer palavra além da frase.
+- Tipografia elegante e legível. Frase centralizada e em destaque.
+- NÃO inclua URLs, QR codes ou logotipos.`
+          : `FORMATO OBRIGATÓRIO: ${dimLabelGenerate}. A imagem DEVE ser gerada neste formato exato.
 
 Crie uma imagem profissional pronta para publicar como ${formatLabel} de ${platformLabel}.
 
