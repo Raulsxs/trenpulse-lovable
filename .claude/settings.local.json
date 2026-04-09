@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find /c/Users/rauls/trendpulse/src -type f \\\\\\( -name \"*.tsx\" -o -name \"*.ts\" \\\\\\) -exec wc -l {} +)",
+      "Bash(find /c/Users/rauls/trendpulse/supabase/functions -type f -name \"*.ts\" -exec wc -l {} +)",
+      "WebFetch(domain:app.inference.sh)",
+      "Bash(npm test:*)",
+      "Bash(npx vitest:*)",
+      "Bash(npm install:*)",
+      "Bash(npx supabase:*)",
+      "Bash(curl:*)",
+      "Bash(python3 -m json.tool)",
+      "Bash(npx tsc:*)",
+      "Bash(xargs grep:*)",
+      "Bash(git fetch:*)",
+      "Bash(git pull:*)",
+      "Bash(git stash:*)",
+      "Bash(git checkout:*)",
+      "Bash(git add:*)",
+      "Bash(bash /tmp/check_calls.sh)",
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(wc -l /c/Users/rauls/trendpulse/src/components/chat/*.tsx /c/Users/rauls/trendpulse/src/components/chat/generation/*.tsx /c/Users/rauls/trendpulse/src/pages/BrandEdit.tsx)",
+      "Bash(grep -l \"generated_contents\\\\|brands\" /c/Users/rauls/trendpulse/supabase/migrations/*.sql)",
+      "Bash(grep -A 30 \"CREATE TABLE.*generated_contents\" /c/Users/rauls/trendpulse/supabase/migrations/*.sql)",
+      "Bash(grep -A 30 \"CREATE TABLE.*brands\" /c/Users/rauls/trendpulse/supabase/migrations/*.sql)",
+      "Bash(grep:*)",
+      "WebFetch(domain:github.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:api.github.com)",
+      "WebSearch",
+      "WebFetch(domain:www.postforme.dev)",
+      "WebFetch(domain:higgsfield.ai)",
+      "WebFetch(domain:apify.com)",
+      "WebFetch(domain:blog.segmind.com)",
+      "WebFetch(domain:hackceleration.com)",
+      "WebFetch(domain:cloud.higgsfield.ai)",
+      "WebFetch(domain:use-apify.com)",
+      "WebFetch(domain:apidog.com)"
+    ]
+  }
+}
