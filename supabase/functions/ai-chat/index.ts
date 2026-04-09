@@ -885,16 +885,31 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
         const existingPlatform = existing.platform || "instagram";
         const existingFormat = existing.content_type || "post";
 
-        // Build edit prompt
-        const editPrompt = `Edite esta imagem de ${existingPlatform === "linkedin" ? "LinkedIn" : "Instagram"} (${existingFormat}) seguindo a instrução do usuário:
+        // Resolve dimension label so inference.sh generates the correct aspect ratio
+        const isLinkedInPost = existingPlatform === "linkedin" && existingFormat !== "document" && existingFormat !== "story";
+        const isDocument = existingFormat === "document";
+        const isStory = existingFormat === "story";
+        const dimLabel = isLinkedInPost ? "SQUARE 1:1 (1200x1200px)"
+          : isDocument ? "VERTICAL PORTRAIT 4:5 (1080x1350px)"
+          : isStory ? "VERTICAL PORTRAIT 9:16 (1080x1920px)"
+          : "SQUARE 1:1 (1080x1080px)";
+        const platformLabel = existingPlatform === "linkedin" ? "LinkedIn" : "Instagram";
 
-INSTRUÇÃO: ${instruction}
+        // Build edit prompt — include dimensions at top so inference.sh respects aspect ratio
+        const editPrompt = `FORMATO OBRIGATÓRIO: ${dimLabel}. Gere a imagem EXATAMENTE neste formato.
 
-Mantenha o estilo geral mas aplique as mudanças pedidas.
-Se a instrução pede mudança de texto, altere o texto na imagem.
-Se pede mudança visual, altere o visual.
+Você está editando uma imagem de ${platformLabel} (${existingFormat}).
+A imagem de referência fornecida é o conteúdo atual — use-a como base visual.
 
-Responda APENAS com a imagem editada.`;
+O QUE MUDAR: ${instruction}
+
+REGRAS:
+- Aplique APENAS a mudança pedida acima. Mantenha tudo o mais igual possível.
+- Se pede mudança de cor: altere a cor mantendo layout e texto.
+- Se pede mudança de texto: altere o texto mantendo estilo visual.
+- Se pede mudança visual/estilo: altere o visual mantendo os textos.
+- Mantenha qualidade profissional, tipografia legível e identidade do conteúdo.
+- NÃO inclua URLs, QR codes ou logotipos externos.`;
 
         // Call generate-slide-images with edit prompt + current image as reference
         let newImageUrl: string | null = null;
@@ -903,7 +918,7 @@ Responda APENAS com a imagem editada.`;
             method: "POST",
             headers: internalHeaders,
             body: JSON.stringify({
-              slide: { role: "cover", headline: "", body: "" },
+              slide: { role: "cover", headline: existing.slides?.[0]?.headline || "", body: "" },
               slideIndex: 0,
               totalSlides: 1,
               contentFormat: existingFormat,
@@ -912,6 +927,7 @@ Responda APENAS com a imagem editada.`;
               customPrompt: editPrompt,
               referenceImageUrls: currentImage ? [currentImage] : undefined,
               brandId: existing.brand_id,
+              contentId: targetId,
             }),
           });
 

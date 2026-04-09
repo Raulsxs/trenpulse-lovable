@@ -588,11 +588,12 @@ export default function ActionCard({
     setShowImageEditDialog(false);
     setIsRegeneratingImage(true);
     setSlideData(null);
+    setComposedImageUrls(null);
     try {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session) throw new Error("Not authenticated");
 
-      await supabase.functions.invoke("ai-chat", {
+      const { error: invokeErr } = await supabase.functions.invoke("ai-chat", {
         body: {
           message: instruction,
           intent_hint: "EDIT_CONTENT",
@@ -600,7 +601,32 @@ export default function ActionCard({
           generationParams: { contentId },
         },
       });
-      // Polling will pick up the new image once the backend updates the DB
+
+      if (invokeErr) throw invokeErr;
+
+      // Realtime subscription is stopped for existing content — fetch DB directly after invoke
+      const { data } = await supabase
+        .from("generated_contents")
+        .select("slides, image_urls, brand_snapshot, generation_metadata, platform")
+        .eq("id", contentId)
+        .maybeSingle();
+
+      if (data) {
+        const slides = data.slides as any[];
+        if (slides?.length) {
+          setAllSlides(slides);
+          setSlideData(slides[0]);
+        }
+        if (data.brand_snapshot) setBrandSnapshot(data.brand_snapshot);
+        if (data.platform) setResolvedPlatform(data.platform);
+        const newImageUrls = data.image_urls as string[] | null;
+        if (newImageUrls?.length) {
+          setComposedImageUrls(newImageUrls);
+          toast.success("Imagem atualizada!");
+        } else {
+          toast.error("A imagem não foi gerada. Tente novamente.");
+        }
+      }
     } catch (err: any) {
       console.error("[ActionCard] regenerate image error:", err);
       toast.error("Erro ao regenerar imagem");
