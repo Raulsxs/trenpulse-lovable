@@ -404,7 +404,7 @@ Mensagem: "${message}"`;
         // 4. Get content dimensions
         const dims = getContentDimensions(platform, format);
 
-        // 5. Build image prompt
+        // 5. Build image prompt — include FORMATO OBRIGATÓRIO so inference.sh generates correct aspect ratio
         const userTopic = articleContent
           ? `Baseado neste artigo: ${articleContent.substring(0, 2000)}`
           : message;
@@ -412,20 +412,34 @@ Mensagem: "${message}"`;
         const platformLabel = platform === "linkedin" ? "LinkedIn" : "Instagram";
         const formatLabel = format === "story" ? "story" : format === "carousel" ? "carrossel" : "post";
 
-        const imagePrompt = `Crie uma imagem profissional para ${formatLabel} de ${platformLabel} sobre o tema abaixo.
+        const isLinkedInFmt = platform === "linkedin" && format !== "document" && format !== "story";
+        const isDocumentFmt = format === "document";
+        const isStoryFmt = format === "story";
+        const dimLabelGenerate = isLinkedInFmt ? "SQUARE 1:1 (1200x1200px)"
+          : isDocumentFmt ? "VERTICAL PORTRAIT 4:5 (1080x1350px)"
+          : isStoryFmt ? "VERTICAL PORTRAIT 9:16 (1080x1920px)"
+          : "SQUARE 1:1 (1080x1080px)";
 
-${userTopic}
+        const imagePrompt = `FORMATO OBRIGATÓRIO: ${dimLabelGenerate}. A imagem DEVE ser gerada neste formato exato.
+
+Crie uma imagem profissional pronta para publicar como ${formatLabel} de ${platformLabel}.
+
+TEMA: ${userTopic}
 
 ${brandContext ? `IDENTIDADE VISUAL:\n${brandContext}\n` : ""}${userCtx?.business_niche ? `Nicho do criador: ${userCtx.business_niche}. ` : ""}${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}. ` : ""}
 
-A imagem deve ter texto integrado pronta para publicar. Use tipografia profissional e legível. Não inclua URLs ou QR codes. Gere APENAS a imagem.`;
+REGRAS:
+- A imagem deve ter texto integrado visível e legível sobre o tema acima.
+- Use tipografia profissional, hierarquia visual clara, cores harmônicas.
+- NÃO inclua URLs, QR codes ou logotipos de terceiros.
+- Gere APENAS a imagem final, sem bordas ou mockups.`;
 
         // 6. Call generate-slide-images
         console.log("[ai-chat] GENERATE: calling generate-slide-images");
         let imageUrl: string | null = null;
         try {
           const genController = new AbortController();
-          const genTimer = setTimeout(() => genController.abort(), 60000);
+          const genTimer = setTimeout(() => genController.abort(), 80000); // 80s: inference.sh can take 60s + fallback needs room
           const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-slide-images`, {
             signal: genController.signal,
             method: "POST",

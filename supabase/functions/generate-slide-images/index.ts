@@ -479,12 +479,13 @@ ${brandColorHint}
       }
     }
 
-    // Fallback to Lovable Gateway (or primary for background-only mode)
+    // Fallback to Lovable Gateway (skips inference.sh which already failed)
+    let fallbackImageResult: string | null = null;
     if (!base64Image) {
-      base64Image = await generateImage(contentParts);
+      fallbackImageResult = await generateImage(contentParts);
     }
 
-    if (!base64Image) {
+    if (!base64Image && !fallbackImageResult) {
       return new Response(JSON.stringify({
         success: true, imageUrl: null, bgImageUrl: null,
         debug: { templateSetId, templateSetName, categoryId: resolvedCategoryId, referencesUsedCount: referenceImageUrls.length, referenceExampleIds, fallbackLevel: fallbackLabels[fallbackLevel], backgroundOnly: isBgOnly },
@@ -493,7 +494,14 @@ ${brandColorHint}
       });
     }
 
-    const imageUrl = await uploadBase64ToStorage(supabaseAdmin, base64Image, contentId || "draft", slideIndex || 0);
+    // If fallback returned an HTTP URL directly (not base64), use it as-is
+    let imageUrl: string;
+    if (fallbackImageResult && fallbackImageResult.startsWith("http")) {
+      imageUrl = fallbackImageResult;
+      console.log(`[generate-slide-images] ✅ Using fallback URL directly`);
+    } else {
+      imageUrl = await uploadBase64ToStorage(supabaseAdmin, base64Image || fallbackImageResult!, contentId || "draft", slideIndex || 0);
+    }
     console.log(`[generate-slide-images] ✅ Slide ${(slideIndex || 0) + 1} background uploaded`);
 
     return new Response(JSON.stringify({
@@ -523,54 +531,80 @@ ${brandColorHint}
   }
 });
 
-// ══════ GENERATE IMAGE (simple, no self-check for bg-only) ══════
+// ══════ GENERATE IMAGE (fallback — skips inference.sh, goes straight to Lovable/Google) ══════
 
 async function generateImage(contentParts: any[]): Promise<string | null> {
-  let lastError: Error | null = null;
-  for (let retry = 0; retry < 3; retry++) {
-    if (retry > 0) {
-      const delay = retry * 3000 + Math.random() * 2000;
-      console.log(`[generate-slide-images] Retry ${retry}/2 after ${Math.round(delay)}ms...`);
-      await new Promise(r => setTimeout(r, delay));
-    }
+  // Extract prompt text and image URLs from contentParts
+  const promptText = contentParts.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n");
+  const refImages = contentParts.filter((p: any) => p.type === "image_url").map((p: any) => p.image_url?.url).filter(Boolean);
 
-    const response = await aiGatewayFetch({
-      model: "google/gemini-3-pro-image-preview",
-      messages: [{ role: "user", content: contentParts }],
-      modalities: ["image", "text"],
-    });
+  // Try Lovable Gateway directly (skips inference.sh which already failed)
+  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+  const googleKey = Deno.env.get("GOOGLE_AI_API_KEY");
+  const fallbackKey = lovableKey || googleKey;
+  const fallbackUrl = lovableKey
+    ? "https://ai.gateway.lovable.dev/v1/chat/completions"
+    : "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
+  const fallbackModel = lovableKey ? "google/gemini-pro-vision" : "gemini-2.0-flash";
 
-    if (response.ok) {
-      const responseText = await response.text();
-      let data: any;
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        console.warn(`[generate-slide-images] Empty/invalid JSON response, retrying...`);
-        lastError = new Error("Empty response from AI");
-        continue;
-      }
-      return data.choices?.[0]?.message?.images?.[0]?.image_url?.url || null;
-    }
-
-    const status = response.status;
-    if (status === 402) {
-      console.warn("[generate-slide-images] All providers exhausted (402). Returning null.");
-      return null;
-    }
-    if (status === 429 || status === 502 || status === 503) {
-      await response.text();
-      console.warn(`[generate-slide-images] Retryable error ${status} on retry ${retry + 1}`);
-      lastError = new Error(`AI error: ${status}`);
-      continue;
-    }
-
-    const errText = await response.text();
-    console.error(`[generate-slide-images] Non-retryable error ${status}:`, errText.substring(0, 200));
-    throw new Error(`AI image error: ${status}`);
+  if (!fallbackKey) {
+    console.warn("[generate-slide-images] No fallback key available");
+    return null;
   }
 
-  throw lastError || new Error("Max retries exceeded");
+  for (let retry = 0; retry < 2; retry++) {
+    if (retry > 0) await new Promise(r => setTimeout(r, 3000));
+
+    try {
+      const messageContent: any[] = [{ type: "text", text: promptText }];
+      for (const imgUrl of refImages.slice(0, 3)) {
+        messageContent.push({ type: "image_url", image_url: { url: imgUrl } });
+      }
+
+      console.log(`[generate-slide-images] Lovable/Google fallback attempt ${retry + 1}, model=${fallbackModel}`);
+      const res = await fetch(fallbackUrl, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${fallbackKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: fallbackModel,
+          messages: [{ role: "user", content: messageContent }],
+          modalities: ["image", "text"],
+        }),
+      });
+
+      if (!res.ok) {
+        const errText = await res.text();
+        console.warn(`[generate-slide-images] Fallback error [${res.status}]: ${errText.substring(0, 200)}`);
+        if (res.status === 402 || res.status === 401) return null; // quota exhausted or auth fail
+        continue;
+      }
+
+      const data = await res.json();
+      const msg = data.choices?.[0]?.message;
+      if (!msg) continue;
+
+      // Handle multiple response formats: images array, content as URL, content as base64
+      const fromImages = msg.images?.[0]?.image_url?.url;
+      const fromContent = typeof msg.content === "string"
+        ? (msg.content.startsWith("data:") || msg.content.startsWith("http") ? msg.content : null)
+        : null;
+      const imageResult = fromImages || fromContent || null;
+
+      if (imageResult) {
+        console.log(`[generate-slide-images] Fallback returned image (${imageResult.startsWith("data:") ? "base64" : "url"})`);
+        return imageResult;
+      }
+
+      console.warn("[generate-slide-images] Fallback returned no image in response");
+    } catch (err: any) {
+      console.warn(`[generate-slide-images] Fallback attempt ${retry + 1} error: ${err.message}`);
+    }
+  }
+
+  return null;
 }
 
 // ══════ HELPERS ══════
