@@ -941,6 +941,11 @@ REGRA CRÍTICA DE TEXTO:
 - NÃO adicione texto que não está acima. NÃO invente subtítulos ou rodapés.
 - Cada acento (á, é, í, ó, ú, ã, õ, ç, ê, â) DEVE ser idêntico ao fornecido.
 
+ATENÇÃO — REFERÊNCIAS CONTÊM TEXTOS DE OUTROS POSTS:
+As imagens de referência podem ter textos de posts anteriores (ex.: categorias como "Curiosidades", nomes de programas, hashtags, datas, rodapés, etc.).
+NÃO copie, NÃO replique e NÃO mencione NENHUM desses textos das referências.
+Copie APENAS os elementos visuais/decorativos (cores, gradientes, formas, tipografia, layout, estilo). O texto da imagem é SOMENTE o fornecido acima.
+
 ${articleSnippet ? `Contexto (NÃO incluir na imagem):\n${articleSnippet}\n` : ""}${styleConstraints}
 
 FIDELIDADE VISUAL:
@@ -953,6 +958,7 @@ PROIBIÇÕES:
 - NUNCA inclua URLs, QR codes, @handles inventados, metadados.
 - NUNCA altere a ortografia do texto fornecido.
 - NUNCA inclua texto em outro idioma que não ${lang}.
+- NUNCA copie textos das imagens de referência (categorias, nomes, datas, rodapés, etc.).
 
 Responda APENAS com a imagem gerada.`;
 }

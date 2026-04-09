@@ -63,6 +63,20 @@ function detectFormat(msg: string): string {
   return "post";
 }
 
+// ── Helper: detect if message is a quote/phrase request ──
+function detectContentStyle(msg: string): string | null {
+  if (/\b(frase|citação|citacao|quote|imagem com a frase|imagem com frase|frase inspiracional|frase motivacional)\b/i.test(msg)) return "quote";
+  return null;
+}
+
+// ── Helper: extract phrase text from a "frase" message ──
+function extractPhrase(msg: string): string {
+  // "Crie uma imagem com a frase: X" → X
+  const match = msg.match(/(?:frase[:\s]+|com\s+a\s+frase[:\s]+|imagem\s+com\s+a\s+frase[:\s]+)(.+)/i);
+  if (match?.[1]) return match[1].replace(/^["'"']|["'"']$/g, "").trim();
+  return msg;
+}
+
 // ── Helper: get content dimensions ──
 function getContentDimensions(platform: string, format: string): { w: number; h: number } {
   if (platform === "linkedin") {
@@ -316,10 +330,13 @@ Mensagem: "${message}"`;
       case "GENERATE": {
         console.log("[ai-chat] GENERATE handler started");
 
-        // 1. Detect platform and format
+        // 1. Detect platform, format and content style
         const platform = requestPlatform || detectPlatform(message);
         const format = requestFormat || detectFormat(message);
-        console.log(`[ai-chat] GENERATE: platform=${platform}, format=${format}`);
+        const contentStyle = detectContentStyle(message);
+        // For "frase" requests, extract just the phrase text as the headline
+        const slideHeadline = contentStyle === "quote" ? extractPhrase(message) : message.substring(0, 100);
+        console.log(`[ai-chat] GENERATE: platform=${platform}, format=${format}, contentStyle=${contentStyle || "news"}, headline="${slideHeadline}"`);
 
         // 2. Load brand if brandId provided
         let brandContext = "";
@@ -414,7 +431,7 @@ A imagem deve ter texto integrado pronta para publicar. Use tipografia profissio
             method: "POST",
             headers: internalHeaders,
             body: JSON.stringify({
-              slide: { role: "cover", headline: message.substring(0, 100), body: "" },
+              slide: { role: "cover", headline: slideHeadline, body: "" },
               slideIndex: 0,
               totalSlides: 1,
               contentFormat: format,
@@ -423,6 +440,7 @@ A imagem deve ter texto integrado pronta para publicar. Use tipografia profissio
               customPrompt: imagePrompt,
               brandId: requestBrandId || null,
               referenceImageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
+              contentStyle: contentStyle || undefined,
             }),
           });
 
@@ -475,8 +493,10 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
           console.warn("[ai-chat] GENERATE: caption generation failed:", captionErr?.message);
         }
 
-        // 8. Build title
-        const title = message.length > 80 ? message.substring(0, 80) + "..." : message;
+        // 8. Build title — for "frase" requests use the extracted phrase as title
+        const title = contentStyle === "quote"
+          ? slideHeadline
+          : (message.length > 80 ? message.substring(0, 80) + "..." : message);
 
         // 9. Save to generated_contents
         const savedContentId = await persistGeneratedContent({
@@ -485,7 +505,7 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
             caption,
             hashtags,
             slides: [{
-              headline: title,
+              headline: slideHeadline,
               body: "",
               bullets: [],
               image_url: imageUrl,
