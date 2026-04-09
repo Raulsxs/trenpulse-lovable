@@ -86,7 +86,6 @@ Deno.serve(async (req) => {
     const requestBody: Record<string, any> = {
       platform,
       external_id: user.id,
-      redirect_url_override: callbackUrl,
       permissions: ["posts"],
     };
 
