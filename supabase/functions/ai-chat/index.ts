@@ -197,6 +197,7 @@ serve(async (req) => {
         include_cta: typeof generatedContent?.includeCta === "boolean" ? generatedContent.includeCta : true,
         source_summary: generatedContent?.sourceSummary || null,
         key_insights: Array.isArray(generatedContent?.keyInsights) ? generatedContent.keyInsights : null,
+        platform_captions: generatedContent?.platformCaptions || null,
       });
 
       const requestedTemplateSetId = typeof templateSetId === "string" && templateSetId.trim()
@@ -560,12 +561,55 @@ JSON: { "title": "...", "caption": "...", "hashtags": ["#..."] }`;
           ? slideHeadline
           : (aiTitle || (message.replace(/https?:\/\/\S+/g, "").replace(/^(quero|crie|gere|criar|gerar|me\s+d[eê]|fa[çc]a)\s+(um[a]?\s+)?(post|story|carrossel|imagem|conteúdo)\s+(para\s+o\s+)?(instagram|linkedin)?\s*/i, "").trim().substring(0, 80) || message.substring(0, 80)));
 
+        // 8b. Generate multi-platform caption variants (async, non-blocking)
+        let platformCaptions: Record<string, string> | null = null;
+        try {
+          const variantPrompt = `Adapte a legenda abaixo para cada rede social. Mantenha a essência mas otimize para cada plataforma.
+
+LEGENDA ORIGINAL:
+${caption}
+
+HASHTAGS: ${hashtags.join(" ")}
+
+Gere versões para TODAS estas plataformas:
+- instagram: tom casual, emojis moderados, 8-12 hashtags no final, até 2200 chars
+- linkedin: tom profissional e corporativo, poucos emojis, sem hashtags excessivos, até 3000 chars
+- x: conciso e direto, máx 280 chars, sem hashtags (ou 1-2 no máximo)
+- tiktok: informal e com call-to-action ("salve!", "compartilhe!"), até 2200 chars
+- facebook: tom amigável, perguntas para gerar comentários, até 2000 chars
+
+Responda APENAS em JSON:
+{ "instagram": "...", "linkedin": "...", "x": "...", "tiktok": "...", "facebook": "..." }`;
+
+          const variantResp = await aiGatewayFetch({
+            model: "openrouter/minimax-m-25",
+            messages: [{ role: "user", content: variantPrompt }],
+          });
+
+          if (variantResp.ok) {
+            const variantData = await variantResp.json();
+            const raw = variantData.choices?.[0]?.message?.content || "";
+            const jsonMatch = raw.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              try {
+                platformCaptions = JSON.parse(jsonMatch[0]);
+                console.log("[ai-chat] GENERATE: platform variants generated:", Object.keys(platformCaptions || {}).join(", "));
+              } catch {
+                console.warn("[ai-chat] GENERATE: platform variants JSON parse failed");
+              }
+            }
+          }
+        } catch (variantErr: any) {
+          console.warn("[ai-chat] GENERATE: platform variants failed:", variantErr?.message);
+        }
+
         // 9. Save to generated_contents
         const savedContentId = await persistGeneratedContent({
           generatedContent: {
             title,
             caption,
             hashtags,
+            platformCaptions,
             slides: [{
               headline: slideHeadline,
               body: "",
