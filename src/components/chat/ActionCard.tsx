@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, RefreshCw, X } from "lucide-react";
+import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, RefreshCw, X, Send, ChevronDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import ScheduleModal from "@/components/content/ScheduleModal";
 import SlideBgOverlayRenderer from "@/components/content/SlideBgOverlayRenderer";
@@ -13,6 +13,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { PLATFORMS } from "@/components/profile/SocialConnections";
+import type { ConnectedAccount } from "@/components/profile/SocialConnections";
 
 interface ActionCardProps {
   contentId: string;
@@ -165,6 +169,13 @@ export default function ActionCard({
   const [showImageEditDialog, setShowImageEditDialog] = useState(false);
   const [imageEditInstruction, setImageEditInstruction] = useState("");
 
+  // Multi-platform publish state
+  const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [publishResults, setPublishResults] = useState<Record<string, { success: boolean; error?: string }> | null>(null);
+
   // Slide data for client-side rendering (same component as studio)
   const [slideData, setSlideData] = useState<any>(null);
   const [allSlides, setAllSlides] = useState<any[]>([]);
@@ -193,6 +204,78 @@ export default function ActionCard({
       if (w > 0) setContainerWidth(w);
     }
   }, []);
+
+  // ── Fetch connected social accounts for publish ──
+  const accountsFetchedRef = useRef(false);
+  useEffect(() => {
+    if (contentType === "cron_config" || accountsFetchedRef.current) return;
+    accountsFetchedRef.current = true;
+    supabase.functions.invoke("connect-social", { body: { action: "list" } })
+      .then(({ data }) => {
+        const list = data?.accounts || data || [];
+        const connected = Array.isArray(list) ? list.filter((a: ConnectedAccount) => a.connected) : [];
+        setConnectedAccounts(connected);
+        // Pre-select the content's platform if connected
+        if (platform) {
+          const match = connected.find((a: ConnectedAccount) => a.platform === platform);
+          if (match) setSelectedPlatforms([platform]);
+        }
+      })
+      .catch(() => { /* silent */ });
+  }, [contentType, platform]);
+
+  const handlePublish = async () => {
+    if (selectedPlatforms.length === 0) return;
+    setIsPublishing(true);
+    setPublishResults(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("publish-postforme", {
+        body: { contentId, platforms: selectedPlatforms },
+      });
+      if (error) throw error;
+
+      // Parse results per platform
+      const results: Record<string, { success: boolean; error?: string }> = {};
+      if (data?.results) {
+        for (const r of data.results) {
+          results[r.platform] = { success: r.success !== false, error: r.error };
+        }
+      } else {
+        // If no per-platform results, assume all succeeded
+        for (const p of selectedPlatforms) {
+          results[p] = { success: true };
+        }
+      }
+      setPublishResults(results);
+
+      const successCount = Object.values(results).filter((r) => r.success).length;
+      const failCount = Object.values(results).filter((r) => !r.success).length;
+
+      if (failCount === 0) {
+        toast.success(`Publicado em ${successCount} plataforma${successCount > 1 ? "s" : ""}!`);
+      } else if (successCount > 0) {
+        toast.warning(`Publicado em ${successCount}, falhou em ${failCount} plataforma${failCount > 1 ? "s" : ""}`);
+      } else {
+        toast.error("Falha ao publicar em todas as plataformas");
+      }
+    } catch (err: any) {
+      console.error("[ActionCard] publish error:", err);
+      toast.error("Erro ao publicar conteudo");
+      const failResults: Record<string, { success: boolean; error?: string }> = {};
+      for (const p of selectedPlatforms) failResults[p] = { success: false, error: err.message };
+      setPublishResults(failResults);
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
+  const togglePlatformSelection = (platformId: string) => {
+    setSelectedPlatforms((prev) =>
+      prev.includes(platformId) ? prev.filter((p) => p !== platformId) : [...prev, platformId]
+    );
+    // Clear previous results when selection changes
+    setPublishResults(null);
+  };
 
   // ── Fetch slide data for client-side rendering (same as studio) ──
   const bgLoadedRef = useRef(false);
@@ -756,6 +839,97 @@ export default function ActionCard({
               Studio
             </Button>
           </div>
+
+          {/* Row 1b: Publish to connected platforms */}
+          {connectedAccounts.length > 0 && (
+            <div className="mb-2">
+              <Popover open={publishOpen} onOpenChange={setPublishOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="w-full text-xs gap-1.5 border-primary/20 text-primary hover:bg-primary/5"
+                    disabled={isPublishing}
+                  >
+                    {isPublishing ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Send className="w-3 h-3" />
+                    )}
+                    {isPublishing
+                      ? "Publicando..."
+                      : publishResults
+                        ? "Publicado"
+                        : "Publicar"}
+                    <ChevronDown className="w-3 h-3 ml-auto" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-64 p-3" align="start">
+                  <p className="text-xs font-medium mb-2 text-foreground">Publicar em:</p>
+                  <div className="space-y-1.5 mb-3">
+                    {connectedAccounts.map((account) => {
+                      const info = PLATFORMS.find((p) => p.id === account.platform);
+                      if (!info) return null;
+                      const isSelected = selectedPlatforms.includes(account.platform);
+                      const result = publishResults?.[account.platform];
+
+                      return (
+                        <label
+                          key={account.platform}
+                          className={`flex items-center gap-2.5 p-2 rounded-md cursor-pointer transition-colors ${
+                            isSelected ? "bg-primary/5" : "hover:bg-muted/50"
+                          }`}
+                        >
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => togglePlatformSelection(account.platform)}
+                            disabled={isPublishing}
+                          />
+                          <div
+                            className={`w-6 h-6 rounded bg-gradient-to-br ${info.color} flex items-center justify-center text-white text-xs shrink-0`}
+                          >
+                            {info.emoji}
+                          </div>
+                          <span className="text-xs flex-1">{info.name}</span>
+                          {result && (
+                            result.success ? (
+                              <Check className="w-3.5 h-3.5 text-green-500" />
+                            ) : (
+                              <X className="w-3.5 h-3.5 text-destructive" />
+                            )
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  {publishResults && (
+                    <div className="mb-2 space-y-1">
+                      {Object.entries(publishResults)
+                        .filter(([, r]) => !r.success && r.error)
+                        .map(([plat, r]) => (
+                          <p key={plat} className="text-[10px] text-destructive">
+                            {PLATFORMS.find((p) => p.id === plat)?.name}: {r.error}
+                          </p>
+                        ))}
+                    </div>
+                  )}
+                  <Button
+                    size="sm"
+                    className="w-full text-xs"
+                    onClick={handlePublish}
+                    disabled={selectedPlatforms.length === 0 || isPublishing}
+                  >
+                    {isPublishing ? (
+                      <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                    ) : (
+                      <Send className="w-3 h-3 mr-1" />
+                    )}
+                    Publicar em {selectedPlatforms.length} plataforma{selectedPlatforms.length !== 1 ? "s" : ""}
+                  </Button>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
 
           {/* Row 2: Regeneration actions */}
           <div className="flex gap-2 mb-2">

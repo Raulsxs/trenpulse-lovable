@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import ProfileAvatarSection from "@/components/profile/ProfileAvatarSection";
 import ProfilePersonalInfo from "@/components/profile/ProfilePersonalInfo";
 import ProfilePreferences from "@/components/profile/ProfilePreferences";
+import SocialConnections from "@/components/profile/SocialConnections";
 
 interface ProfileRow {
   id: string;
@@ -52,6 +53,7 @@ const AUDIENCE_OPTIONS = [
 
 const Profile = () => {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -80,6 +82,22 @@ const Profile = () => {
   useEffect(() => {
     fetchProfile();
   }, []);
+
+  // Handle OAuth callback params
+  useEffect(() => {
+    const connected = searchParams.get("pfm_connected");
+    const error = searchParams.get("pfm_error");
+    if (connected) {
+      toast.success(`${connected} conectado com sucesso!`);
+      searchParams.delete("pfm_connected");
+      setSearchParams(searchParams, { replace: true });
+    }
+    if (error) {
+      toast.error(`Erro ao conectar: ${error}`);
+      searchParams.delete("pfm_error");
+      setSearchParams(searchParams, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const fetchProfile = async () => {
     try {
@@ -353,6 +371,8 @@ const Profile = () => {
             rssSources={formData.rss_sources}
             onChange={handleFieldChange}
           />
+
+          <SocialConnections />
 
           <div className="flex justify-end">
             <Button type="submit" className="gap-2" disabled={saving}>
