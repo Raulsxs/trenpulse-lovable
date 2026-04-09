@@ -16,9 +16,13 @@ const SUPPORTED_PLATFORMS = [
 ];
 
 // Platform-specific fields required by Post for Me API
-const PLATFORM_DATA: Record<string, Record<string, string>> = {
-  instagram: { connection_type: "instagram" },
-  linkedin: { connection_type: "personal" },
+const PLATFORM_DATA: Record<string, Record<string, Record<string, string>>> = {
+  instagram: {
+    instagram: { connection_type: "instagram" },
+  },
+  linkedin: {
+    linkedin: { connection_type: "organization" },
+  },
 };
 
 Deno.serve(async (req) => {
@@ -83,22 +87,18 @@ Deno.serve(async (req) => {
     const pfmApiKey = Deno.env.get("POSTFORME_API_KEY");
     if (!pfmApiKey) return respond({ error: "POSTFORME_API_KEY não configurada" }, 500);
 
-    const callbackUrl = `${supabaseUrl}/functions/v1/postforme-callback`;
-
-    // First attempt: without redirect_url_override (let PFM use their default)
-    // If PFM requires a registered callback, add it back
     const requestBody: Record<string, any> = {
       platform,
       external_id: user.id,
-      permissions: ["posts"],
+      permissions: ["posts", "feeds"],
     };
 
-    // Merge platform-specific fields at top level (PFM expects connection_type at root)
+    // PFM expects platform-specific config nested under platform_data
     if (PLATFORM_DATA[platform]) {
-      Object.assign(requestBody, PLATFORM_DATA[platform]);
+      requestBody.platform_data = PLATFORM_DATA[platform];
     }
 
-    console.log(`[connect-social] Calling PFM: platform=${platform}, userId=${user.id}`);
+    console.log(`[connect-social] Calling PFM: platform=${platform}, userId=${user.id}, payload=${JSON.stringify(requestBody)}`);
 
     const pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts/auth-url", {
       method: "POST",
