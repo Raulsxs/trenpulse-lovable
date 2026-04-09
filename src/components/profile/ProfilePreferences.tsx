@@ -5,8 +5,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Globe, Rss, X } from "lucide-react";
 import { useState } from "react";
-import InstagramConnectionCard from "./InstagramConnectionCard";
-import LinkedInConnectionCard from "./LinkedInConnectionCard";
+// InstagramConnectionCard and LinkedInConnectionCard removed — replaced by SocialConnections component
+// which uses Post for Me API for all 9 platforms. Old components kept as files for reference.
 
 interface ProfilePreferencesProps {
   nativeLanguage: string;
@@ -112,9 +112,7 @@ const ProfilePreferences = ({
         </CardContent>
       </Card>
 
-      {/* Social Connections */}
-      <InstagramConnectionCard />
-      <LinkedInConnectionCard />
+      {/* Social connections moved to SocialConnections component (Post for Me — 9 platforms) */}
     </>
   );
 };
