@@ -98,7 +98,7 @@ Deno.serve(async (req) => {
       requestBody.platform_data = PLATFORM_DATA[platform];
     }
 
-    console.log(`[connect-social] Calling PFM: platform=${platform}, userId=${user.id}`);
+    console.log(`[connect-social] Calling PFM: platform=${platform}, userId=${user.id}, payload=${JSON.stringify(requestBody)}`);
 
     const pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts/auth-url", {
       method: "POST",
