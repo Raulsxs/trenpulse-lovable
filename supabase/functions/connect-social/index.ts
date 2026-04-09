@@ -1,7 +1,6 @@
 /**
- * connect-social — Generates OAuth URL for connecting social media accounts via Post for Me
- *
- * Supported platforms: instagram, linkedin, tiktok, x, facebook, pinterest, bluesky, threads, youtube
+ * connect-social — Manages social media account connections via Post for Me
+ * Actions: connect (default), list, disconnect
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -16,21 +15,28 @@ const SUPPORTED_PLATFORMS = [
   "pinterest", "bluesky", "threads", "youtube",
 ];
 
+// Platform-specific data required by Post for Me API
+const PLATFORM_DATA: Record<string, Record<string, string>> = {
+  instagram: { connection_type: "instagram" },
+  linkedin: { connection_type: "personal" },
+};
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  const respond = (body: any, status = 200) =>
+    new Response(JSON.stringify(body), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+
   try {
-    const { platform, action } = await req.json();
+    let body: any = {};
+    try { body = await req.json(); } catch { /* empty body is ok for some actions */ }
+    const { platform, action } = body;
 
     // Auth
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (!authHeader?.startsWith("Bearer ")) return respond({ error: "Unauthorized" }, 401);
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -39,94 +45,58 @@ Deno.serve(async (req) => {
     });
 
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    const pfmApiKey = Deno.env.get("POSTFORME_API_KEY");
-    if (!pfmApiKey) {
-      return new Response(JSON.stringify({ error: "Post for Me API not configured" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    if (userError || !user) return respond({ error: "Unauthorized" }, 401);
 
     const svc = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
 
-    // ── ACTION: list — Return user's connected accounts ──
+    // ── LIST ──
     if (action === "list") {
-      const { data: connections } = await svc
+      const { data: connections, error: dbErr } = await svc
         .from("social_connections")
         .select("*")
-        .eq("user_id", user.id)
-        .order("connected_at", { ascending: false });
+        .eq("user_id", user.id);
 
-      return new Response(JSON.stringify({ connections: connections || [] }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      if (dbErr) {
+        console.error("[connect-social] list DB error:", dbErr);
+        return respond({ connections: [] });
+      }
+      return respond({ connections: connections || [] });
     }
 
-    // ── ACTION: disconnect — Remove a connection ──
+    // ── DISCONNECT ──
     if (action === "disconnect") {
-      if (!platform) {
-        return new Response(JSON.stringify({ error: "platform is required" }), {
-          status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
+      if (!platform) return respond({ error: "platform is required" }, 400);
       await svc.from("social_connections")
         .update({ status: "disconnected", updated_at: new Date().toISOString() })
         .eq("user_id", user.id)
         .eq("platform", platform);
-
-      return new Response(JSON.stringify({ success: true, message: `${platform} desconectado` }), {
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respond({ success: true });
     }
 
-    // ── ACTION: connect (default) — Generate OAuth URL ──
+    // ── CONNECT (default) ──
     if (!platform || !SUPPORTED_PLATFORMS.includes(platform)) {
-      return new Response(JSON.stringify({
-        error: `Platform inválida. Suportadas: ${SUPPORTED_PLATFORMS.join(", ")}`,
-      }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return respond({ error: `Plataforma inválida. Suportadas: ${SUPPORTED_PLATFORMS.join(", ")}` }, 400);
     }
+
+    const pfmApiKey = Deno.env.get("POSTFORME_API_KEY");
+    if (!pfmApiKey) return respond({ error: "POSTFORME_API_KEY não configurada" }, 500);
 
     const callbackUrl = `${supabaseUrl}/functions/v1/postforme-callback`;
 
-    console.log(`[connect-social] Generating OAuth URL: platform=${platform}, userId=${user.id}`);
-
-    // Platform-specific data required by Post for Me
-    const platformDataMap: Record<string, any> = {
-      instagram: { connection_type: "instagram" },
-      linkedin: { connection_type: "personal" },
-      facebook: {},
-      tiktok: {},
-      youtube: {},
-      pinterest: {},
-      threads: {},
-      x: {},
-      bluesky: {},
-    };
-
-    const requestBody: any = {
+    const requestBody: Record<string, any> = {
       platform,
       external_id: user.id,
       redirect_url_override: callbackUrl,
       permissions: ["posts"],
     };
 
-    // Add platform_data if needed
-    const platformData = platformDataMap[platform];
-    if (platformData && Object.keys(platformData).length > 0) {
-      requestBody.platform_data = platformData;
+    // Add platform-specific data if required
+    if (PLATFORM_DATA[platform]) {
+      requestBody.platform_data = PLATFORM_DATA[platform];
     }
 
-    console.log(`[connect-social] PFM request:`, JSON.stringify(requestBody));
+    console.log(`[connect-social] Calling PFM: platform=${platform}, userId=${user.id}`);
 
-    // Call Post for Me API to generate OAuth URL
     const pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts/auth-url", {
       method: "POST",
       headers: {
@@ -136,42 +106,30 @@ Deno.serve(async (req) => {
       body: JSON.stringify(requestBody),
     });
 
+    const pfmText = await pfmResp.text();
+    console.log(`[connect-social] PFM response: status=${pfmResp.status}, body=${pfmText.substring(0, 500)}`);
+
     if (!pfmResp.ok) {
-      const errText = await pfmResp.text();
-      console.error(`[connect-social] PFM error: ${pfmResp.status}`, errText);
-      let pfmMessage = "";
-      try { pfmMessage = JSON.parse(errText)?.message || errText; } catch { pfmMessage = errText; }
-      return new Response(JSON.stringify({
-        error: `Erro ao conectar ${platform}: ${pfmMessage}`,
-        detail: pfmResp.status,
-      }), {
-        status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      let detail = pfmText;
+      try { detail = JSON.parse(pfmText)?.message || pfmText; } catch {}
+      return respond({ error: `Erro ao conectar ${platform}: ${detail}` }, 502);
     }
 
-    const pfmData = await pfmResp.json();
+    let pfmData: any;
+    try { pfmData = JSON.parse(pfmText); } catch {
+      return respond({ error: "Resposta inválida do Post for Me" }, 502);
+    }
+
     const authUrl = pfmData.url || pfmData.auth_url || pfmData.data?.url;
-
     if (!authUrl) {
-      console.error("[connect-social] PFM returned no URL:", JSON.stringify(pfmData).substring(0, 300));
-      return new Response(JSON.stringify({ error: "Não foi possível gerar link de conexão" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      console.error("[connect-social] No auth URL in PFM response:", pfmText.substring(0, 300));
+      return respond({ error: "Post for Me não retornou URL de autorização" }, 502);
     }
 
-    console.log(`[connect-social] OAuth URL generated for ${platform}`);
-
-    return new Response(JSON.stringify({
-      auth_url: authUrl,
-      platform,
-    }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return respond({ auth_url: authUrl, platform });
 
   } catch (err: any) {
-    console.error("[connect-social] Error:", err);
-    return new Response(JSON.stringify({ error: err.message || "Internal error" }), {
-      status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    console.error("[connect-social] Unhandled error:", err?.message, err?.stack);
+    return respond({ error: err?.message || "Erro interno" }, 500);
   }
 });
