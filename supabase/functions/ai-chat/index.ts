@@ -457,15 +457,25 @@ A imagem deve ter texto integrado pronta para publicar. Use tipografia profissio
           console.error("[ai-chat] GENERATE: generate-slide-images error:", genErr?.name === "AbortError" ? "timeout (60s)" : genErr?.message);
         }
 
-        // 7. Generate caption with minimax
+        // 7. Generate caption + title with minimax
         let caption = "";
         let hashtags: string[] = [];
+        let aiTitle = "";
         try {
-          const captionPrompt = `Gere uma legenda para ${platform === "linkedin" ? "LinkedIn" : "Instagram"} sobre: "${message}"
+          const topic = articleContent
+            ? articleContent.substring(0, 600)
+            : message;
+          const captionPrompt = `Gere uma legenda para ${platform === "linkedin" ? "LinkedIn" : "Instagram"} sobre o tema abaixo.
 ${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
 ${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}
-Legenda curta e engajante. Inclua 5-8 hashtags relevantes no final.
-Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
+Tema/Conteúdo: "${topic}"
+
+Responda em JSON com 3 campos:
+- title: título curto e descritivo do conteúdo (máximo 8 palavras, SEM meta-instruções como "Crie um post", "Quero", etc — apenas o TEMA real)
+- caption: legenda engajante para a rede social
+- hashtags: array de 5-8 hashtags relevantes
+
+JSON: { "title": "...", "caption": "...", "hashtags": ["#..."] }`;
 
           const captionResp = await aiGatewayFetch({
             model: "openrouter/minimax-m-25",
@@ -479,6 +489,7 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
             if (jsonMatch) {
               try {
                 const parsed = JSON.parse(jsonMatch[0]);
+                aiTitle = parsed.title || "";
                 caption = parsed.caption || "";
                 hashtags = parsed.hashtags || [];
               } catch (parseErr) {
@@ -493,10 +504,10 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
           console.warn("[ai-chat] GENERATE: caption generation failed:", captionErr?.message);
         }
 
-        // 8. Build title — for "frase" requests use the extracted phrase as title
+        // 8. Build title — prefer AI-generated title, fallback to phrase/message cleanup
         const title = contentStyle === "quote"
           ? slideHeadline
-          : (message.length > 80 ? message.substring(0, 80) + "..." : message);
+          : (aiTitle || (message.replace(/https?:\/\/\S+/g, "").replace(/^(quero|crie|gere|criar|gerar|me\s+d[eê]|fa[çc]a)\s+(um[a]?\s+)?(post|story|carrossel|imagem|conteúdo)\s+(para\s+o\s+)?(instagram|linkedin)?\s*/i, "").trim().substring(0, 80) || message.substring(0, 80)));
 
         // 9. Save to generated_contents
         const savedContentId = await persistGeneratedContent({
