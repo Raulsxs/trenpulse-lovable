@@ -624,7 +624,7 @@ export default function ChatWindow() {
 
 
   // ══════ CHAT SEND ══════
-  const handleSend = useCallback(async (text: string) => {
+  const handleSend = useCallback(async (text: string, extraParams?: Record<string, any>) => {
     if (!userId || isSending) return;
 
     // 1. FIRST: Check if brand creation flow is active — takes priority over everything
@@ -750,6 +750,7 @@ export default function ChatWindow() {
           message: text,
           brandId: selectedBrandId || null,
           history: recentHistory,
+          ...extraParams,
         },
       });
       if (error) throw error;
@@ -931,7 +932,18 @@ export default function ChatWindow() {
                   actionResult={msg.actionResult}
                   quickReplies={msg.quickReplies}
                   onQuickReply={handleQuickReply}
-                  onRegenerate={() => handleSend("Regenere o último conteúdo por favor")}
+                  onRegenerate={() => {
+                    const cid = msg.actionResult?.content_id;
+                    if (cid) {
+                      handleSend(`Refaça este conteúdo do zero com um visual completamente novo`, {
+                        intent_hint: "EDIT_CONTENT",
+                        editInstruction: "Refaça completamente com visual novo, mantendo o mesmo tema",
+                        generationParams: { contentId: cid },
+                      });
+                    } else {
+                      handleSend("Regenere o último conteúdo com um visual novo");
+                    }
+                  }}
                   onReject={() => {
                     setMessages(prev => prev.filter(existingMsg => existingMsg !== msg && existingMsg.id !== msg.id));
                   }}
