@@ -70,16 +70,26 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
   const doSingleUpload = async (file: File) => {
     setUploading(true);
     try {
-      const fileName = `${brandId}/${Date.now()}-${file.name}`;
+      // Sanitize filename - remove special chars that could break storage paths
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const fileName = `${brandId}/${Date.now()}-${safeName}`;
+      
+      console.log("[BrandExamples] uploading:", fileName, "size:", file.size, "type:", file.type);
+      
       const { error: uploadError } = await supabase.storage
         .from("content-images")
-        .upload(fileName, file);
+        .upload(fileName, file, { contentType: file.type || "image/jpeg" });
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("[BrandExamples] storage upload error:", uploadError);
+        throw uploadError;
+      }
 
       const { data: { publicUrl } } = supabase.storage
         .from("content-images")
         .getPublicUrl(fileName);
+
+      console.log("[BrandExamples] uploaded, publicUrl:", publicUrl);
 
       await addExample.mutateAsync({
         brand_id: brandId,
@@ -92,11 +102,13 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
         category_mode: categoryMode,
       });
 
+      toast.success("Exemplo adicionado com sucesso!");
       setDescription("");
       setUploadSubtype("");
       if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (error: any) {
-      toast.error("Erro ao fazer upload: " + error.message);
+      console.error("[BrandExamples] upload error:", error);
+      toast.error("Erro ao fazer upload: " + (error.message || "Tente novamente"));
     } finally {
       setUploading(false);
     }

@@ -161,7 +161,11 @@ export default function ImageEditorModal({
 
       canvas.toBlob(
         (blob) => {
-          if (!blob) { setIsExporting(false); return; }
+          if (!blob) {
+            console.error("[ImageEditor] toBlob returned null");
+            setIsExporting(false);
+            return;
+          }
           const fname = outputFilename
             || (file?.name.replace(/\.[^.]+$/, ".jpg"))
             || "imagem.jpg";
@@ -171,7 +175,8 @@ export default function ImageEditorModal({
         "image/jpeg",
         0.92,
       );
-    } catch {
+    } catch (err) {
+      console.error("[ImageEditor] export error:", err);
       setIsExporting(false);
     }
   }, [imageSrc, scale, offsetX, offsetY, rotation, flipH, file, outputFilename, onConfirm]);
