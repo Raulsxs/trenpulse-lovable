@@ -872,8 +872,6 @@ const Calendar = () => {
                   const slides = selectedContent.slides;
                   const currentSlide = slides[previewSlideIndex];
                   const hasMultiple = slides.length > 1;
-                  const brandSnap = selectedContent.brand_snapshot;
-                  const renderMode = getSlideRenderMode(currentSlide, brandSnap?.render_mode);
                   const isStory = selectedContent.content_type === "story";
                   const RENDER_W = 1080;
                   const RENDER_H = isStory ? 1920 : 1350;
@@ -881,51 +879,70 @@ const Calendar = () => {
                   const scale = PREVIEW_W / RENDER_W;
                   const PREVIEW_H = Math.round(RENDER_H * scale);
 
+                  // Use final composite image_urls when available (these are the actual published images)
+                  const compositeUrl = selectedContent.image_urls?.[previewSlideIndex];
+                  // Fallback: slide-level image (Gemini-generated full image)
+                  const slideImageUrl = currentSlide?.image_url || currentSlide?.imageUrl || currentSlide?.previewImage;
+
                   return (
                     <div className="relative">
                       <div
                         className="rounded-lg overflow-hidden mx-auto"
                         style={{ width: PREVIEW_W, height: PREVIEW_H }}
                       >
-                        <div
-                          style={{
-                            width: RENDER_W,
-                            height: RENDER_H,
-                            transform: `scale(${scale})`,
-                            transformOrigin: "top left",
-                            pointerEvents: "none",
-                          }}
-                        >
-                          {renderMode === "ai_bg_overlay" && currentSlide?.background_image_url ? (
-                            <SlideBgOverlayRenderer
-                              backgroundImageUrl={currentSlide.background_image_url}
-                              overlay={currentSlide.overlay || { headline: currentSlide.headline, body: currentSlide.body, bullets: currentSlide.bullets }}
-                              overlayStyle={currentSlide.overlay_style}
-                              overlayPositions={currentSlide.overlay_positions}
-                              dimensions={{ width: RENDER_W, height: RENDER_H }}
-                              role={currentSlide.role}
-                              slideIndex={previewSlideIndex}
-                              totalSlides={slides.length}
-                              brandSnapshot={brandSnap ? { palette: brandSnap.palette, fonts: brandSnap.fonts } : null}
-                            />
-                          ) : (
-                            <SlideTemplateRenderer
-                              slide={currentSlide}
-                              slideIndex={previewSlideIndex}
-                              totalSlides={slides.length}
-                              brand={brandSnap ? {
-                                name: brandSnap.name || "",
-                                palette: brandSnap.palette || [],
-                                fonts: brandSnap.fonts || { headings: "Inter", body: "Inter" },
-                                visual_tone: brandSnap.visual_tone || "clean",
-                                logo_url: brandSnap.logo_url || null,
-                                layout_params: brandSnap.layout_params,
-                              } : undefined}
-                              template="parameterized"
-                              dimensions={{ width: RENDER_W, height: RENDER_H }}
-                            />
-                          )}
-                        </div>
+                        {compositeUrl || slideImageUrl ? (
+                          // Show the actual final image directly
+                          <img
+                            src={compositeUrl || slideImageUrl}
+                            alt={selectedContent.title}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          // Fallback: render via template system (for legacy content without images)
+                          <div
+                            style={{
+                              width: RENDER_W,
+                              height: RENDER_H,
+                              transform: `scale(${scale})`,
+                              transformOrigin: "top left",
+                              pointerEvents: "none",
+                            }}
+                          >
+                            {(() => {
+                              const brandSnap = selectedContent.brand_snapshot;
+                              const renderMode = getSlideRenderMode(currentSlide, brandSnap?.render_mode);
+                              return renderMode === "ai_bg_overlay" && currentSlide?.background_image_url ? (
+                                <SlideBgOverlayRenderer
+                                  backgroundImageUrl={currentSlide.background_image_url}
+                                  overlay={currentSlide.overlay || { headline: currentSlide.headline, body: currentSlide.body, bullets: currentSlide.bullets }}
+                                  overlayStyle={currentSlide.overlay_style}
+                                  overlayPositions={currentSlide.overlay_positions}
+                                  dimensions={{ width: RENDER_W, height: RENDER_H }}
+                                  role={currentSlide.role}
+                                  slideIndex={previewSlideIndex}
+                                  totalSlides={slides.length}
+                                  brandSnapshot={brandSnap ? { palette: brandSnap.palette, fonts: brandSnap.fonts } : null}
+                                />
+                              ) : (
+                                <SlideTemplateRenderer
+                                  slide={currentSlide}
+                                  slideIndex={previewSlideIndex}
+                                  totalSlides={slides.length}
+                                  brand={brandSnap ? {
+                                    name: brandSnap.name || "",
+                                    palette: brandSnap.palette || [],
+                                    fonts: brandSnap.fonts || { headings: "Inter", body: "Inter" },
+                                    visual_tone: brandSnap.visual_tone || "clean",
+                                    logo_url: brandSnap.logo_url || null,
+                                    layout_params: brandSnap.layout_params,
+                                  } : undefined}
+                                  template="parameterized"
+                                  dimensions={{ width: RENDER_W, height: RENDER_H }}
+                                />
+                              );
+                            })()}
+                          </div>
+                        )}
                       </div>
                       {hasMultiple && (
                         <>
