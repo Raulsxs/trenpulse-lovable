@@ -27,7 +27,6 @@ interface ProfileRow {
   secondary_languages: string[];
   preferred_tone: string;
   preferred_audience: string;
-  interest_areas: string[];
   rss_sources: string[];
 }
 
@@ -227,12 +226,14 @@ const Profile = () => {
       if (profileRes.error) throw profileRes.error;
 
       const existingExtra = (ctxFetchRes.data?.extra_context as Record<string, any>) || {};
-      const { error: ctxErr } = await supabase.from("ai_user_context").update({
+      const ctxPayload = {
+        user_id: uid,
         business_niche: contentSettings.business_niche || null,
         brand_voice: contentSettings.brand_voice || null,
         content_topics: contentSettings.content_topics.length > 0 ? contentSettings.content_topics : null,
         extra_context: { ...existingExtra, reference_sources: contentSettings.reference_sources },
-      }).eq("user_id", uid);
+      };
+      const { error: ctxErr } = await supabase.from("ai_user_context").upsert(ctxPayload as any, { onConflict: 'user_id' });
 
       if (ctxErr) throw ctxErr;
 
@@ -363,11 +364,7 @@ const Profile = () => {
           </Card>
 
           <ProfilePreferences
-            nativeLanguage={formData.native_language}
             secondaryLanguages={formData.secondary_languages}
-            preferredTone={formData.preferred_tone}
-            preferredAudience={formData.preferred_audience}
-            interestAreas={formData.interest_areas}
             rssSources={formData.rss_sources}
             onChange={handleFieldChange}
           />

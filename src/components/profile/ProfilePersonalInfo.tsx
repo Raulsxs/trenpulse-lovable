@@ -42,9 +42,10 @@ const ProfilePersonalInfo = ({ fullName, companyName, instagramHandle, onChange 
           <Input
             id="instagram_handle"
             value={instagramHandle}
-            onChange={(e) => onChange("instagram_handle", e.target.value.replace("@", ""))}
+            onChange={(e) => onChange("instagram_handle", e.target.value.replace(/[^a-zA-Z0-9._]/g, ""))}
             placeholder="seu_usuario"
             className="pl-8"
+            maxLength={30}
           />
         </div>
       </div>

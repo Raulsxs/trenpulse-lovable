@@ -170,6 +170,20 @@ export default function BrandEdit() {
                 </div>
 
                 <div className="space-y-2">
+                  <Label>Modo de Criação</Label>
+                  <p className="text-xs text-muted-foreground">Define como a IA usa referências visuais ao gerar conteúdo.</p>
+                  <Select value={formData.creation_mode || "from_scratch"} onValueChange={(value) => setFormData({ ...formData, creation_mode: value })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="photo_backgrounds">📸 Fotos pessoais como fundo</SelectItem>
+                      <SelectItem value="style_copy">🎨 Copiar estilo de referências</SelectItem>
+                      <SelectItem value="inspired">💡 Inspirado em referências</SelectItem>
+                      <SelectItem value="from_scratch">✨ Criar do zero (sem referências)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <Label>Paleta de Cores</Label>
                     {formData.palette.length < 6 && (

@@ -12,7 +12,6 @@ import ContentPreview from "./pages/ContentPreview";
 import DownloadPage from "./pages/Download";
 import Contents from "./pages/Contents";
 import Profile from "./pages/Profile";
-// StyleGallery removed — brand visuals now in chat brand selection
 import BrandWizard from "./pages/BrandWizard";
 import Studio from "./pages/Studio";
 import StudioProject from "./pages/StudioProject";

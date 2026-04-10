@@ -21,9 +21,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { HelpCenterTrigger } from "@/components/onboarding/HelpCenterModal";
 
-const BADGE_DEPLOY_DATE = "2026-03-10";
-const BADGE_DURATION_DAYS = 30;
-
 const SAVED_ACCOUNTS_KEY = "tp_saved_accounts";
 
 interface SavedAccount {
@@ -36,7 +33,7 @@ interface SavedAccount {
 
 // Primary: what 90% of users need daily
 const primaryItems = [
-  { icon: MessageSquare, label: "Assistente IA", href: "/chat", showBadge: true },
+  { icon: MessageSquare, label: "Assistente IA", href: "/chat" },
   { icon: FileText, label: "Meus Conteúdos", href: "/contents" },
   { icon: CalendarDays, label: "Calendário", href: "/calendar" },
 ];
@@ -56,21 +53,10 @@ const advancedItems = [
 const Sidebar = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const [showNewBadge, setShowNewBadge] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const { usage } = useSubscription();
-
-  useEffect(() => {
-    const dismissed = localStorage.getItem("assistente-ia-badge-dismissed");
-    if (dismissed) return;
-    const deployDate = new Date(BADGE_DEPLOY_DATE);
-    const expiresAt = new Date(deployDate.getTime() + BADGE_DURATION_DAYS * 86400000);
-    if (new Date() < expiresAt) {
-      setShowNewBadge(true);
-    }
-  }, []);
 
   useEffect(() => {
     const saveSession = (session: { user: { id: string; email?: string; user_metadata?: { name?: string } }; access_token: string; refresh_token: string } | null) => {
@@ -99,11 +85,6 @@ const Sidebar = () => {
 
     return () => subscription.unsubscribe();
   }, []);
-
-  const handleDismissBadge = () => {
-    localStorage.setItem("assistente-ia-badge-dismissed", "true");
-    setShowNewBadge(false);
-  };
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -236,9 +217,6 @@ const Sidebar = () => {
               <Link
                 key={item.href}
                 to={item.href}
-                onClick={() => {
-                  if (item.showBadge && showNewBadge) handleDismissBadge();
-                }}
                 className={cn(
                   "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200",
                   isActive
@@ -248,11 +226,6 @@ const Sidebar = () => {
               >
                 <item.icon className="w-5 h-5" />
                 {item.label}
-                {item.showBadge && showNewBadge && (
-                  <span className="ml-auto text-[10px] font-bold bg-destructive text-destructive-foreground px-1.5 py-0.5 rounded-full leading-none">
-                    NOVO
-                  </span>
-                )}
               </Link>
             );
           })}

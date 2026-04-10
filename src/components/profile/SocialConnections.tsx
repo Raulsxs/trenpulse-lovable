@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -144,6 +144,11 @@ export default function SocialConnections() {
     }
   }, [fetchAccounts]);
 
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // Cleanup polling on unmount
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
   const handleConnect = async (platformId: string) => {
     setConnectingPlatform(platformId);
     try {
@@ -155,6 +160,26 @@ export default function SocialConnections() {
       if (authUrl) {
         window.open(authUrl, "_blank", "noopener,noreferrer");
         toast.success("Janela de autorização aberta. Autorize o acesso e volte aqui.", { duration: 5000 });
+        // Auto-poll for connection status after OAuth (every 4s for 60s)
+        if (pollRef.current) clearInterval(pollRef.current);
+        let polls = 0;
+        pollRef.current = setInterval(async () => {
+          polls++;
+          try {
+            const { data: listData } = await supabase.functions.invoke("connect-social", { body: { action: "list" } });
+            const connections = listData?.connections || [];
+            const conn = connections.find((c: any) => c.platform === platformId && c.status === "connected");
+            if (conn) {
+              clearInterval(pollRef.current!);
+              pollRef.current = null;
+              toast.success(`${platformId} conectado com sucesso!`);
+              fetchAccounts();
+            } else if (polls >= 15) {
+              clearInterval(pollRef.current!);
+              pollRef.current = null;
+            }
+          } catch { /* ignore poll errors */ }
+        }, 4000);
       } else {
         console.error("[SocialConnections] No auth_url in response:", data);
         toast.error("Não foi possível gerar link de conexão. Verifique a configuração da API.");

@@ -95,6 +95,7 @@ export function useUpdateBrand() {
           logo_url: updates.logo_url,
           default_visual_style: (updates as any).default_visual_style,
           creation_mode: (updates as any).creation_mode,
+          visual_preferences: (updates as any).visual_preferences,
         })
         .eq('id', id)
         .select()

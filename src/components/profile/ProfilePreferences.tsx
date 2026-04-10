@@ -5,15 +5,9 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Globe, Rss, X } from "lucide-react";
 import { useState } from "react";
-// InstagramConnectionCard and LinkedInConnectionCard removed — replaced by SocialConnections component
-// which uses Post for Me API for all 9 platforms. Old components kept as files for reference.
 
 interface ProfilePreferencesProps {
-  nativeLanguage: string;
   secondaryLanguages: string[];
-  preferredTone: string;
-  preferredAudience: string;
-  interestAreas: string[];
   rssSources: string[];
   onChange: (field: string, value: any) => void;
 }
@@ -26,8 +20,12 @@ const ProfilePreferences = ({
   const [newRss, setNewRss] = useState("");
 
   const addRss = () => {
-    const url = newRss.trim();
-    if (url && !rssSources.includes(url)) {
+    let url = newRss.trim().toLowerCase();
+    if (!url) return;
+    // Accept bare domains like "exame.com" — normalize to domain format
+    url = url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+    if (!/^[a-z0-9]([a-z0-9-]*\.)+[a-z]{2,}/.test(url)) return;
+    if (!rssSources.includes(url)) {
       onChange("rss_sources", [...rssSources, url]);
       setNewRss("");
     }
@@ -66,7 +64,7 @@ const ProfilePreferences = ({
         </CardContent>
       </Card>
 
-      {/* Content sources — unified */}
+      {/* Content sources */}
       <Card className="shadow-card border-border/50">
         <CardHeader>
           <CardTitle className="text-lg flex items-center gap-2">
@@ -111,8 +109,6 @@ const ProfilePreferences = ({
           </div>
         </CardContent>
       </Card>
-
-      {/* Social connections moved to SocialConnections component (Post for Me — 9 platforms) */}
     </>
   );
 };
