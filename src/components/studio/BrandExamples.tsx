@@ -124,7 +124,8 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
         const file = files[i];
         if (!file.type.startsWith("image/")) continue;
 
-        const fileName = `${brandId}/${Date.now()}-${i}-${file.name}`;
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const fileName = `${brandId}/${Date.now()}-${i}-${safeName}`;
         const { error: uploadError } = await supabase.storage
           .from("content-images")
           .upload(fileName, file);
