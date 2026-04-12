@@ -823,25 +823,27 @@ export default function ActionCard({
           </div>
         </div>
 
-        <CardContent className="p-3">
-          <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{platformLabel} · {typeLabel}</div>
-          {headline && <p className="mb-1 text-sm font-medium text-foreground line-clamp-2">{headline}</p>}
+        <CardContent className="p-3 pt-2.5">
+          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-primary/60">{platformLabel} · {typeLabel}</div>
+          {headline && <p className="mb-2 text-sm font-semibold text-foreground line-clamp-2">{headline}</p>}
           {captionText && (
-            <div className="mb-2">
-              <p className={`text-xs text-muted-foreground whitespace-pre-line ${showFullCaption ? "" : "line-clamp-3"}`}>
+            <div className="mb-3 rounded-lg bg-muted/40 px-3 py-2.5">
+              <p className={`text-[13px] leading-relaxed text-foreground/80 whitespace-pre-line ${showFullCaption ? "" : "line-clamp-4"}`}>
                 {captionText}
               </p>
-              {captionText.length > 150 && (
+              {captionText.length > 120 && (
                 <button
-                  className="text-[10px] text-primary hover:underline mt-0.5"
+                  className="text-[11px] text-primary font-medium hover:underline mt-1.5 block"
                   onClick={() => setShowFullCaption(!showFullCaption)}
                 >
                   {showFullCaption ? "ver menos" : "ver mais"}
                 </button>
               )}
               {hashtagsList && hashtagsList.length > 0 && (
-                <p className="text-[10px] text-primary/70 mt-1 line-clamp-1">
-                  {hashtagsList.map(h => h.startsWith("#") ? h : `#${h}`).join(" ")}
+                <p className="text-[11px] text-primary/60 mt-2 leading-relaxed flex flex-wrap gap-x-1.5 gap-y-0.5">
+                  {hashtagsList.map(h => (
+                    <span key={h}>{h.startsWith("#") ? h : `#${h}`}</span>
+                  ))}
                 </p>
               )}
             </div>
