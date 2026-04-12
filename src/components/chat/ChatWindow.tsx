@@ -5,9 +5,8 @@ import { supabase } from "@/integrations/supabase/client";
 import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import BrandAnalysisLoader from "./BrandAnalysisLoader";
-import { Sparkles, ArrowDown, X, MessageSquarePlus, LayoutTemplate, Plus, ChevronDown } from "lucide-react";
+import { Sparkles, ArrowDown, X, MessageSquarePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import SmartNudge from "./SmartNudge";
 import { useNotification } from "@/hooks/useNotification";
@@ -117,7 +116,6 @@ export default function ChatWindow() {
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
   const [prefillText, setPrefillText] = useState("");
   const [prefillKey, setPrefillKey] = useState(0);
-  const [templatePopoverOpen, setTemplatePopoverOpen] = useState(false);
   const [customTemplates, setCustomTemplates] = useState<Array<{ id: string; emoji: string; label: string; template: string }>>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasLoadedHistory = useRef(false);
@@ -938,11 +936,10 @@ export default function ChatWindow() {
                   </button>
                 ))}
                 <button
-                  className="border border-primary/30 bg-primary/5 text-primary rounded-xl px-4 py-2.5 text-[13px] hover:bg-primary/10 transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98] flex items-center gap-1.5"
-                  onClick={() => setTemplatePopoverOpen(true)}
+                  onClick={() => handleSend('Quero criar uma nova marca')}
+                  className="border border-border/60 bg-background text-foreground/80 rounded-xl px-4 py-2.5 text-[13px] hover:bg-primary/5 hover:border-primary/30 hover:text-foreground transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
                 >
-                  <LayoutTemplate className="w-3.5 h-3.5" />
-                  Templates
+                  🎨 Criar marca
                 </button>
               </div>
             </div>
@@ -1004,67 +1001,22 @@ export default function ChatWindow() {
         </div>
       )}
 
-      {/* Quick actions + Templates above input */}
+      {/* Quick actions above input */}
       {onboardingStep == null && (
-        <div className="flex items-center gap-1.5 px-4 py-2 border-t border-border/30">
-          {/* Quick action pills */}
-          <div className="flex gap-1.5 flex-1 overflow-x-auto scrollbar-thin justify-center">
-            {QUICK_ACTIONS.map((action) => (
-              <button
-                key={action.label}
-                onClick={() => handleQuickAction(action.template)}
-                className="text-[11px] px-3 py-1.5 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150 whitespace-nowrap shrink-0"
-              >
-                {action.emoji} {action.label}
-              </button>
-            ))}
-            <button onClick={() => handleSend('Quero criar uma nova marca')}
-              className="text-[11px] px-3 py-1.5 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150 whitespace-nowrap shrink-0">
-              🎨 Criar marca
+        <div className="flex gap-1.5 px-4 py-2 border-t border-border/30 justify-center overflow-x-auto scrollbar-thin">
+          {QUICK_ACTIONS.map((action) => (
+            <button
+              key={action.label}
+              onClick={() => handleQuickAction(action.template)}
+              className="text-[11px] px-3 py-1.5 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150 whitespace-nowrap shrink-0"
+            >
+              {action.emoji} {action.label}
             </button>
-          </div>
-
-          {/* Templates dropdown */}
-          <Popover open={templatePopoverOpen} onOpenChange={setTemplatePopoverOpen}>
-            <PopoverTrigger asChild>
-              <button className="flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-all duration-150 whitespace-nowrap shrink-0">
-                <LayoutTemplate className="w-3 h-3" />
-                Templates
-                <ChevronDown className="w-2.5 h-2.5" />
-              </button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80 p-2 max-h-[400px] overflow-y-auto" align="end" side="top">
-              <div className="space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">Prompts prontos</p>
-                {DEFAULT_TEMPLATES.map((t) => (
-                  <button
-                    key={t.id}
-                    onClick={() => { handleQuickAction(t.template); setTemplatePopoverOpen(false); }}
-                    className="w-full text-left px-2 py-2 rounded-md hover:bg-muted/60 transition-colors group"
-                  >
-                    <span className="text-xs font-medium text-foreground">{t.emoji} {t.label}</span>
-                    <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 group-hover:text-foreground/60">{t.template.replace(/: $/, "")}</p>
-                  </button>
-                ))}
-                {customTemplates.length > 0 && (
-                  <>
-                    <div className="border-t border-border/30 my-1" />
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">Seus templates</p>
-                    {customTemplates.map((t) => (
-                      <button
-                        key={t.id}
-                        onClick={() => { handleQuickAction(t.template); setTemplatePopoverOpen(false); }}
-                        className="w-full text-left px-2 py-2 rounded-md hover:bg-muted/60 transition-colors group"
-                      >
-                        <span className="text-xs font-medium text-foreground">{t.emoji} {t.label}</span>
-                        <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 group-hover:text-foreground/60">{t.template.replace(/: $/, "")}</p>
-                      </button>
-                    ))}
-                  </>
-                )}
-              </div>
-            </PopoverContent>
-          </Popover>
+          ))}
+          <button onClick={() => handleSend('Quero criar uma nova marca')}
+            className="text-[11px] px-3 py-1.5 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150 whitespace-nowrap shrink-0">
+            🎨 Criar marca
+          </button>
         </div>
       )}
 
@@ -1081,6 +1033,9 @@ export default function ChatWindow() {
         onBrandSelect={setSelectedBrandId}
         prefillText={prefillText}
         prefillKey={prefillKey}
+        defaultTemplates={DEFAULT_TEMPLATES}
+        customTemplates={customTemplates}
+        onTemplateSelect={handleQuickAction}
         placeholder={
           onboardingStep != null
             ? "Digite sua resposta..."

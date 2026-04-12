@@ -1,7 +1,15 @@
 import { useState, useRef, useEffect, KeyboardEvent, useMemo } from "react";
-import { Send, Loader2, ImagePlus, MessageSquarePlus, Tag, X } from "lucide-react";
+import { Send, Loader2, ImagePlus, MessageSquarePlus, Tag, X, LayoutTemplate, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ImageEditorModal from "@/components/ui/ImageEditorModal";
+
+interface PromptTemplate {
+  id: string;
+  emoji: string;
+  label: string;
+  template: string;
+}
 
 interface ChatInputProps {
   onSend: (message: string) => void;
@@ -17,9 +25,12 @@ interface ChatInputProps {
   onBrandSelect?: (brandId: string | null) => void;
   prefillText?: string;
   prefillKey?: number;
+  defaultTemplates?: PromptTemplate[];
+  customTemplates?: PromptTemplate[];
+  onTemplateSelect?: (template: string) => void;
 }
 
-export default function ChatInput({ onSend, onFilesSelected, disabled, placeholder = "Cole um link ou descreva o conteúdo...", showImageUpload, userId, onNewChat, hasMessages, brands, selectedBrandId, onBrandSelect, prefillText, prefillKey }: ChatInputProps) {
+export default function ChatInput({ onSend, onFilesSelected, disabled, placeholder = "Cole um link ou descreva o conteúdo...", showImageUpload, userId, onNewChat, hasMessages, brands, selectedBrandId, onBrandSelect, prefillText, prefillKey, defaultTemplates, customTemplates, onTemplateSelect }: ChatInputProps) {
   const [value, setValue] = useState("");
   const [showBrandDropdown, setShowBrandDropdown] = useState(false);
   const [editorQueue, setEditorQueue] = useState<File[]>([]);
@@ -210,6 +221,51 @@ export default function ChatInput({ onSend, onFilesSelected, disabled, placehold
                 </div>
               )}
             </div>
+          )}
+
+          {/* Templates button */}
+          {defaultTemplates && defaultTemplates.length > 0 && onTemplateSelect && (
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  className="flex-shrink-0 h-10 w-10 rounded-xl border border-border/60 bg-muted/20 flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/5 hover:border-primary/30 transition-all duration-200"
+                  title="Templates de prompt"
+                >
+                  <LayoutTemplate className="w-4 h-4" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-2 max-h-[400px] overflow-y-auto" align="start" side="top">
+                <div className="space-y-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">Prompts prontos</p>
+                  {defaultTemplates.map((t) => (
+                    <button
+                      key={t.id}
+                      onClick={() => onTemplateSelect(t.template)}
+                      className="w-full text-left px-2 py-2 rounded-md hover:bg-muted/60 transition-colors group"
+                    >
+                      <span className="text-xs font-medium text-foreground">{t.emoji} {t.label}</span>
+                      <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 group-hover:text-foreground/60">{t.template.replace(/: $/, "")}</p>
+                    </button>
+                  ))}
+                  {customTemplates && customTemplates.length > 0 && (
+                    <>
+                      <div className="border-t border-border/30 my-1" />
+                      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">Seus templates</p>
+                      {customTemplates.map((t) => (
+                        <button
+                          key={t.id}
+                          onClick={() => onTemplateSelect(t.template)}
+                          className="w-full text-left px-2 py-2 rounded-md hover:bg-muted/60 transition-colors group"
+                        >
+                          <span className="text-xs font-medium text-foreground">{t.emoji} {t.label}</span>
+                          <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 group-hover:text-foreground/60">{t.template.replace(/: $/, "")}</p>
+                        </button>
+                      ))}
+                    </>
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           )}
 
           {/* Image upload button */}
