@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, RefreshCw, X, Send, ChevronDown } from "lucide-react";
+import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, RefreshCw, X, Send, ChevronDown, Play } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import ScheduleModal from "@/components/content/ScheduleModal";
 import SlideBgOverlayRenderer from "@/components/content/SlideBgOverlayRenderer";
@@ -83,15 +83,16 @@ function ActionCardPreview({
     const isIllustrationTitled = generationMetadata?.visual_style === "ai_illustration_titled";
 
     const isVideoContent = slideData?.media_type === "video" || /\.(mp4|webm|mov)(\?|$)/i.test(displayUrl || "");
+    const aspectRatio = `${dims.width} / ${dims.height}`;
 
     return (
-      <div style={{ width: containerWidth, height: dims.height * scale, overflow: "hidden" }}>
+      <div style={{ width: "100%", aspectRatio, overflow: "hidden" }}>
         {isVideoContent && displayUrl ? (
-          <video src={displayUrl} controls muted playsInline style={{ width: containerWidth, height: dims.height * scale, objectFit: "cover" }} />
+          <video src={displayUrl} controls muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         ) : showAsFinishedImage ? (
-          <img src={displayUrl} alt="" style={{ width: containerWidth, height: dims.height * scale, objectFit: "cover" }} />
+          <img src={displayUrl} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         ) : (
-          <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: dims.width, height: dims.height }}>
+          <div style={{ transform: `scale(${scale})`, transformOrigin: "top center", width: dims.width, height: dims.height, margin: "0 auto" }}>
             <SlideBgOverlayRenderer
               backgroundImageUrl={renderImageUrl}
               overlay={{
@@ -172,6 +173,8 @@ export default function ActionCard({
   const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
   const [showImageEditDialog, setShowImageEditDialog] = useState(false);
   const [imageEditInstruction, setImageEditInstruction] = useState("");
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [animatedVideoUrl, setAnimatedVideoUrl] = useState<string | null>(null);
 
   // Multi-platform publish state
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
@@ -964,7 +967,7 @@ export default function ActionCard({
             </div>
           )}
 
-          {/* Row 2: Regeneration actions */}
+          {/* Row 2: Regeneration + Animate actions */}
           <div className="flex gap-2 mb-2">
             <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={handleRegenerateImage} disabled={isRegeneratingImage}>
               {isRegeneratingImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pencil className="w-3 h-3" />}
@@ -974,7 +977,57 @@ export default function ActionCard({
               <RefreshCw className="w-3 h-3" />
               Refazer
             </Button>
+            {composedImageUrls?.[0] && !animatedVideoUrl && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="flex-1 text-xs border-primary/20 text-primary hover:bg-primary/5"
+                disabled={isAnimating}
+                onClick={async () => {
+                  setIsAnimating(true);
+                  try {
+                    const imageUrl = composedImageUrls[0];
+                    const { data, error } = await supabase.functions.invoke("blotato-proxy", {
+                      body: {
+                        action: "create_visual",
+                        templateKey: "image-slideshow",
+                        prompt: captionText || headline || "Animate this image with smooth motion",
+                        inputs: {
+                          slides: [{ uploadedMedia: imageUrl }],
+                          aspectRatio: effectivePlatform === "linkedin" ? "1:1" : contentType === "story" ? "9:16" : "1:1",
+                          slideDuration: 5,
+                          transition: "crossfade",
+                        },
+                      },
+                    });
+                    if (error) throw error;
+                    if (data?.mediaUrl) {
+                      setAnimatedVideoUrl(data.mediaUrl);
+                      toast.success("Video animado gerado!");
+                    } else if (data?.imageUrls?.[0]) {
+                      setAnimatedVideoUrl(data.imageUrls[0]);
+                      toast.success("Animação gerada!");
+                    } else {
+                      toast.error("Não foi possível gerar a animação");
+                    }
+                  } catch (err: any) {
+                    console.error("[ActionCard] Animate error:", err);
+                    toast.error("Erro ao animar: " + (err?.message || "tente novamente"));
+                  } finally {
+                    setIsAnimating(false);
+                  }
+                }}
+              >
+                {isAnimating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
+                {isAnimating ? "Animando..." : "Animar"}
+              </Button>
+            )}
           </div>
+          {animatedVideoUrl && (
+            <div className="mb-2 rounded-lg overflow-hidden border border-primary/20">
+              <video src={animatedVideoUrl} controls playsInline className="w-full" />
+            </div>
+          )}
 
           {/* Save background nudge — only for ai_background mode (has bg image + overlay text) */}
           {slideData?.background_image_url && slideData?.render_mode !== "ai_full_design" && (

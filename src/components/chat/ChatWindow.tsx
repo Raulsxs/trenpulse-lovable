@@ -5,8 +5,9 @@ import { supabase } from "@/integrations/supabase/client";
 import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import BrandAnalysisLoader from "./BrandAnalysisLoader";
-import { Sparkles, ArrowDown, X, MessageSquarePlus } from "lucide-react";
+import { Sparkles, ArrowDown, X, MessageSquarePlus, LayoutTemplate, Plus, ChevronDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { toast } from "sonner";
 import SmartNudge from "./SmartNudge";
 import { useNotification } from "@/hooks/useNotification";
@@ -70,18 +71,25 @@ const buildCompletionMsg = (data: { name?: string; handle?: string; niche?: stri
     `💡 **Dica rápida:** você pode me enviar links de notícias ou artigos e eu transformo em post, carrossel ou story automaticamente. Experimente colar um link aqui!`;
 };
 
+// Quick actions: always visible, most common actions
 const QUICK_ACTIONS = [
   { emoji: "📷", label: "Post", template: "Crie um post para Instagram sobre: " },
-  { emoji: "🎠", label: "Carrossel", template: "Crie um carrossel de 5 slides sobre: " },
   { emoji: "📱", label: "Story", template: "Crie um story para Instagram sobre: " },
-  { emoji: "💬", label: "Frase", template: "Crie uma imagem com a frase: " },
-  { emoji: "🔗", label: "Link", template: "Crie um post baseado neste link: " },
   { emoji: "💼", label: "LinkedIn", template: "Crie um post para LinkedIn sobre: " },
+  { emoji: "💬", label: "Frase", template: "Crie uma imagem com a frase: " },
   { emoji: "🐦", label: "Tweet", template: "Crie um tweet card visual sobre: " },
-  { emoji: "📚", label: "Tutorial", template: "Crie um carrossel tutorial passo a passo sobre: " },
-  { emoji: "💎", label: "Citação", template: "Crie um quote card visual com a frase: " },
-  { emoji: "📊", label: "Infográfico", template: "Crie um infográfico sobre: " },
-  { emoji: "🎬", label: "Reels", template: "Crie um vídeo Reels sobre: " },
+];
+
+// Default prompt templates: richer prompts for better results
+const DEFAULT_TEMPLATES = [
+  { id: "carousel-ig", emoji: "🎠", label: "Carrossel Instagram", template: "Crie um carrossel de 5 slides educativos e visualmente impactantes para Instagram sobre: " },
+  { id: "carousel-li", emoji: "📊", label: "Carrossel LinkedIn", template: "Crie um carrossel profissional para LinkedIn com dados, insights e tom corporativo sobre: " },
+  { id: "tutorial", emoji: "📚", label: "Tutorial Passo a Passo", template: "Crie um carrossel tutorial passo a passo com slides educativos, cada slide explicando uma etapa clara sobre: " },
+  { id: "tweet-thread", emoji: "🐦", label: "Tweet Thread", template: "Crie um tweet card visual estilo Twitter com frase de autoridade e impacto, posicionando como especialista sobre: " },
+  { id: "quote", emoji: "💎", label: "Citação Visual", template: "Crie um quote card visual com frase motivacional e inspiracional, tipografia elegante sobre: " },
+  { id: "infographic", emoji: "📊", label: "Infográfico", template: "Crie um infográfico detalhado com dados, estatísticas e informações visuais organizadas sobre: " },
+  { id: "link-post", emoji: "🔗", label: "Post de Link/Notícia", template: "Crie um post baseado neste link, extraindo os pontos principais e criando um visual profissional: " },
+  { id: "photo-phrase", emoji: "📸", label: "Foto + Frase", template: "Crie uma imagem usando minha foto pessoal como fundo com uma frase inspiracional de autoridade sobre: " },
 ];
 
 function getGreeting(): string {
@@ -109,6 +117,8 @@ export default function ChatWindow() {
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
   const [prefillText, setPrefillText] = useState("");
   const [prefillKey, setPrefillKey] = useState(0);
+  const [templatePopoverOpen, setTemplatePopoverOpen] = useState(false);
+  const [customTemplates, setCustomTemplates] = useState<Array<{ id: string; emoji: string; label: string; template: string }>>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasLoadedHistory = useRef(false);
   const lastActiveContentId = useRef<string | null>(null);
@@ -186,6 +196,11 @@ export default function ChatWindow() {
       const bc = extra?.brand_creation;
       if (bc && bc.step > 0 && bc.step <= 3) {
         setBrandCreationStep(bc.step);
+      }
+
+      // Load custom prompt templates
+      if (extra?.prompt_templates?.length) {
+        setCustomTemplates(extra.prompt_templates);
       }
 
       // Only load messages from current conversation (if user started a "new chat")
@@ -912,16 +927,23 @@ export default function ChatWindow() {
               <p className="text-sm text-muted-foreground/70 max-w-sm mb-8">
                 Cole um link, descreva um tema, ou escolha abaixo para começar.
               </p>
-              <div className="flex flex-wrap justify-center gap-2 max-w-lg">
+              <div className="flex flex-wrap justify-center gap-2.5 max-w-md">
                 {QUICK_ACTIONS.map((action) => (
                   <button
                     key={action.label}
-                    className="border border-border/60 bg-background text-foreground/80 rounded-xl px-4 py-2 text-[13px] hover:bg-primary/5 hover:border-primary/30 hover:text-foreground transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                    className="border border-border/60 bg-background text-foreground/80 rounded-xl px-4 py-2.5 text-[13px] hover:bg-primary/5 hover:border-primary/30 hover:text-foreground transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
                     onClick={() => handleQuickAction(action.template)}
                   >
                     {action.emoji} {action.label}
                   </button>
                 ))}
+                <button
+                  className="border border-primary/30 bg-primary/5 text-primary rounded-xl px-4 py-2.5 text-[13px] hover:bg-primary/10 transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98] flex items-center gap-1.5"
+                  onClick={() => setTemplatePopoverOpen(true)}
+                >
+                  <LayoutTemplate className="w-3.5 h-3.5" />
+                  Templates
+                </button>
               </div>
             </div>
           ) : (
@@ -982,22 +1004,67 @@ export default function ChatWindow() {
         </div>
       )}
 
-      {/* Quick action pills above input */}
+      {/* Quick actions + Templates above input */}
       {onboardingStep == null && (
-        <div className="flex flex-wrap gap-1.5 px-4 py-2 border-t border-border/30 justify-center">
-          {QUICK_ACTIONS.map((action) => (
-            <button
-              key={action.label}
-              onClick={() => handleQuickAction(action.template)}
-              className="text-[11px] px-3 py-1 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150"
-            >
-              {action.emoji} {action.label}
+        <div className="flex items-center gap-1.5 px-4 py-2 border-t border-border/30">
+          {/* Quick action pills */}
+          <div className="flex gap-1.5 flex-1 overflow-x-auto scrollbar-thin justify-center">
+            {QUICK_ACTIONS.map((action) => (
+              <button
+                key={action.label}
+                onClick={() => handleQuickAction(action.template)}
+                className="text-[11px] px-3 py-1.5 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150 whitespace-nowrap shrink-0"
+              >
+                {action.emoji} {action.label}
+              </button>
+            ))}
+            <button onClick={() => handleSend('Quero criar uma nova marca')}
+              className="text-[11px] px-3 py-1.5 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150 whitespace-nowrap shrink-0">
+              🎨 Criar marca
             </button>
-          ))}
-          <button onClick={() => handleSend('Quero criar uma nova marca')}
-            className="text-[11px] px-3 py-1 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150">
-            🎨 Nova marca
-          </button>
+          </div>
+
+          {/* Templates dropdown */}
+          <Popover open={templatePopoverOpen} onOpenChange={setTemplatePopoverOpen}>
+            <PopoverTrigger asChild>
+              <button className="flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg border border-primary/30 bg-primary/5 text-primary hover:bg-primary/10 transition-all duration-150 whitespace-nowrap shrink-0">
+                <LayoutTemplate className="w-3 h-3" />
+                Templates
+                <ChevronDown className="w-2.5 h-2.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-2 max-h-[400px] overflow-y-auto" align="end" side="top">
+              <div className="space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">Prompts prontos</p>
+                {DEFAULT_TEMPLATES.map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => { handleQuickAction(t.template); setTemplatePopoverOpen(false); }}
+                    className="w-full text-left px-2 py-2 rounded-md hover:bg-muted/60 transition-colors group"
+                  >
+                    <span className="text-xs font-medium text-foreground">{t.emoji} {t.label}</span>
+                    <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 group-hover:text-foreground/60">{t.template.replace(/: $/, "")}</p>
+                  </button>
+                ))}
+                {customTemplates.length > 0 && (
+                  <>
+                    <div className="border-t border-border/30 my-1" />
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground px-2 py-1">Seus templates</p>
+                    {customTemplates.map((t) => (
+                      <button
+                        key={t.id}
+                        onClick={() => { handleQuickAction(t.template); setTemplatePopoverOpen(false); }}
+                        className="w-full text-left px-2 py-2 rounded-md hover:bg-muted/60 transition-colors group"
+                      >
+                        <span className="text-xs font-medium text-foreground">{t.emoji} {t.label}</span>
+                        <p className="text-[10px] text-muted-foreground mt-0.5 line-clamp-2 group-hover:text-foreground/60">{t.template.replace(/: $/, "")}</p>
+                      </button>
+                    ))}
+                  </>
+                )}
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
       )}
 
