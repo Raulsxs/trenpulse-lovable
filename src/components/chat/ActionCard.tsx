@@ -82,9 +82,13 @@ function ActionCardPreview({
     const displayUrl = composedUrl || renderImageUrl;
     const isIllustrationTitled = generationMetadata?.visual_style === "ai_illustration_titled";
 
+    const isVideoContent = slideData?.media_type === "video" || /\.(mp4|webm|mov)(\?|$)/i.test(displayUrl || "");
+
     return (
       <div style={{ width: containerWidth, height: dims.height * scale, overflow: "hidden" }}>
-        {showAsFinishedImage ? (
+        {isVideoContent && displayUrl ? (
+          <video src={displayUrl} controls muted playsInline style={{ width: containerWidth, height: dims.height * scale, objectFit: "cover" }} />
+        ) : showAsFinishedImage ? (
           <img src={displayUrl} alt="" style={{ width: containerWidth, height: dims.height * scale, objectFit: "cover" }} />
         ) : (
           <div style={{ transform: `scale(${scale})`, transformOrigin: "top left", width: dims.width, height: dims.height }}>
@@ -188,6 +192,9 @@ export default function ActionCard({
   const [generationFailed, setGenerationFailed] = useState(false);
   const [contentDeleted, setContentDeleted] = useState(false);
   const [generationPhase, setGenerationPhase] = useState(0);
+  const [captionText, setCaptionText] = useState<string | null>(null);
+  const [hashtagsList, setHashtagsList] = useState<string[] | null>(null);
+  const [showFullCaption, setShowFullCaption] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(360);
 
@@ -311,7 +318,7 @@ export default function ActionCard({
       try {
         const { data } = await supabase
           .from("generated_contents")
-          .select("slides, brand_snapshot, platform, content_type, created_at, image_urls, generation_metadata")
+          .select("slides, brand_snapshot, platform, content_type, created_at, image_urls, generation_metadata, caption, hashtags")
           .eq("id", contentId)
           .maybeSingle();
 
@@ -338,6 +345,8 @@ export default function ActionCard({
           setBrandSnapshot(data.brand_snapshot);
           if (data.generation_metadata) setGenerationMetadata(data.generation_metadata);
           if (data.platform) setResolvedPlatform(data.platform);
+          if ((data as any).caption) setCaptionText((data as any).caption);
+          if ((data as any).hashtags) setHashtagsList((data as any).hashtags);
           const fetchedImageUrls = data.image_urls as string[] | null;
           if (fetchedImageUrls?.length) setComposedImageUrls(fetchedImageUrls);
 
@@ -690,11 +699,13 @@ export default function ActionCard({
       // Realtime subscription is stopped for existing content — fetch DB directly after invoke
       const { data } = await supabase
         .from("generated_contents")
-        .select("slides, image_urls, brand_snapshot, generation_metadata, platform")
+        .select("slides, image_urls, brand_snapshot, generation_metadata, platform, caption, hashtags")
         .eq("id", contentId)
         .maybeSingle();
 
       if (data) {
+        if ((data as any).caption) setCaptionText((data as any).caption);
+        if ((data as any).hashtags) setHashtagsList((data as any).hashtags);
         const slides = data.slides as any[];
         if (slides?.length) {
           setAllSlides(slides);
@@ -814,7 +825,27 @@ export default function ActionCard({
 
         <CardContent className="p-3">
           <div className="mb-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">{platformLabel} · {typeLabel}</div>
-          {headline && <p className="mb-3 text-sm font-medium text-foreground line-clamp-2">{headline}</p>}
+          {headline && <p className="mb-1 text-sm font-medium text-foreground line-clamp-2">{headline}</p>}
+          {captionText && (
+            <div className="mb-2">
+              <p className={`text-xs text-muted-foreground whitespace-pre-line ${showFullCaption ? "" : "line-clamp-3"}`}>
+                {captionText}
+              </p>
+              {captionText.length > 150 && (
+                <button
+                  className="text-[10px] text-primary hover:underline mt-0.5"
+                  onClick={() => setShowFullCaption(!showFullCaption)}
+                >
+                  {showFullCaption ? "ver menos" : "ver mais"}
+                </button>
+              )}
+              {hashtagsList && hashtagsList.length > 0 && (
+                <p className="text-[10px] text-primary/70 mt-1 line-clamp-1">
+                  {hashtagsList.map(h => h.startsWith("#") ? h : `#${h}`).join(" ")}
+                </p>
+              )}
+            </div>
+          )}
           {scheduledAt && (
             <p className="mb-2 text-xs text-muted-foreground">📅 Agendado: {new Date(scheduledAt).toLocaleDateString("pt-BR")}</p>
           )}

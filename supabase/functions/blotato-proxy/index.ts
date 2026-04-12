@@ -34,6 +34,10 @@ const TEMPLATES: Record<string, string> = {
   "infographic-tv-news": "8800be71-52df-4ac7-ac94-df9d8a494d0f",
   "infographic-steampunk": "7b7104f1-d277-4993-ad3a-e5883c4b776d",
   "infographic-graffiti": "3598483b-c148-4276-a800-eede85c1c62f",
+  // Credit-based — video
+  "video-story": "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1",
+  // Credit-based — slideshow video
+  "image-slideshow": "/base/v2/image-slideshow/5903b592-1255-43b4-b9ac-f8ed7cbf6a5f/v1",
 };
 
 const respond = (body: any, status = 200) =>
@@ -144,12 +148,14 @@ Deno.serve(async (req) => {
 
     console.log(`[blotato-proxy] Creation started: id=${creationId}, polling...`);
 
-    // Poll until done (server-side — Blotato typically takes 10-15s)
-    const result = await pollVisualStatus(blotatoApiKey, creationId);
+    // Video templates need longer polling (up to 120s vs 45s for images)
+    const isVideoTemplate = templateKey?.startsWith("video-") || templateId.includes("ai-story-video") || templateId.includes("ai-selfie-video");
+    const pollTimeout = isVideoTemplate ? 120000 : 45000;
+    const result = await pollVisualStatus(blotatoApiKey, creationId, pollTimeout);
 
-    console.log(`[blotato-proxy] Result: status=${result.status}, images=${result.imageUrls.length}`);
+    console.log(`[blotato-proxy] Result: status=${result.status}, images=${result.imageUrls.length}, mediaUrl=${!!result.mediaUrl}`);
 
-    if (result.status === "done" && result.imageUrls.length > 0) {
+    if (result.status === "done" && (result.imageUrls.length > 0 || result.mediaUrl)) {
       return respond({
         status: "done",
         creationId,

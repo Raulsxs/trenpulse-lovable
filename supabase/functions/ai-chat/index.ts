@@ -73,7 +73,7 @@ function detectContentStyle(msg: string): string | null {
 // ── Helper: detect if message should use a Blotato template ──
 interface BlotataTemplateMatch {
   templateKey: string;
-  templateType: "tweet" | "tutorial" | "quote" | "infographic";
+  templateType: "tweet" | "tutorial" | "quote" | "infographic" | "video";
 }
 
 function detectBlotataTemplate(msg: string): BlotataTemplateMatch | null {
@@ -94,6 +94,10 @@ function detectBlotataTemplate(msg: string): BlotataTemplateMatch | null {
   // Infographic
   if (/\b(infogr[aá]fico|infographic)\b/.test(m)) {
     return { templateKey: "infographic-newspaper", templateType: "infographic" };
+  }
+  // Video / Reels
+  if (/\b(v[ií]deo\s*reels|reels|v[ií]deo\s*IA|v[ií]deo\s*para\s*(instagram|tiktok|reels)|crie\s*um\s*v[ií]deo)\b/.test(m)) {
+    return { templateKey: "video-story", templateType: "video" };
   }
   return null;
 }
@@ -319,7 +323,7 @@ Seja concisa mas completa nas respostas.`;
 
 IMPORTANTE: Se a mensagem contém um link (URL), classifique como LINK_PARA_POST.
 Se pede "carrossel", "múltiplos slides", "série", "documento", classifique como GENERATE_CAROUSEL.
-Se menciona "tweet card", "estilo tweet", "tutorial passo a passo", "quote card", "citação visual", "infográfico", classifique como GENERATE_TEMPLATE.
+Se menciona "tweet card", "estilo tweet", "tutorial passo a passo", "quote card", "citação visual", "infográfico", "vídeo reels", "crie um vídeo", classifique como GENERATE_TEMPLATE.
 
 Responda APENAS com o nome da categoria.
 
@@ -477,6 +481,23 @@ Responda APENAS em JSON válido:
 }
 
 Mensagem: "${message}"`,
+
+          video: `Crie o roteiro de um vídeo curto (30-60 segundos) para Instagram Reels/TikTok.
+Divida em 3-5 cenas. Cada cena precisa de uma descrição visual (para gerar imagem IA) e um script de narração.
+${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
+${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
+${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}` : ""}
+
+Responda APENAS em JSON válido:
+{
+  "scenes": [
+    { "aiPrompt": "descrição visual da cena (em inglês, para IA gerar imagem)", "voiceoverScript": "texto que será narrado nesta cena (em português)" },
+    { "aiPrompt": "...", "voiceoverScript": "..." }
+  ],
+  "voiceName": "pt-BR-francisca"
+}
+
+Mensagem: "${message}"`,
         };
 
         const structPrompt = inputPrompts[templateMatch.templateType];
@@ -523,10 +544,26 @@ Mensagem: "${message}"`,
           templateInputs.aspectRatio = "1:1";
         }
 
+        if (templateMatch.templateType === "video") {
+          templateInputs.enableVoiceover = true;
+          templateInputs.aspectRatio = "9:16";
+          templateInputs.captionPosition = "bottom";
+          templateInputs.highlightColor = brandColors[0] || "#FFD700";
+          templateInputs.transition = "crossfade";
+          // Ensure scenes use mediaSource.aiPrompt format
+          if (templateInputs.scenes) {
+            templateInputs.scenes = templateInputs.scenes.map((s: any) => ({
+              mediaSource: { aiPrompt: s.aiPrompt || s.mediaSource?.aiPrompt || "professional background" },
+              voiceoverScript: s.voiceoverScript || s.script || "",
+            }));
+          }
+        }
+
         // 5. Call blotato-proxy
         console.log(`[ai-chat] GENERATE_TEMPLATE: calling blotato-proxy with inputs:`, JSON.stringify(templateInputs).substring(0, 300));
 
         let blotatoImageUrls: string[] = [];
+        let blotatoMediaUrl: string | null = null;
         try {
           const blotatoResp = await fetch(`${supabaseUrl}/functions/v1/blotato-proxy`, {
             method: "POST",
@@ -542,7 +579,8 @@ Mensagem: "${message}"`,
           if (blotatoResp.ok) {
             const blotatoData = await blotatoResp.json();
             blotatoImageUrls = blotatoData.imageUrls || [];
-            console.log(`[ai-chat] GENERATE_TEMPLATE: Blotato returned ${blotatoImageUrls.length} images`);
+            blotatoMediaUrl = blotatoData.mediaUrl || null;
+            console.log(`[ai-chat] GENERATE_TEMPLATE: Blotato returned ${blotatoImageUrls.length} images, mediaUrl=${!!blotatoMediaUrl}`);
           } else {
             const errText = await blotatoResp.text().catch(() => "");
             console.error(`[ai-chat] GENERATE_TEMPLATE: blotato-proxy failed: ${blotatoResp.status} ${errText.substring(0, 200)}`);
@@ -551,7 +589,7 @@ Mensagem: "${message}"`,
           console.error("[ai-chat] GENERATE_TEMPLATE: blotato-proxy error:", blotatoErr?.message);
         }
 
-        if (blotatoImageUrls.length === 0) {
+        if (blotatoImageUrls.length === 0 && !blotatoMediaUrl) {
           replyOverride = "Não foi possível gerar o visual. Tente novamente ou use outro formato.";
           break;
         }
@@ -591,15 +629,15 @@ Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legen
         }
 
         // 7. Save to generated_contents
+        const isVideo = templateMatch.templateType === "video";
         const isCarousel = blotatoImageUrls.length > 1;
-        const templateSlides = blotatoImageUrls.map((url: string) => ({
-          headline: "",
-          body: "",
-          bullets: [],
-          image_url: url,
-          background_image_url: url,
-          render_mode: "ai_full_design",
-        }));
+
+        const templateSlides = isVideo && blotatoMediaUrl
+          ? [{ headline: "", body: "", bullets: [], image_url: blotatoMediaUrl, background_image_url: blotatoMediaUrl, render_mode: "ai_full_design", media_type: "video" }]
+          : blotatoImageUrls.map((url: string) => ({
+              headline: "", body: "", bullets: [],
+              image_url: url, background_image_url: url, render_mode: "ai_full_design",
+            }));
 
         const platform = requestPlatform || detectPlatform(message);
         const savedTemplateContentId = await persistGeneratedContent({
@@ -611,28 +649,35 @@ Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legen
             slides: templateSlides,
           },
           fallbackTitle: templateTitle,
-          contentType: isCarousel ? "carousel" : "post",
+          contentType: isVideo ? "story" : isCarousel ? "carousel" : "post",
           brandId: requestBrandId || null,
           brandSnapshot: templateBrandSnapshot,
           platform,
-          visualMode: "blotato_template",
+          visualMode: isVideo ? "blotato_video" : "blotato_template",
         });
 
         if (savedTemplateContentId) {
-          await svc.from("generated_contents")
-            .update({ image_urls: blotatoImageUrls })
-            .eq("id", savedTemplateContentId);
+          const updatePayload: Record<string, any> = {};
+          if (blotatoImageUrls.length > 0) updatePayload.image_urls = blotatoImageUrls;
+          if (blotatoMediaUrl) updatePayload.rendered_image_urls = [blotatoMediaUrl];
+          if (Object.keys(updatePayload).length > 0) {
+            await svc.from("generated_contents")
+              .update(updatePayload)
+              .eq("id", savedTemplateContentId);
+          }
         }
 
-        replyOverride = blotatoImageUrls.length > 1
-          ? `Carrossel gerado com ${blotatoImageUrls.length} slides! Confira abaixo.`
-          : "Visual gerado! Confira abaixo.";
+        replyOverride = isVideo
+          ? "Vídeo Reels gerado! Confira abaixo."
+          : blotatoImageUrls.length > 1
+            ? `Carrossel gerado com ${blotatoImageUrls.length} slides! Confira abaixo.`
+            : "Visual gerado! Confira abaixo.";
 
         actionResult = savedTemplateContentId ? {
           content_id: savedTemplateContentId,
-          content_type: isCarousel ? "carousel" : "post",
+          content_type: isVideo ? "story" : isCarousel ? "carousel" : "post",
           platform,
-          preview_image_url: blotatoImageUrls[0],
+          preview_image_url: blotatoImageUrls[0] || blotatoMediaUrl || undefined,
         } : null;
 
         break;

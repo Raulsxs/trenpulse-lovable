@@ -81,6 +81,7 @@ const QUICK_ACTIONS = [
   { emoji: "📚", label: "Tutorial", template: "Crie um carrossel tutorial passo a passo sobre: " },
   { emoji: "💎", label: "Citação", template: "Crie um quote card visual com a frase: " },
   { emoji: "📊", label: "Infográfico", template: "Crie um infográfico sobre: " },
+  { emoji: "🎬", label: "Reels", template: "Crie um vídeo Reels sobre: " },
 ];
 
 function getGreeting(): string {
