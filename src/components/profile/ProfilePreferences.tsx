@@ -2,18 +2,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Globe, Rss, X } from "lucide-react";
 import { useState } from "react";
 
+const BILINGUAL_PLATFORM_OPTIONS = [
+  { id: "instagram", label: "Instagram" },
+  { id: "linkedin", label: "LinkedIn" },
+  { id: "x", label: "X (Twitter)" },
+  { id: "tiktok", label: "TikTok" },
+  { id: "facebook", label: "Facebook" },
+];
+
 interface ProfilePreferencesProps {
   secondaryLanguages: string[];
+  bilingualPlatforms: string[];
   rssSources: string[];
   onChange: (field: string, value: any) => void;
 }
 
 const ProfilePreferences = ({
   secondaryLanguages,
+  bilingualPlatforms,
   rssSources,
   onChange,
 }: ProfilePreferencesProps) => {
@@ -22,7 +33,6 @@ const ProfilePreferences = ({
   const addRss = () => {
     let url = newRss.trim().toLowerCase();
     if (!url) return;
-    // Accept bare domains like "exame.com" — normalize to domain format
     url = url.replace(/^https?:\/\//, "").replace(/\/+$/, "");
     if (!/^[a-z0-9]([a-z0-9-]*\.)+[a-z]{2,}/.test(url)) return;
     if (!rssSources.includes(url)) {
@@ -35,6 +45,17 @@ const ProfilePreferences = ({
     onChange("rss_sources", rssSources.filter(u => u !== url));
   };
 
+  const toggleBilingualPlatform = (platformId: string) => {
+    const current = bilingualPlatforms || [];
+    const updated = current.includes(platformId)
+      ? current.filter(p => p !== platformId)
+      : [...current, platformId];
+    onChange("bilingual_platforms", updated);
+  };
+
+  const hasSecondaryLang = secondaryLanguages.length > 0;
+  const langLabel = secondaryLanguages[0] === "en" ? "inglês" : secondaryLanguages[0] === "es" ? "espanhol" : "";
+
   return (
     <>
       {/* Bilingual captions */}
@@ -46,12 +67,15 @@ const ProfilePreferences = ({
           </CardTitle>
           <CardDescription>As legendas dos posts serão geradas no idioma selecionado além do português</CardDescription>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="space-y-2">
             <Label>Idioma secundário</Label>
             <Select
               value={secondaryLanguages[0] || "none"}
-              onValueChange={(v) => onChange("secondary_languages", v === "none" ? [] : [v])}
+              onValueChange={(v) => {
+                onChange("secondary_languages", v === "none" ? [] : [v]);
+                if (v === "none") onChange("bilingual_platforms", []);
+              }}
             >
               <SelectTrigger><SelectValue placeholder="Somente português" /></SelectTrigger>
               <SelectContent>
@@ -61,6 +85,34 @@ const ProfilePreferences = ({
               </SelectContent>
             </Select>
           </div>
+
+          {hasSecondaryLang && (
+            <div className="space-y-3 pt-2 border-t border-border/30">
+              <div>
+                <Label className="text-sm">Plataformas com legenda em {langLabel}</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Selecione em quais redes a legenda será gerada em português + {langLabel}
+                </p>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {BILINGUAL_PLATFORM_OPTIONS.map(p => (
+                  <label
+                    key={p.id}
+                    className="flex items-center gap-2 p-2 rounded-lg border border-border/50 hover:bg-muted/30 cursor-pointer transition-colors"
+                  >
+                    <Checkbox
+                      checked={bilingualPlatforms.includes(p.id)}
+                      onCheckedChange={() => toggleBilingualPlatform(p.id)}
+                    />
+                    <span className="text-sm">{p.label}</span>
+                  </label>
+                ))}
+              </div>
+              {bilingualPlatforms.length === 0 && (
+                <p className="text-xs text-amber-600">Selecione ao menos uma plataforma para ativar legendas bilíngues</p>
+              )}
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -274,6 +274,17 @@ serve(async (req) => {
       .eq("user_id", userId)
       .maybeSingle();
 
+    // ── Load bilingual settings ──
+    const { data: userProfileForLang } = await svc.from("profiles")
+      .select("secondary_languages")
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    const secondaryLang = userProfileForLang?.secondary_languages?.[0] || null; // "en" or "es" or null
+    const bilingualPlatforms: string[] = (userCtx?.extra_context as any)?.bilingual_platforms || [];
+    const langNames: Record<string, string> = { en: "inglês", es: "espanhol" };
+    const secondaryLangName = secondaryLang ? langNames[secondaryLang] || secondaryLang : null;
+
     // ── System prompt ──
     let systemPrompt = `Você é a assistente de conteúdo do TrendPulse, uma plataforma de criação de conteúdo para redes sociais para qualquer nicho ou setor de atuação.
 
@@ -601,10 +612,13 @@ Mensagem: "${message}"`,
         let templatePlatformCaptions: Record<string, string> | null = null;
 
         try {
+          const templateBilingual = secondaryLang && bilingualPlatforms.length > 0
+            ? `\nIMPORTANTE: A legenda DEVE ser bilíngue — primeiro em português, depois "---" e a versão em ${secondaryLangName}.`
+            : "";
           const captionPrompt = `Gere uma legenda para Instagram/LinkedIn sobre este conteúdo.
 Tema: ${message}
 ${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
-${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}
+${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}${templateBilingual}
 
 Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legenda (max 300 chars)", "hashtags": ["tag1", "tag2", "tag3"] }`;
 
@@ -894,10 +908,13 @@ REGRAS:
           const topic = articleContent
             ? articleContent.substring(0, 600)
             : message;
+          const mainBilingual = secondaryLang && bilingualPlatforms.includes(platform)
+            ? `\nIMPORTANTE: A legenda DEVE ser bilíngue — primeiro em português, depois "---" e a versão em ${secondaryLangName}.`
+            : "";
           const captionPrompt = `Gere uma legenda para ${platform === "linkedin" ? "LinkedIn" : "Instagram"} sobre o tema abaixo.
 ${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
 ${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}
-Tema/Conteúdo: "${topic}"
+Tema/Conteúdo: "${topic}"${mainBilingual}
 
 Responda em JSON com 3 campos:
 - title: título curto e descritivo do conteúdo (máximo 8 palavras, SEM meta-instruções como "Crie um post", "Quero", etc — apenas o TEMA real)
@@ -950,6 +967,10 @@ JSON: { "title": "...", "caption": "...", "hashtags": ["#..."] }`;
         // 8b. Generate multi-platform caption variants (async, non-blocking)
         let platformCaptions: Record<string, string> | null = null;
         try {
+          const bilingualNote = secondaryLang && bilingualPlatforms.length > 0
+            ? `\n\nIMPORTANTE — LEGENDAS BILÍNGUES: Para as plataformas [${bilingualPlatforms.join(", ")}], a legenda DEVE ser bilíngue: primeiro o texto em português, depois uma linha "---" e o texto traduzido para ${secondaryLangName}. As outras plataformas ficam somente em português.`
+            : "";
+
           const variantPrompt = `Adapte a legenda abaixo para cada rede social. Mantenha a essência mas otimize para cada plataforma.
 
 LEGENDA ORIGINAL:
@@ -963,6 +984,7 @@ Gere versões para TODAS estas plataformas:
 - x: conciso e direto, máx 280 chars, sem hashtags (ou 1-2 no máximo)
 - tiktok: informal e com call-to-action ("salve!", "compartilhe!"), até 2200 chars
 - facebook: tom amigável, perguntas para gerar comentários, até 2000 chars
+${bilingualNote}
 
 Responda APENAS em JSON:
 { "instagram": "...", "linkedin": "...", "x": "...", "tiktok": "...", "facebook": "..." }`;
@@ -1258,10 +1280,13 @@ Responda APENAS com a imagem gerada.`;
         let caption = "";
         let hashtags: string[] = [];
         try {
+          const carouselBilingual = secondaryLang && bilingualPlatforms.includes(platform)
+            ? `\nIMPORTANTE: A legenda DEVE ser bilíngue — primeiro em português, depois "---" e a versão em ${secondaryLangName}.`
+            : "";
           const captionPrompt = `Gere uma legenda para um carrossel de ${platform === "linkedin" ? "LinkedIn" : "Instagram"} sobre: "${message}"
 ${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
 ${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}
-Legenda curta e engajante. Inclua 5-8 hashtags relevantes no final.
+Legenda curta e engajante. Inclua 5-8 hashtags relevantes no final.${carouselBilingual}
 Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
 
           const captionResp = await aiGatewayFetch({

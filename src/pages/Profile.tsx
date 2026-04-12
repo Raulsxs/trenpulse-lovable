@@ -67,6 +67,7 @@ const Profile = () => {
     preferred_audience: "gestores",
     interest_areas: [] as string[],
     rss_sources: [] as string[],
+    bilingual_platforms: [] as string[],
   });
 
   const [contentSettings, setContentSettings] = useState({
@@ -124,6 +125,7 @@ const Profile = () => {
           preferred_audience: row.preferred_audience || "gestores",
           interest_areas: row.interest_areas || [],
           rss_sources: row.rss_sources || [],
+          bilingual_platforms: [] as string[],
         });
       }
 
@@ -135,6 +137,10 @@ const Profile = () => {
           content_topics: ctxRes.data.content_topics || [],
           reference_sources: (extra.reference_sources as string[]) || [],
         });
+        // Load bilingual_platforms from extra_context
+        if (extra.bilingual_platforms) {
+          setFormData(prev => ({ ...prev, bilingual_platforms: extra.bilingual_platforms || [] }));
+        }
       }
     } catch (error) {
       console.error("Error fetching profile:", error);
@@ -231,7 +237,7 @@ const Profile = () => {
         business_niche: contentSettings.business_niche || null,
         brand_voice: contentSettings.brand_voice || null,
         content_topics: contentSettings.content_topics.length > 0 ? contentSettings.content_topics : null,
-        extra_context: { ...existingExtra, reference_sources: contentSettings.reference_sources },
+        extra_context: { ...existingExtra, reference_sources: contentSettings.reference_sources, bilingual_platforms: formData.bilingual_platforms },
       };
       const { error: ctxErr } = await supabase.from("ai_user_context").upsert(ctxPayload as any, { onConflict: 'user_id' });
 
@@ -365,6 +371,7 @@ const Profile = () => {
 
           <ProfilePreferences
             secondaryLanguages={formData.secondary_languages}
+            bilingualPlatforms={formData.bilingual_platforms}
             rssSources={formData.rss_sources}
             onChange={handleFieldChange}
           />
