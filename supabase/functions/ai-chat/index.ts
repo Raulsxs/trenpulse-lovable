@@ -40,6 +40,7 @@ const corsHeaders = {
 };
 
 const INTENTS = [
+  "GENERATE_TEMPLATE",
   "GENERATE",
   "GENERATE_CAROUSEL",
   "EDIT_CONTENT",
@@ -66,6 +67,34 @@ function detectFormat(msg: string): string {
 // ── Helper: detect if message is a quote/phrase request ──
 function detectContentStyle(msg: string): string | null {
   if (/\b(frase|citação|citacao|quote|imagem com a frase|imagem com frase|frase inspiracional|frase motivacional)\b/i.test(msg)) return "quote";
+  return null;
+}
+
+// ── Helper: detect if message should use a Blotato template ──
+interface BlotataTemplateMatch {
+  templateKey: string;
+  templateType: "tweet" | "tutorial" | "quote" | "infographic";
+}
+
+function detectBlotataTemplate(msg: string): BlotataTemplateMatch | null {
+  const m = msg.toLowerCase();
+  // Tweet card
+  if (/\b(tweet\s*card|card\s*de\s*tweet|tweet\s*visual|visual\s*de\s*tweet|estilo\s*tweet|estilo\s*twitter)\b/.test(m)) {
+    const hasPhoto = /\b(com\s+foto|foto\s+de\s+fundo|background|com\s+imagem)\b/.test(m);
+    return { templateKey: hasPhoto ? "tweet-photo" : "tweet-minimal", templateType: "tweet" };
+  }
+  // Tutorial carousel
+  if (/\b(carrossel\s+tutorial|tutorial.*passo\s*a\s*passo|passo\s*a\s*passo.*slides|carousel\s+tutorial)\b/.test(m)) {
+    return { templateKey: "tutorial-monocolor", templateType: "tutorial" };
+  }
+  // Quote card
+  if (/\b(quote\s*card|card\s*de\s*(frase|cita[çc][aã]o)|cita[çc][aã]o\s*visual)\b/.test(m)) {
+    return { templateKey: "quote-paper", templateType: "quote" };
+  }
+  // Infographic
+  if (/\b(infogr[aá]fico|infographic)\b/.test(m)) {
+    return { templateKey: "infographic-newspaper", templateType: "infographic" };
+  }
   return null;
 }
 
@@ -279,7 +308,8 @@ Seja concisa mas completa nas respostas.`;
       detectedIntent = intent_hint;
     } else {
       const classifyPrompt = `Classifique a intenção da mensagem em UMA categoria:
-- GENERATE: quer criar post, story, imagem, conteúdo visual
+- GENERATE_TEMPLATE: quer criar tweet card, card estilo twitter, carrossel tutorial passo a passo, quote card visual, citação visual, infográfico
+- GENERATE: quer criar post, story, imagem, conteúdo visual com design artístico
 - GENERATE_CAROUSEL: quer criar carrossel, múltiplos slides, série de posts, documento
 - EDIT_CONTENT: quer editar, mudar, ajustar conteúdo já existente (ex: "muda a fonte", "texto menor", "nova imagem")
 - CRIAR_MARCA: quer criar marca, identidade visual, definir cores/logo/estilo
@@ -289,6 +319,7 @@ Seja concisa mas completa nas respostas.`;
 
 IMPORTANTE: Se a mensagem contém um link (URL), classifique como LINK_PARA_POST.
 Se pede "carrossel", "múltiplos slides", "série", "documento", classifique como GENERATE_CAROUSEL.
+Se menciona "tweet card", "estilo tweet", "tutorial passo a passo", "quote card", "citação visual", "infográfico", classifique como GENERATE_TEMPLATE.
 
 Responda APENAS com o nome da categoria.
 
@@ -310,6 +341,11 @@ Mensagem: "${message}"`;
       const urlMatch = message.match(/https?:\/\/[^\s]+/);
       if (urlMatch && detectedIntent === "CHAT") {
         detectedIntent = "LINK_PARA_POST";
+      }
+
+      // Template detection: if intent is GENERATE/GENERATE_CAROUSEL but message matches a Blotato template, upgrade
+      if ((detectedIntent === "GENERATE" || detectedIntent === "GENERATE_CAROUSEL" || detectedIntent === "CHAT") && detectBlotataTemplate(message)) {
+        detectedIntent = "GENERATE_TEMPLATE";
       }
     }
 
@@ -335,6 +371,272 @@ Mensagem: "${message}"`;
     // ══════════════════════════════════════════════════════════════════════════
 
     switch (detectedIntent) {
+
+      // ════════════════════════════════════════════════════════════════════════
+      // GENERATE_TEMPLATE — Blotato template-based visual generation
+      // ════════════════════════════════════════════════════════════════════════
+      case "GENERATE_TEMPLATE": {
+        const templateMatch = detectBlotataTemplate(message);
+        if (!templateMatch) {
+          // Fallback to GENERATE if detection fails at this stage
+          console.log("[ai-chat] GENERATE_TEMPLATE: no template match, falling back to GENERATE");
+          detectedIntent = "GENERATE";
+          break; // will fall through to GENERATE case below
+        }
+
+        console.log(`[ai-chat] GENERATE_TEMPLATE: template=${templateMatch.templateKey}, type=${templateMatch.templateType}`);
+
+        // 1. Load user profile for author info
+        const { data: userProfile } = await svc.from("profiles")
+          .select("full_name, instagram_handle, avatar_url")
+          .eq("user_id", userId).maybeSingle();
+
+        const authorName = userProfile?.full_name || "Autor";
+        const authorHandle = userProfile?.instagram_handle || "";
+        const authorImage = userProfile?.avatar_url || "";
+
+        // 2. Load brand context if provided
+        let templateBrandContext = "";
+        let templateBrandSnapshot: Record<string, any> | null = null;
+        let brandColors: string[] = [];
+
+        if (requestBrandId && requestBrandId !== "none") {
+          const { data: brand } = await svc.from("brands")
+            .select("name, palette, fonts, visual_tone, do_rules, dont_rules, visual_preferences, logo_url, creation_mode")
+            .eq("id", requestBrandId).single();
+          if (brand) {
+            templateBrandSnapshot = brand;
+            brandColors = (brand.palette as any[] || []).map((c: any) => typeof c === "string" ? c : c.hex).filter(Boolean);
+            const parts: string[] = [];
+            parts.push(`Marca: ${brand.name}`);
+            if (brandColors.length) parts.push(`Cores: ${brandColors.join(", ")}`);
+            if (brand.visual_tone) parts.push(`Tom visual: ${brand.visual_tone}`);
+            if (brand.do_rules) parts.push(`FAÇA: ${brand.do_rules}`);
+            if (brand.dont_rules) parts.push(`NÃO FAÇA: ${brand.dont_rules}`);
+            templateBrandContext = parts.join("\n");
+          }
+        }
+
+        // 3. Use AI to structure content into template inputs
+        let templateInputs: Record<string, any> = {};
+        let templatePrompt = message;
+
+        const inputPrompts: Record<string, string> = {
+          tweet: `Transforme a mensagem do usuário em conteúdo para um tweet card visual.
+Extraia o conteúdo principal e divida em frases impactantes.
+${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
+${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
+${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}` : ""}
+
+Responda APENAS em JSON válido:
+{
+  "quotes": ["frase 1 do tweet", "frase 2 complementar"],
+  "theme": "light"
+}
+
+Mensagem: "${message}"`,
+
+          tutorial: `Transforme a mensagem do usuário em um carrossel tutorial educativo com 5-7 slides.
+${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
+${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
+${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}` : ""}
+
+Responda APENAS em JSON válido:
+{
+  "title": "Título do carrossel (curto, max 60 chars)",
+  "contentSlides": [
+    { "title": "Passo 1: ...", "description": "Explicação breve do passo" },
+    { "title": "Passo 2: ...", "description": "Explicação breve" }
+  ],
+  "ctaGreeting": "Gostou? Siga para mais!",
+  "ctaDescription": "Salve este post e compartilhe"
+}
+
+Mensagem: "${message}"`,
+
+          quote: `Transforme a mensagem do usuário em frases para um quote card visual.
+Divida em 4-6 frases/slides impactantes com palavras-chave em destaque.
+${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
+
+Responda APENAS em JSON válido:
+{
+  "title": "Título temático curto (max 40 chars)",
+  "quotes": ["frase 1 impactante", "frase 2 com profundidade", "frase 3 provocativa"]
+}
+
+Mensagem: "${message}"`,
+
+          infographic: `Transforme a mensagem do usuário em conteúdo para um infográfico visual.
+${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
+${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
+
+Responda APENAS em JSON válido:
+{
+  "description": "Descrição detalhada do infográfico: dados, fatos, estatísticas e informações visuais (max 500 chars)",
+  "footerText": "${authorName}"
+}
+
+Mensagem: "${message}"`,
+        };
+
+        const structPrompt = inputPrompts[templateMatch.templateType];
+        if (structPrompt) {
+          try {
+            const structResp = await aiGatewayFetch({
+              model: "openrouter/minimax-m-25",
+              messages: [{ role: "user", content: structPrompt }],
+            });
+            if (structResp.ok) {
+              const structData = await structResp.json();
+              const raw = structData.choices?.[0]?.message?.content || "";
+              const jsonMatch = raw.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                const parsed = JSON.parse(jsonMatch[0]);
+                templateInputs = parsed;
+              }
+            }
+          } catch (parseErr: any) {
+            console.warn("[ai-chat] GENERATE_TEMPLATE: AI input structuring failed:", parseErr?.message);
+          }
+        }
+
+        // 4. Enrich inputs with profile and brand data
+        if (templateMatch.templateType === "tweet" || templateMatch.templateType === "tutorial") {
+          templateInputs.authorName = authorName;
+          templateInputs.handle = authorHandle;
+          if (authorImage) templateInputs.profileImage = authorImage;
+          templateInputs.verified = false;
+        }
+
+        if (templateMatch.templateType === "tweet") {
+          templateInputs.aspectRatio = "1:1";
+        }
+
+        if (templateMatch.templateType === "tutorial") {
+          if (brandColors[0]) templateInputs.accentColor = brandColors[0];
+          if (brandColors[1]) templateInputs.introBackgroundColor = brandColors[1];
+          if (brandColors[1]) templateInputs.contentBackgroundColor = brandColors[1];
+          templateInputs.aspectRatio = "1:1";
+        }
+
+        if (templateMatch.templateType === "quote") {
+          templateInputs.aspectRatio = "1:1";
+        }
+
+        // 5. Call blotato-proxy
+        console.log(`[ai-chat] GENERATE_TEMPLATE: calling blotato-proxy with inputs:`, JSON.stringify(templateInputs).substring(0, 300));
+
+        let blotatoImageUrls: string[] = [];
+        try {
+          const blotatoResp = await fetch(`${supabaseUrl}/functions/v1/blotato-proxy`, {
+            method: "POST",
+            headers: internalHeaders,
+            body: JSON.stringify({
+              action: "create_visual",
+              templateKey: templateMatch.templateKey,
+              prompt: message,
+              inputs: templateInputs,
+            }),
+          });
+
+          if (blotatoResp.ok) {
+            const blotatoData = await blotatoResp.json();
+            blotatoImageUrls = blotatoData.imageUrls || [];
+            console.log(`[ai-chat] GENERATE_TEMPLATE: Blotato returned ${blotatoImageUrls.length} images`);
+          } else {
+            const errText = await blotatoResp.text().catch(() => "");
+            console.error(`[ai-chat] GENERATE_TEMPLATE: blotato-proxy failed: ${blotatoResp.status} ${errText.substring(0, 200)}`);
+          }
+        } catch (blotatoErr: any) {
+          console.error("[ai-chat] GENERATE_TEMPLATE: blotato-proxy error:", blotatoErr?.message);
+        }
+
+        if (blotatoImageUrls.length === 0) {
+          replyOverride = "Não foi possível gerar o visual. Tente novamente ou use outro formato.";
+          break;
+        }
+
+        // 6. Generate caption
+        let templateCaption = "";
+        let templateHashtags: string[] = [];
+        let templateTitle = templateInputs.title || message.substring(0, 80);
+        let templatePlatformCaptions: Record<string, string> | null = null;
+
+        try {
+          const captionPrompt = `Gere uma legenda para Instagram/LinkedIn sobre este conteúdo.
+Tema: ${message}
+${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
+${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}
+
+Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legenda (max 300 chars)", "hashtags": ["tag1", "tag2", "tag3"] }`;
+
+          const captionResp = await aiGatewayFetch({
+            model: "openrouter/minimax-m-25",
+            messages: [{ role: "user", content: captionPrompt }],
+          });
+
+          if (captionResp.ok) {
+            const captionData = await captionResp.json();
+            const raw = captionData.choices?.[0]?.message?.content || "";
+            const jsonMatch = raw.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              templateTitle = parsed.title || templateTitle;
+              templateCaption = parsed.caption || "";
+              templateHashtags = parsed.hashtags || [];
+            }
+          }
+        } catch (capErr: any) {
+          console.warn("[ai-chat] GENERATE_TEMPLATE: caption generation failed:", capErr?.message);
+        }
+
+        // 7. Save to generated_contents
+        const isCarousel = blotatoImageUrls.length > 1;
+        const templateSlides = blotatoImageUrls.map((url: string) => ({
+          headline: "",
+          body: "",
+          bullets: [],
+          image_url: url,
+          background_image_url: url,
+          render_mode: "ai_full_design",
+        }));
+
+        const platform = requestPlatform || detectPlatform(message);
+        const savedTemplateContentId = await persistGeneratedContent({
+          generatedContent: {
+            title: templateTitle,
+            caption: templateCaption,
+            hashtags: templateHashtags,
+            platformCaptions: templatePlatformCaptions,
+            slides: templateSlides,
+          },
+          fallbackTitle: templateTitle,
+          contentType: isCarousel ? "carousel" : "post",
+          brandId: requestBrandId || null,
+          brandSnapshot: templateBrandSnapshot,
+          platform,
+          visualMode: "blotato_template",
+        });
+
+        if (savedTemplateContentId) {
+          await svc.from("generated_contents")
+            .update({ image_urls: blotatoImageUrls })
+            .eq("id", savedTemplateContentId);
+        }
+
+        replyOverride = blotatoImageUrls.length > 1
+          ? `Carrossel gerado com ${blotatoImageUrls.length} slides! Confira abaixo.`
+          : "Visual gerado! Confira abaixo.";
+
+        actionResult = savedTemplateContentId ? {
+          content_id: savedTemplateContentId,
+          content_type: isCarousel ? "carousel" : "post",
+          platform,
+          preview_image_url: blotatoImageUrls[0],
+        } : null;
+
+        break;
+      }
 
       // ════════════════════════════════════════════════════════════════════════
       // GENERATE — Single post/story image generation
