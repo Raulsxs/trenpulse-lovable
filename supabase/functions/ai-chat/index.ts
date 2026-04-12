@@ -73,7 +73,7 @@ function detectContentStyle(msg: string): string | null {
 // ── Helper: detect if message should use a Blotato template ──
 interface BlotataTemplateMatch {
   templateKey: string;
-  templateType: "tweet" | "tutorial" | "quote" | "infographic" | "video";
+  templateType: "tweet" | "tutorial" | "quote" | "infographic" | "video" | "product" | "before-after";
 }
 
 function detectBlotataTemplate(msg: string): BlotataTemplateMatch | null {
@@ -98,6 +98,14 @@ function detectBlotataTemplate(msg: string): BlotataTemplateMatch | null {
   // Video / Reels
   if (/\b(v[ií]deo\s*reels|reels|v[ií]deo\s*IA|v[ií]deo\s*para\s*(instagram|tiktok|reels)|crie\s*um\s*v[ií]deo)\b/.test(m)) {
     return { templateKey: "video-story", templateType: "video" };
+  }
+  // Product placement
+  if (/\b(product\s*placement|produto\s*(em|no|na)\s*(cen[aá]rio|ambiente|contexto)|coloque\s*(meu|o)\s*produto|foto\s*do\s*produto)\b/.test(m)) {
+    return { templateKey: "product-placement", templateType: "product" };
+  }
+  // Before/After comparison
+  if (/\b(antes\s*e?\s*depois|before.*after|compara[çc][aã]o|antes\s*vs|antes\s*x\s*depois)\b/.test(m)) {
+    return { templateKey: "before-after", templateType: "before-after" };
   }
   return null;
 }
@@ -334,7 +342,7 @@ Seja concisa mas completa nas respostas.`;
 
 IMPORTANTE: Se a mensagem contém um link (URL), classifique como LINK_PARA_POST.
 Se pede "carrossel", "múltiplos slides", "série", "documento", classifique como GENERATE_CAROUSEL.
-Se menciona "tweet card", "estilo tweet", "tutorial passo a passo", "quote card", "citação visual", "infográfico", "vídeo reels", "crie um vídeo", classifique como GENERATE_TEMPLATE.
+Se menciona "tweet card", "estilo tweet", "tutorial passo a passo", "quote card", "citação visual", "infográfico", "vídeo reels", "crie um vídeo", "produto em cenário", "product placement", "antes e depois", "before after", classifique como GENERATE_TEMPLATE.
 
 Responda APENAS com o nome da categoria.
 
@@ -509,6 +517,34 @@ Responda APENAS em JSON válido:
 }
 
 Mensagem: "${message}"`,
+
+          product: `O usuário quer colocar um produto em um cenário profissional gerado por IA.
+Extraia da mensagem: qual é o produto e que tipo de cenário/ambiente ele quer.
+${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
+
+Responda APENAS em JSON válido:
+{
+  "sceneDescription": "Descrição detalhada do cenário desejado em inglês (para IA gerar, max 200 chars). Ex: 'Modern minimalist kitchen counter with soft morning light, marble surface'"
+}
+
+Mensagem: "${message}"`,
+
+          "before-after": `Crie um conteúdo visual de comparação "Antes vs Depois" sobre o tema do usuário.
+Pense em um cenário de transformação claro e impactante.
+${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
+${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
+
+Responda APENAS em JSON válido:
+{
+  "firstSlideText": "Texto de abertura chamativo (max 60 chars)",
+  "firstSlideImagePrompt": "Descrição visual do cenário ANTES em inglês (para IA gerar imagem)",
+  "comparisonTextTop": "ANTES: frase curta descrevendo o problema",
+  "comparisonTextBottom": "DEPOIS: frase curta descrevendo a solução",
+  "lastSlideText": "CTA final motivacional (max 60 chars)",
+  "lastSlideImagePrompt": "Descrição visual do cenário DEPOIS em inglês (para IA gerar imagem)"
+}
+
+Mensagem: "${message}"`,
         };
 
         const structPrompt = inputPrompts[templateMatch.templateType];
@@ -568,6 +604,11 @@ Mensagem: "${message}"`,
               voiceoverScript: s.voiceoverScript || s.script || "",
             }));
           }
+        }
+
+        if (templateMatch.templateType === "before-after") {
+          templateInputs.aspectRatio = "1:1";
+          templateInputs.slideDuration = 4;
         }
 
         // 5. Call blotato-proxy
@@ -911,15 +952,34 @@ REGRAS:
           const mainBilingual = secondaryLang && bilingualPlatforms.includes(platform)
             ? `\nIMPORTANTE: A legenda DEVE ser bilíngue — primeiro em português, depois "---" e a versão em ${secondaryLangName}.`
             : "";
-          const captionPrompt = `Gere uma legenda para ${platform === "linkedin" ? "LinkedIn" : "Instagram"} sobre o tema abaixo.
-${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
-${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}
-Tema/Conteúdo: "${topic}"${mainBilingual}
+          const platformRules = platform === "linkedin"
+            ? `REGRAS LINKEDIN:
+- Tom profissional e corporativo, como um especialista compartilhando insight valioso
+- Comece com um gancho forte (pergunta provocativa, dado surpreendente ou afirmação ousada)
+- Use parágrafos curtos (2-3 linhas) com espaçamento entre eles
+- Inclua um CTA no final (pergunta aberta para gerar comentários)
+- Máx 3000 chars. Sem excesso de emojis (1-2 no máximo). Sem hashtags no meio do texto.
+- 3-5 hashtags relevantes apenas no final`
+            : `REGRAS INSTAGRAM:
+- Tom ${userCtx?.brand_voice || "natural"} e acessível, como se falasse com um seguidor próximo
+- Comece com um gancho que pare o scroll (frase curta e impactante na primeira linha)
+- Use emojis com moderação para dar ritmo visual
+- Inclua CTA claro (salve, compartilhe, comente)
+- Máx 2200 chars. 8-12 hashtags no final separados do texto.`;
+
+          const captionPrompt = `Você é um especialista em copywriting para redes sociais. Gere uma legenda de alta qualidade para ${platform === "linkedin" ? "LinkedIn" : "Instagram"}.
+
+${platformRules}
+
+${userCtx?.business_niche ? `NICHO DO AUTOR: ${userCtx.business_niche} — use como contexto de fundo para adaptar a linguagem e exemplos.` : ""}
+${userCtx?.brand_voice ? `TOM DE VOZ: ${userCtx.brand_voice}` : ""}
+
+TEMA/CONTEÚDO: "${topic}"${mainBilingual}
 
 Responda em JSON com 3 campos:
-- title: título curto e descritivo do conteúdo (máximo 8 palavras, SEM meta-instruções como "Crie um post", "Quero", etc — apenas o TEMA real)
-- caption: legenda engajante para a rede social
-- hashtags: array de 5-8 hashtags relevantes
+- title: título curto e descritivo (máximo 8 palavras, SEM meta-instruções — apenas o TEMA real)
+- caption: legenda completa seguindo as regras acima (gancho + desenvolvimento + CTA)
+- hashtags: array de 5-8 hashtags relevantes e específicas (não genéricas)
 
 JSON: { "title": "...", "caption": "...", "hashtags": ["#..."] }`;
 
@@ -971,19 +1031,19 @@ JSON: { "title": "...", "caption": "...", "hashtags": ["#..."] }`;
             ? `\n\nIMPORTANTE — LEGENDAS BILÍNGUES: Para as plataformas [${bilingualPlatforms.join(", ")}], a legenda DEVE ser bilíngue: primeiro o texto em português, depois uma linha "---" e o texto traduzido para ${secondaryLangName}. As outras plataformas ficam somente em português.`
             : "";
 
-          const variantPrompt = `Adapte a legenda abaixo para cada rede social. Mantenha a essência mas otimize para cada plataforma.
+          const variantPrompt = `Você é um copywriter especialista em cada rede social. Adapte a legenda abaixo mantendo a essência mas otimizando RADICALMENTE para cada plataforma. NÃO é tradução — cada versão deve parecer nativa daquela rede.
 
 LEGENDA ORIGINAL:
 ${caption}
 
 HASHTAGS: ${hashtags.join(" ")}
 
-Gere versões para TODAS estas plataformas:
-- instagram: tom casual, emojis moderados, 8-12 hashtags no final, até 2200 chars
-- linkedin: tom profissional e corporativo, poucos emojis, sem hashtags excessivos, até 3000 chars
-- x: conciso e direto, máx 280 chars, sem hashtags (ou 1-2 no máximo)
-- tiktok: informal e com call-to-action ("salve!", "compartilhe!"), até 2200 chars
-- facebook: tom amigável, perguntas para gerar comentários, até 2000 chars
+REGRAS POR PLATAFORMA:
+- instagram: Gancho forte na 1a linha (pare o scroll). Tom ${userCtx?.brand_voice || "casual"}, emojis moderados. CTA (salve/compartilhe). 8-12 hashtags NO FINAL (separados). Máx 2200 chars.
+- linkedin: Tom de especialista/thought leader. Comece com dado ou insight surpreendente. Parágrafos curtos. Pergunta no final para gerar debate. 3-5 hashtags discretos. Máx 3000 chars.
+- x: Conciso, opinião forte, provocativo. Máx 280 chars. 0-2 hashtags. Sem emojis excessivos.
+- tiktok: Super informal, enérgico, com urgência. CTA direto ("salve agora!", "manda pra alguém!"). Emojis ok. Máx 2200 chars.
+- facebook: Tom amigável e conversacional. Pergunta aberta no início OU final para comentários. Pode ser mais longo. Máx 2000 chars.
 ${bilingualNote}
 
 Responda APENAS em JSON:
@@ -1148,19 +1208,31 @@ Responda APENAS em JSON:
           ? `Baseado neste artigo: ${articleContent.substring(0, 2000)}`
           : message;
 
-        const structurePrompt = `Crie a estrutura de um carrossel de ${slideCount} slides para ${platform === "linkedin" ? "LinkedIn" : "Instagram"}.
+        const carouselPlatformGuide = platform === "linkedin"
+          ? `FORMATO LINKEDIN DOCUMENT:
+- Slide 1 (CAPA): Título provocativo que gere curiosidade profissional (máx 8 palavras). Use dado ou pergunta.
+- Slides 2-${slideCount - 1} (CONTEÚDO): Cada slide = 1 ideia clara. Headline forte + body conciso + bullets com dados/exemplos.
+- Slide ${slideCount} (CTA): Convide para comentar ("Qual desses pontos mais impacta seu negócio?") + "Siga para mais insights".
+- Tom: executivo, baseado em dados, insights acionáveis.`
+          : `FORMATO INSTAGRAM CARROSSEL:
+- Slide 1 (CAPA): Gancho irresistível que faça deslizar (máx 8 palavras). Pode ser pergunta, afirmação ousada ou promessa.
+- Slides 2-${slideCount - 1} (CONTEÚDO): 1 ponto por slide. Headline emocional + body didático + bullets práticos.
+- Slide ${slideCount} (CTA): "Salve para consultar depois" + "Compartilhe com quem precisa" + "Siga @handle".
+- Tom: ${userCtx?.brand_voice || "educativo e acessível"}, como se ensinasse a um amigo.`;
+
+        const structurePrompt = `Você é um estrategista de conteúdo especialista em carrosseis virais. Crie ${slideCount} slides.
 
 TEMA: ${userTopic}
-${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
-${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}
+${userCtx?.business_niche ? `NICHO DO AUTOR: ${userCtx.business_niche}` : ""}
 
-Regras:
-- Slide 1: capa impactante (título curto, máx 8 palavras)
-- Slides 2-${slideCount - 1}: conteúdo educativo/informativo (headline curta + body com 2-3 bullets)
-- Slide ${slideCount}: CTA (chamada para ação)
-- Cada headline: máx 60 caracteres
-- Cada body: máx 200 caracteres
-- Cada bullet: máx 120 caracteres
+${carouselPlatformGuide}
+
+REGRAS DE COPY:
+- Cada headline: máx 60 caracteres, impactante, sem filler words
+- Cada body: máx 200 caracteres, direto ao ponto
+- Cada bullet: máx 120 caracteres, comece com verbo de ação ou dado
+- Evite clichês genéricos ("neste post vou ensinar", "você sabia que")
+- Use números específicos quando possível ("3 erros", "aumento de 47%")
 
 Responda em JSON:
 {

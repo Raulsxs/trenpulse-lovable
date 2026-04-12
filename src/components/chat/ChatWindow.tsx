@@ -89,6 +89,9 @@ const DEFAULT_TEMPLATES = [
   { id: "infographic", emoji: "📊", label: "Infográfico", template: "Crie um infográfico detalhado com dados, estatísticas e informações visuais organizadas sobre: " },
   { id: "link-post", emoji: "🔗", label: "Post de Link/Notícia", template: "Crie um post baseado neste link, extraindo os pontos principais e criando um visual profissional: " },
   { id: "photo-phrase", emoji: "📸", label: "Foto + Frase", template: "Crie uma imagem usando minha foto pessoal como fundo com uma frase inspiracional de autoridade sobre: " },
+  { id: "before-after", emoji: "🔄", label: "Antes e Depois", template: "Crie um visual de comparação antes e depois mostrando a transformação sobre: " },
+  { id: "product", emoji: "🛍️", label: "Produto em Cenário", template: "Coloque meu produto em um cenário profissional gerado por IA. Produto: " },
+  { id: "reels", emoji: "🎬", label: "Vídeo Reels", template: "Crie um vídeo Reels com narração IA e imagens profissionais sobre: " },
 ];
 
 function getGreeting(): string {

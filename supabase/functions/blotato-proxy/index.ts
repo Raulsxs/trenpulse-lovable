@@ -38,6 +38,12 @@ const TEMPLATES: Record<string, string> = {
   "video-story": "/base/v2/ai-story-video/5903fe43-514d-40ee-a060-0d6628c5f8fd/v1",
   // Credit-based — slideshow video
   "image-slideshow": "/base/v2/image-slideshow/5903b592-1255-43b4-b9ac-f8ed7cbf6a5f/v1",
+  // Free — combine clips (0 credits)
+  "combine-clips": "/base/v2/combine-clips/c306ae43-1dcc-4f45-ac2b-88e75430ffd8/v1",
+  // Credit-based — product placement
+  "product-placement": "f524614b-ba01-448c-967a-ce518c52a700",
+  // Credit-based — before/after comparison
+  "before-after": "/base/v2/images-with-text/c9892c3b-fa75-4ade-821a-a50ff8456230/v1",
 };
 
 const respond = (body: any, status = 200) =>
