@@ -480,9 +480,12 @@ ${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}` : ""}
 Responda APENAS em JSON válido:
 {
   "title": "Título do carrossel (curto, max 60 chars)",
-  "contentSlides": [
-    { "title": "Passo 1: ...", "description": "Explicação breve do passo" },
-    { "title": "Passo 2: ...", "description": "Explicação breve" }
+  "contentItems": [
+    { "title": "Passo 1: ...", "description": "Explicação breve do passo (max 120 chars)" },
+    { "title": "Passo 2: ...", "description": "Explicação breve (max 120 chars)" },
+    { "title": "Passo 3: ...", "description": "Explicação breve (max 120 chars)" },
+    { "title": "Passo 4: ...", "description": "Explicação breve (max 120 chars)" },
+    { "title": "Passo 5: ...", "description": "Explicação breve (max 120 chars)" }
   ],
   "ctaGreeting": "Gostou? Siga para mais!",
   "ctaDescription": "Salve este post e compartilhe"
@@ -599,8 +602,26 @@ Mensagem: "${message}"`,
           const topicText = message.replace(/^.*?(sobre|com a frase|visual)\s*:?\s*/i, "").trim() || message;
           templateInputs.quotes = [topicText];
         }
-        if (templateMatch.templateType === "tutorial" && !templateInputs.contentSlides?.length && !templateInputs.contentItems?.length) {
-          templateInputs.title = message.replace(/^.*?(sobre|passo a passo)\s*:?\s*/i, "").trim().substring(0, 60);
+        if (templateMatch.templateType === "tutorial") {
+          // Map contentSlides → contentItems if AI used the old field name
+          if (templateInputs.contentSlides?.length && !templateInputs.contentItems?.length) {
+            templateInputs.contentItems = templateInputs.contentSlides;
+            delete templateInputs.contentSlides;
+          }
+          // Fallback: if AI produced no content, generate minimal default slides
+          if (!templateInputs.contentItems?.length) {
+            const topic = message.replace(/^.*?(sobre|passo a passo)\s*:?\s*/i, "").trim().substring(0, 60) || message.substring(0, 60);
+            templateInputs.title = templateInputs.title || topic;
+            templateInputs.contentItems = [
+              { title: "Passo 1: Introdução", description: `Conheça os fundamentos de: ${topic}` },
+              { title: "Passo 2: Preparação", description: "Prepare tudo o que você precisa antes de começar" },
+              { title: "Passo 3: Execução", description: "Coloque em prática seguindo cada etapa com atenção" },
+              { title: "Passo 4: Revisão", description: "Verifique o resultado e faça os ajustes necessários" },
+              { title: "Passo 5: Conclusão", description: "Parabéns! Você completou todas as etapas" },
+            ];
+          }
+          if (!templateInputs.ctaGreeting) templateInputs.ctaGreeting = "Gostou? Siga para mais!";
+          if (!templateInputs.ctaDescription) templateInputs.ctaDescription = "Salve este post e compartilhe";
         }
 
         // 4. Enrich inputs with profile and brand data
