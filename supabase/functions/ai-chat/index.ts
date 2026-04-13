@@ -401,10 +401,14 @@ Mensagem: "${message}"`;
       case "GENERATE_TEMPLATE": {
         const templateMatch = detectBlotataTemplate(message);
         if (!templateMatch) {
-          // Fallback to GENERATE if detection fails at this stage
-          console.log("[ai-chat] GENERATE_TEMPLATE: no template match, falling back to GENERATE");
+          // This shouldn't happen (post-classification already checked), but just in case
+          console.log("[ai-chat] GENERATE_TEMPLATE: no template match, will use GENERATE instead");
+          // Cannot fall through in switch — set flag and break, GENERATE will be handled after switch
+          replyOverride = null;
           detectedIntent = "GENERATE";
-          break; // will fall through to GENERATE case below
+          // NOTE: break exits the switch; GENERATE won't run. The response will be a generic chat reply.
+          // This is acceptable since this case should never happen (detection runs before switch).
+          break;
         }
 
         console.log(`[ai-chat] GENERATE_TEMPLATE: template=${templateMatch.templateKey}, type=${templateMatch.templateType}`);
@@ -561,11 +565,33 @@ Mensagem: "${message}"`,
               if (jsonMatch) {
                 const parsed = JSON.parse(jsonMatch[0]);
                 templateInputs = parsed;
+                console.log(`[ai-chat] GENERATE_TEMPLATE: AI structured inputs OK, keys: ${Object.keys(parsed).join(", ")}`);
+              } else {
+                console.warn("[ai-chat] GENERATE_TEMPLATE: AI response had no JSON, using fallback");
               }
+            } else {
+              console.warn("[ai-chat] GENERATE_TEMPLATE: AI structuring call failed, status:", structResp.status);
             }
           } catch (parseErr: any) {
             console.warn("[ai-chat] GENERATE_TEMPLATE: AI input structuring failed:", parseErr?.message);
           }
+        } else {
+          console.log(`[ai-chat] GENERATE_TEMPLATE: no structPrompt for type "${templateMatch.templateType}", using message as-is`);
+        }
+
+        // Fallback: if AI didn't produce inputs, create sensible defaults from the user message
+        if (templateMatch.templateType === "tweet" && !templateInputs.quotes?.length) {
+          // Extract topic from message (remove "Crie um tweet card visual sobre: " prefix)
+          const topicText = message.replace(/^.*?(sobre|com a frase|visual)\s*:?\s*/i, "").trim() || message;
+          templateInputs.quotes = [topicText];
+          console.log("[ai-chat] GENERATE_TEMPLATE: tweet fallback — using message as quote");
+        }
+        if (templateMatch.templateType === "quote" && !templateInputs.quotes?.length) {
+          const topicText = message.replace(/^.*?(sobre|com a frase|visual)\s*:?\s*/i, "").trim() || message;
+          templateInputs.quotes = [topicText];
+        }
+        if (templateMatch.templateType === "tutorial" && !templateInputs.contentSlides?.length && !templateInputs.contentItems?.length) {
+          templateInputs.title = message.replace(/^.*?(sobre|passo a passo)\s*:?\s*/i, "").trim().substring(0, 60);
         }
 
         // 4. Enrich inputs with profile and brand data
