@@ -450,15 +450,23 @@ Mensagem: "${message}"`;
         let templatePrompt = message;
 
         const inputPrompts: Record<string, string> = {
-          tweet: `Transforme a mensagem do usuário em conteúdo para um tweet card visual.
-Extraia o conteúdo principal e divida em frases impactantes.
+          tweet: `Transforme a mensagem do usuário em conteúdo para um CARROSSEL estilo tweet/Twitter.
+Crie 4-6 frases impactantes que formem uma narrativa — como um thread do Twitter.
+Cada frase será um slide separado do carrossel.
 ${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
 ${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
 ${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}` : ""}
 
+REGRAS:
+- Frase 1: gancho provocativo que prende atenção (pode incluir dado ou pergunta)
+- Frases 2-4: desenvolvimento do argumento, uma ideia por frase, use **negrito** em palavras-chave
+- Frase 5-6: conclusão forte + CTA ("Salve e compartilhe")
+- Cada frase: 1-3 parágrafos curtos, máx 280 chars por frase
+- Tom: autoridade, como um especialista compartilhando insight valioso
+
 Responda APENAS em JSON válido:
 {
-  "quotes": ["frase 1 do tweet", "frase 2 complementar"],
+  "quotes": ["frase 1 (gancho)", "frase 2 (argumento)", "frase 3", "frase 4", "frase 5 (conclusão/CTA)"],
   "theme": "light"
 }
 
