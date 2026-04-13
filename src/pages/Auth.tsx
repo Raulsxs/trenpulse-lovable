@@ -10,6 +10,21 @@ import { toast } from "sonner";
 import { TrendingUp, Sparkles, BarChart3, Zap, Eye, EyeOff, ArrowLeft, ChevronRight, X, Loader2 } from "lucide-react";
 
 const SAVED_ACCOUNTS_KEY = "tp_saved_accounts";
+const MAX_SAVED_ACCOUNTS = 5;
+
+function saveAccounts(accounts: SavedAccount[]): void {
+  const trimmed = accounts.slice(-MAX_SAVED_ACCOUNTS);
+  try {
+    localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(trimmed));
+  } catch {
+    // localStorage quota exceeded — drop oldest account and retry once
+    try {
+      localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(trimmed.slice(1)));
+    } catch {
+      // give up silently — user just won't have multi-account on this device
+    }
+  }
+}
 
 interface SavedAccount {
   userId: string;
@@ -78,7 +93,7 @@ const Auth = () => {
         const idx = stored.findIndex(a => a.userId === uid);
         const acct: SavedAccount = { userId: uid, email: em, name: nm, accessToken: newSession.access_token, refreshToken: newSession.refresh_token };
         if (idx >= 0) stored[idx] = acct; else stored.push(acct);
-        localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(stored));
+        saveAccounts(stored);
       }
 
       window.location.href = "/chat";
@@ -88,7 +103,7 @@ const Auth = () => {
         try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
       })();
       const updated = stored.filter(a => a.userId !== account.userId);
-      localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updated));
+      saveAccounts(updated);
       window.location.href = `/auth?email=${encodeURIComponent(account.email)}&expired=1`;
     } finally {
       setLoadingAccountId(null);
@@ -98,7 +113,7 @@ const Auth = () => {
   const handleRemoveAccount = (e: React.MouseEvent, userId: string) => {
     e.stopPropagation();
     const updated = savedAccounts.filter(a => a.userId !== userId);
-    localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updated));
+    saveAccounts(updated);
     setSavedAccounts(updated);
     if (updated.length === 0) setMode("login");
   };
@@ -142,7 +157,7 @@ const Auth = () => {
         const idx = stored.findIndex(a => a.userId === uid);
         const acct: SavedAccount = { userId: uid, email: em, name: nm, accessToken: session.access_token, refreshToken: session.refresh_token };
         if (idx >= 0) stored[idx] = acct; else stored.push(acct);
-        localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(stored));
+        saveAccounts(stored);
       }
 
       navigate("/chat");
