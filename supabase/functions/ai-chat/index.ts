@@ -365,16 +365,17 @@ Mensagem: "${message}"`;
       if (urlMatch && detectedIntent === "CHAT") {
         detectedIntent = "LINK_PARA_POST";
       }
-
-      // Template detection: if intent is GENERATE/GENERATE_CAROUSEL but message matches a Blotato template, upgrade
-      if ((detectedIntent === "GENERATE" || detectedIntent === "GENERATE_CAROUSEL" || detectedIntent === "CHAT") && detectBlotataTemplate(message)) {
-        detectedIntent = "GENERATE_TEMPLATE";
-      }
     }
 
     // LINK_PARA_POST is treated as GENERATE (with URL extraction)
     if (detectedIntent === "LINK_PARA_POST") {
       detectedIntent = "GENERATE";
+    }
+
+    // Template detection AFTER all conversions — if message matches a Blotato template, upgrade
+    // This runs last so it takes priority over GENERATE/GENERATE_CAROUSEL
+    if ((detectedIntent === "GENERATE" || detectedIntent === "GENERATE_CAROUSEL" || detectedIntent === "CHAT") && detectBlotataTemplate(message)) {
+      detectedIntent = "GENERATE_TEMPLATE";
     }
 
     // ── Process intent-specific actions ──
