@@ -78,15 +78,21 @@ Deno.serve(async (req) => {
               : [];
 
             if (pfmAccounts.length > 0) {
-              const connections = pfmAccounts.map((a: any) => ({
+              // Filter accounts that belong to this user (by external_id)
+              const userAccounts = pfmAccounts.filter((a: any) =>
+                a.external_id === user.id || !a.external_id
+              );
+              console.log(`[connect-social] PFM accounts total: ${pfmAccounts.length}, for user ${user.id}: ${userAccounts.length}`);
+
+              const connections = userAccounts.map((a: any) => ({
                 user_id: user.id,
                 platform: a.platform || "unknown",
                 pfm_account_id: a.id || a.account_id || null,
                 status: "connected",
-                account_name: a.name || a.username || a.account_name || a.display_name || null,
+                account_name: a.username || a.name || a.account_name || a.display_name || null,
               }));
 
-              // Sync to our DB
+              // Sync to our DB (best-effort, don't block response)
               for (const conn of connections) {
                 if (conn.pfm_account_id) {
                   await svc.from("social_connections").upsert({
@@ -96,9 +102,7 @@ Deno.serve(async (req) => {
                     status: conn.status,
                     account_name: conn.account_name,
                     connected_at: new Date().toISOString(),
-                  }, { onConflict: "user_id,platform" }).catch((e: any) => {
-                    console.warn("[connect-social] sync upsert failed:", e?.message);
-                  });
+                  }, { onConflict: "user_id,platform", ignoreDuplicates: true }).catch(() => {});
                 }
               }
 
