@@ -419,14 +419,12 @@ Mensagem: "${message}"`;
           .select("full_name, instagram_handle, avatar_url")
           .eq("user_id", userId).maybeSingle();
 
-        const authorName = userProfile?.full_name || "Autor";
-        const authorHandle = userProfile?.instagram_handle || "";
-        const authorImage = userProfile?.avatar_url || "";
-
         // 2. Load brand context if provided
         let templateBrandContext = "";
         let templateBrandSnapshot: Record<string, any> | null = null;
         let brandColors: string[] = [];
+        let brandName = "";
+        let brandLogo = "";
 
         if (requestBrandId && requestBrandId !== "none") {
           const { data: brand } = await svc.from("brands")
@@ -434,6 +432,8 @@ Mensagem: "${message}"`;
             .eq("id", requestBrandId).single();
           if (brand) {
             templateBrandSnapshot = brand;
+            brandName = brand.name || "";
+            brandLogo = brand.logo_url || "";
             brandColors = (brand.palette as any[] || []).map((c: any) => typeof c === "string" ? c : c.hex).filter(Boolean);
             const parts: string[] = [];
             parts.push(`Marca: ${brand.name}`);
@@ -444,6 +444,11 @@ Mensagem: "${message}"`;
             templateBrandContext = parts.join("\n");
           }
         }
+
+        // Author info: prefer brand name/logo when a brand is active
+        const authorName = brandName || userProfile?.full_name || "Autor";
+        const authorHandle = userProfile?.instagram_handle || "";
+        const authorImage = brandLogo || userProfile?.avatar_url || "";
 
         // 3. Use AI to structure content into template inputs
         let templateInputs: Record<string, any> = {};
