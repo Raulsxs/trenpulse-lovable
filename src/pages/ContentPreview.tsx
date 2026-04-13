@@ -654,12 +654,10 @@ const ContentPreview = () => {
         );
       }
 
-      const isLinkedIn = content?.platform === "linkedin";
-      const publishFn = isLinkedIn ? "publish-linkedin" : "publish-instagram";
-      const platformName = isLinkedIn ? "LinkedIn" : "Instagram";
+      const platformName = content?.platform === "linkedin" ? "LinkedIn" : "Instagram";
 
-      const { data, error } = await supabase.functions.invoke(publishFn, {
-        body: { content_id: id, composite_urls: compositeUrls },
+      const { data, error } = await supabase.functions.invoke("publish-postforme", {
+        body: { contentId: id, platforms: [content?.platform || "instagram"] },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
@@ -667,7 +665,7 @@ const ContentPreview = () => {
       toast.success(`Publicado no ${platformName} com sucesso! 🎉`);
     } catch (error) {
       console.error("Publish error:", error);
-      toast.error("Erro ao publicar no Instagram", {
+      toast.error("Erro ao publicar", {
         description: error instanceof Error ? error.message : "Tente novamente",
       });
     } finally {

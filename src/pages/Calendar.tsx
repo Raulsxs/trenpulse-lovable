@@ -387,13 +387,11 @@ const Calendar = () => {
         content.id,
       );
 
-      const isLinkedIn = content.platform === "linkedin";
-      const publishFn = isLinkedIn ? "publish-linkedin" : "publish-instagram";
-      const platformName = isLinkedIn ? "LinkedIn" : "Instagram";
+      const platformName = content.platform === "linkedin" ? "LinkedIn" : "Instagram";
 
       toast.info(`Publicando no ${platformName}...`, { duration: 8000 });
-      const { data, error } = await supabase.functions.invoke(publishFn, {
-        body: { content_id: content.id, composite_urls: compositeUrls },
+      const { data, error } = await supabase.functions.invoke("publish-postforme", {
+        body: { contentId: content.id, platforms: [content.platform || "instagram"] },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
