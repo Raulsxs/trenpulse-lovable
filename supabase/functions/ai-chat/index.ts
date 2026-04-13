@@ -613,6 +613,9 @@ Mensagem: "${message}"`,
 
         if (templateMatch.templateType === "tweet") {
           templateInputs.aspectRatio = "1:1";
+          // Apply brand colors to tweet card
+          if (brandColors[0]) templateInputs.accentColor = brandColors[0];
+          if (brandColors[1]) templateInputs.backgroundColor = brandColors[1];
         }
 
         if (templateMatch.templateType === "tutorial") {
@@ -1499,6 +1502,25 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
         const existingPlatform = existing.platform || "instagram";
         const existingFormat = existing.content_type || "post";
 
+        // Load brand context for edit prompt
+        let editBrandContext = "";
+        if (existing.brand_id) {
+          const { data: editBrand } = await svc.from("brands")
+            .select("name, palette, fonts, visual_tone, do_rules, dont_rules")
+            .eq("id", existing.brand_id).single();
+          if (editBrand) {
+            const bParts: string[] = [];
+            if (editBrand.name) bParts.push(`Marca: ${editBrand.name}`);
+            const bColors = ((editBrand.palette as any[]) || []).map((c: any) => typeof c === "string" ? c : c.hex).filter(Boolean);
+            if (bColors.length) bParts.push(`Cores da marca: ${bColors.join(", ")}`);
+            if ((editBrand.fonts as any)?.headings) bParts.push(`Fonte títulos: ${(editBrand.fonts as any).headings}`);
+            if (editBrand.visual_tone) bParts.push(`Tom visual: ${editBrand.visual_tone}`);
+            if (editBrand.do_rules) bParts.push(`FAÇA: ${editBrand.do_rules}`);
+            if (editBrand.dont_rules) bParts.push(`NÃO FAÇA: ${editBrand.dont_rules}`);
+            editBrandContext = bParts.join("\n");
+          }
+        }
+
         // Resolve dimension label so inference.sh generates the correct aspect ratio
         const isLinkedInPost = existingPlatform === "linkedin" && existingFormat !== "document" && existingFormat !== "story";
         const isDocument = existingFormat === "document";
@@ -1516,7 +1538,7 @@ Você está editando uma imagem de ${platformLabel} (${existingFormat}).
 A imagem de referência fornecida é o conteúdo atual — use-a como base visual.
 
 O QUE MUDAR: ${instruction}
-
+${editBrandContext ? `\nIDENTIDADE VISUAL DA MARCA (mantenha estas referências na edição):\n${editBrandContext}\n` : ""}
 REGRAS:
 - Aplique APENAS a mudança pedida acima. Mantenha tudo o mais igual possível.
 - Se pede mudança de cor: altere a cor mantendo layout e texto.

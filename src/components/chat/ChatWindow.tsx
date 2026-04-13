@@ -369,10 +369,15 @@ export default function ChatWindow() {
                 },
               ]);
               setBrandCreationStep(null);
-              // Reload brands list after brand creation
+              // Reload brands list and auto-select newly created brand
               supabase.from("brands").select("id, name").eq("owner_user_id", userId)
                 .order("created_at", { ascending: false })
-                .then(({ data }) => { if (data) setBrands(data); });
+                .then(({ data }) => {
+                  if (data) {
+                    setBrands(data);
+                    if (data[0]?.id) setSelectedBrandId(data[0].id);
+                  }
+                });
               toast.success('Marca criada com sucesso! 🎨');
             }
 
@@ -675,11 +680,14 @@ export default function ChatWindow() {
 
         // If step 4 returned with trigger_analyze, fire brand analysis in a separate request
         if (bcStep === 4 && data?.action_result?.trigger_analyze && data?.action_result?.brand_id) {
+          const newBrandId = data.action_result.brand_id;
+          // Auto-select the newly created brand
+          setSelectedBrandId(newBrandId);
           supabase.functions.invoke('ai-chat', {
             body: {
               message: 'CRIAR_MARCA_ANALYZE',
               intent_hint: 'CRIAR_MARCA_ANALYZE',
-              generationParams: { brandId: data.action_result.brand_id },
+              generationParams: { brandId: newBrandId },
             },
           }).catch(err => console.error('[CRIAR_MARCA_ANALYZE] background error:', err));
         }
