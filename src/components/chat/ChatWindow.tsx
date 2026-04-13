@@ -77,9 +77,6 @@ const QUICK_ACTIONS = [
   { emoji: "💼", label: "LinkedIn", template: "Crie um post para LinkedIn sobre: " },
   { emoji: "💬", label: "Frase", template: "Crie uma imagem com a frase: " },
   { emoji: "🐦", label: "Tweet", template: "Crie um tweet card visual sobre: " },
-  { emoji: "📚", label: "Tutorial", template: "Crie um carrossel tutorial passo a passo com slides educativos, cada slide explicando uma etapa clara sobre: " },
-  { emoji: "💎", label: "Citação", template: "Crie um quote card visual com frase motivacional e inspiracional, tipografia elegante sobre: " },
-  { emoji: "📊", label: "Infográfico", template: "Crie um infográfico detalhado com dados, estatísticas e informações visuais organizadas sobre: " },
 ];
 
 // Default prompt templates: richer prompts for better results
