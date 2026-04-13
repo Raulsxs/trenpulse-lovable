@@ -254,6 +254,7 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
       onConfirm={(editedFile) => { setEditorOpen(false); setEditorFile(null); doSingleUpload(editedFile); }}
       onCancel={() => { setEditorOpen(false); setEditorFile(null); }}
       title="Ajustar imagem de referência"
+      autoRatio
     />
     <div className="space-y-4">
       <div className="flex items-center justify-between">

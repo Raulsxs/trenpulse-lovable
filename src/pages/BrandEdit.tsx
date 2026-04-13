@@ -18,6 +18,15 @@ import BrandPhotoBackgrounds from "@/components/studio/BrandPhotoBackgrounds";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
+const FONT_OPTIONS = [
+  "Inter", "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins",
+  "Raleway", "Nunito", "Oswald", "Playfair Display", "Merriweather",
+  "PT Sans", "Source Sans Pro", "Ubuntu", "Mulish", "Quicksand",
+  "Josefin Sans", "Exo 2", "Titillium Web", "DM Sans",
+  "Bebas Neue", "Anton", "Pacifico", "Dancing Script", "Lobster",
+  "Abril Fatface", "Cinzel", "Cormorant Garamond", "EB Garamond",
+];
+
 export default function BrandEdit() {
   const navigate = useNavigate();
   const { id } = useParams<{ id: string }>();
@@ -211,11 +220,21 @@ export default function BrandEdit() {
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Títulos (headlines)</Label>
-                      <Input value={formData.fonts.headings} onChange={(e) => setFormData({ ...formData, fonts: { ...formData.fonts, headings: e.target.value } })} placeholder="Inter" />
+                      <Select value={formData.fonts.headings} onValueChange={v => setFormData({ ...formData, fonts: { ...formData.fonts, headings: v } })}>
+                        <SelectTrigger><SelectValue placeholder="Selecione uma fonte" /></SelectTrigger>
+                        <SelectContent>
+                          {FONT_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Corpo (body text)</Label>
-                      <Input value={formData.fonts.body} onChange={(e) => setFormData({ ...formData, fonts: { ...formData.fonts, body: e.target.value } })} placeholder="Inter" />
+                      <Select value={formData.fonts.body} onValueChange={v => setFormData({ ...formData, fonts: { ...formData.fonts, body: v } })}>
+                        <SelectTrigger><SelectValue placeholder="Selecione uma fonte" /></SelectTrigger>
+                        <SelectContent>
+                          {FONT_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
                     </div>
                   </div>
                 </div>

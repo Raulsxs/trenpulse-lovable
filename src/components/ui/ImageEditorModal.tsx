@@ -24,8 +24,10 @@ interface ImageEditorModalProps {
   file: File | null;
   onConfirm: (editedFile: File) => void;
   onCancel: () => void;
-  /** Width / Height ratio. Default 1 (square). */
+  /** Width / Height ratio. Default 1 (square). Ignored when autoRatio=true. */
   aspectRatio?: number;
+  /** Auto-detect ratio from the image and use contain (fit) mode. */
+  autoRatio?: boolean;
   title?: string;
   /** Output filename. Defaults to original name with .jpg extension. */
   outputFilename?: string;
@@ -37,10 +39,12 @@ export default function ImageEditorModal({
   onConfirm,
   onCancel,
   aspectRatio = 1,
+  autoRatio = false,
   title = "Ajustar imagem",
   outputFilename,
 }: ImageEditorModalProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [containerRatio, setContainerRatio] = useState(aspectRatio);
   const [scale, setScale] = useState(1);
   const [offsetX, setOffsetX] = useState(0);
   const [offsetY, setOffsetY] = useState(0);
@@ -68,26 +72,42 @@ export default function ImageEditorModal({
     setOffsetY(0);
     setRotation(0);
     setFlipH(false);
+    if (!autoRatio) setContainerRatio(aspectRatio);
 
     return () => {
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     };
   }, [file, open]);
 
-  // Auto-fit image to fill the container (cover) once it loads
+  // Auto-fit image once it loads
   const handleImageLoad = useCallback(() => {
     if (!imageRef.current || !containerRef.current) return;
     const img = imageRef.current;
     const container = containerRef.current;
-    const cW = container.offsetWidth;
-    const cH = container.offsetHeight;
     const iW = img.naturalWidth;
     const iH = img.naturalHeight;
-    const scaleToFill = Math.max(cW / iW, cH / iH);
-    setScale(scaleToFill);
-    setOffsetX(0);
-    setOffsetY(0);
-  }, []);
+
+    if (autoRatio) {
+      // Adapt container ratio to image, then fit the whole image (contain)
+      setContainerRatio(iW / iH);
+      // After ratio change the container size will update — use requestAnimationFrame
+      // to read the new dimensions and set scale to 1 (image fills it exactly)
+      requestAnimationFrame(() => {
+        if (!containerRef.current) return;
+        const cW = containerRef.current.offsetWidth;
+        const cH = containerRef.current.offsetHeight;
+        setScale(Math.min(cW / iW, cH / iH));
+        setOffsetX(0);
+        setOffsetY(0);
+      });
+    } else {
+      const cW = container.offsetWidth;
+      const cH = container.offsetHeight;
+      setScale(Math.max(cW / iW, cH / iH));
+      setOffsetX(0);
+      setOffsetY(0);
+    }
+  }, [autoRatio]);
 
   // ── Drag (mouse) ──
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -199,8 +219,8 @@ export default function ImageEditorModal({
         <div className="px-4 pt-4">
           <div
             ref={containerRef}
-            className={`relative overflow-hidden rounded-xl bg-muted/60 border border-border/40 ${isDragging ? "cursor-grabbing" : "cursor-grab"} select-none`}
-            style={{ width: "100%", aspectRatio: String(aspectRatio) }}
+            className={`relative overflow-hidden rounded-xl bg-white dark:bg-zinc-900 border border-border/40 ${isDragging ? "cursor-grabbing" : "cursor-grab"} select-none`}
+            style={{ width: "100%", aspectRatio: String(containerRatio) }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}

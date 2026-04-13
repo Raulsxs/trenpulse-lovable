@@ -19,6 +19,15 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+const FONT_OPTIONS = [
+  "Inter", "Roboto", "Open Sans", "Lato", "Montserrat", "Poppins",
+  "Raleway", "Nunito", "Oswald", "Playfair Display", "Merriweather",
+  "PT Sans", "Source Sans Pro", "Ubuntu", "Mulish", "Quicksand",
+  "Josefin Sans", "Exo 2", "Titillium Web", "DM Sans",
+  "Bebas Neue", "Anton", "Pacifico", "Dancing Script", "Lobster",
+  "Abril Fatface", "Cinzel", "Cormorant Garamond", "EB Garamond",
+];
+
 const STEPS = [
   { id: 1, label: "Nome & Logo", icon: Type },
   { id: 2, label: "Paleta & Fontes", icon: Palette },
@@ -240,11 +249,21 @@ export default function BrandWizard() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Fonte Títulos</Label>
-                  <Input value={formData.fonts.headings} onChange={e => setFormData(prev => ({ ...prev, fonts: { ...prev.fonts, headings: e.target.value } }))} placeholder="Inter" />
+                  <Select value={formData.fonts.headings} onValueChange={v => setFormData(prev => ({ ...prev, fonts: { ...prev.fonts, headings: v } }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione uma fonte" /></SelectTrigger>
+                    <SelectContent>
+                      {FONT_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
                   <Label>Fonte Corpo</Label>
-                  <Input value={formData.fonts.body} onChange={e => setFormData(prev => ({ ...prev, fonts: { ...prev.fonts, body: e.target.value } }))} placeholder="Inter" />
+                  <Select value={formData.fonts.body} onValueChange={v => setFormData(prev => ({ ...prev, fonts: { ...prev.fonts, body: v } }))}>
+                    <SelectTrigger><SelectValue placeholder="Selecione uma fonte" /></SelectTrigger>
+                    <SelectContent>
+                      {FONT_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
               <div className="flex justify-between pt-4">
