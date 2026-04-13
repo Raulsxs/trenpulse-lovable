@@ -57,6 +57,46 @@ Deno.serve(async (req) => {
 
     // ── LIST ──
     if (action === "list") {
+      // Try PFM API first (source of truth for connected accounts)
+      try {
+        const pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts", {
+          headers: { "Authorization": `Bearer ${Deno.env.get("POSTFORME_API_KEY")}` },
+        });
+        if (pfmResp.ok) {
+          const pfmData = await pfmResp.json();
+          const pfmAccounts = pfmData.data || pfmData.accounts || pfmData || [];
+          if (Array.isArray(pfmAccounts) && pfmAccounts.length > 0) {
+            // Map PFM accounts to our format and sync to DB
+            const connections = pfmAccounts
+              .filter((a: any) => a.external_id === user.id || !a.external_id)
+              .map((a: any) => ({
+                user_id: user.id,
+                platform: a.platform || "unknown",
+                pfm_account_id: a.id || a.account_id,
+                status: a.status === "active" || a.status === "connected" ? "connected" : a.status,
+                account_name: a.name || a.username || a.account_name || null,
+              }));
+
+            // Sync to our DB (upsert each)
+            for (const conn of connections) {
+              await svc.from("social_connections").upsert({
+                user_id: conn.user_id,
+                platform: conn.platform,
+                pfm_account_id: conn.pfm_account_id,
+                status: conn.status,
+                account_name: conn.account_name,
+                connected_at: new Date().toISOString(),
+              }, { onConflict: "user_id,platform" }).catch(() => {});
+            }
+
+            return respond({ connections });
+          }
+        }
+      } catch (pfmErr: any) {
+        console.warn("[connect-social] PFM list failed, falling back to DB:", pfmErr?.message);
+      }
+
+      // Fallback: read from our DB
       const { data: connections, error: dbErr } = await svc
         .from("social_connections")
         .select("*")
@@ -87,12 +127,12 @@ Deno.serve(async (req) => {
     const pfmApiKey = Deno.env.get("POSTFORME_API_KEY");
     if (!pfmApiKey) return respond({ error: "POSTFORME_API_KEY não configurada" }, 500);
 
-    const callbackUrl = `${supabaseUrl}/functions/v1/postforme-callback`;
+    const appUrl = Deno.env.get("APP_URL") || "https://trendpulse.com.br";
     const requestBody: Record<string, any> = {
       platform,
       external_id: user.id,
       permissions: ["posts", "feeds"],
-      redirect_url: callbackUrl,
+      redirect_url: `${appUrl}/profile?pfm_connected=${platform}`,
     };
 
     // PFM expects platform-specific config nested under platform_data
