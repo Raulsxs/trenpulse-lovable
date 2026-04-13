@@ -464,10 +464,12 @@ ${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}` : ""}
 
 REGRAS:
 - Frase 1: gancho provocativo que prende atenção (pode incluir dado ou pergunta)
-- Frases 2-4: desenvolvimento do argumento, uma ideia por frase, use **negrito** em palavras-chave
+- Frases 2-4: desenvolvimento do argumento, uma ideia por frase
 - Frase 5-6: conclusão forte + CTA ("Salve e compartilhe")
 - Cada frase: 1-3 parágrafos curtos, máx 280 chars por frase
 - Tom: autoridade, como um especialista compartilhando insight valioso
+- NÃO use asteriscos, markdown ou formatação especial no texto
+- SEMPRE responda em português brasileiro (PT-BR)
 
 Responda APENAS em JSON válido:
 {
@@ -482,10 +484,15 @@ ${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
 ${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
 ${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}` : ""}
 
+REGRAS:
+- SEMPRE responda em português brasileiro (PT-BR) — NUNCA em inglês
+- NÃO use asteriscos, markdown ou formatação especial
+- Cada slide deve ter título curto e descrição objetiva
+
 Responda APENAS em JSON válido:
 {
-  "title": "Título do carrossel (curto, max 60 chars)",
-  "contentItems": [
+  "title": "Título do carrossel em PT-BR (curto, max 60 chars)",
+  "contentSlides": [
     { "title": "Passo 1: ...", "description": "Explicação breve do passo (max 120 chars)" },
     { "title": "Passo 2: ...", "description": "Explicação breve (max 120 chars)" },
     { "title": "Passo 3: ...", "description": "Explicação breve (max 120 chars)" },
@@ -499,13 +506,19 @@ Responda APENAS em JSON válido:
 Mensagem: "${message}"`,
 
           quote: `Transforme a mensagem do usuário em frases para um quote card visual.
-Divida em 4-6 frases/slides impactantes com palavras-chave em destaque.
+Divida em 4-6 frases/slides impactantes. Cada frase será exibida em um slide separado.
 ${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
+
+REGRAS:
+- NÃO use asteriscos, markdown, negrito ou formatação especial — apenas texto puro
+- SEMPRE responda em português brasileiro (PT-BR) — NUNCA em inglês
+- Cada frase deve ser completa e funcionar sozinha como slide
+- Tom: inspiracional, profissional e impactante
 
 Responda APENAS em JSON válido:
 {
-  "title": "Título temático curto (max 40 chars)",
-  "quotes": ["frase 1 impactante", "frase 2 com profundidade", "frase 3 provocativa"]
+  "title": "Título temático curto em PT-BR (max 40 chars)",
+  "quotes": ["frase 1 em português", "frase 2 em português", "frase 3 em português", "frase 4 em português"]
 }
 
 Mensagem: "${message}"`,
@@ -758,7 +771,19 @@ Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legen
               image_url: url, background_image_url: url, render_mode: "ai_full_design",
             }));
 
-        const platform = requestPlatform || detectPlatform(message);
+        // Use platform from user request, or infer from template type
+        const templatePlatformMap: Record<string, string> = {
+          tweet: "x", tutorial: "instagram", quote: "instagram",
+          infographic: "instagram", video: "instagram",
+          product: "instagram", "before-after": "instagram",
+        };
+        const platform = requestPlatform || templatePlatformMap[templateMatch.templateType] || detectPlatform(message);
+
+        // Content type: tweets/quotes are carousels if multiple slides, tutorials always carousel
+        const templateContentType = isVideo ? "story"
+          : templateMatch.templateType === "tutorial" ? "carousel"
+          : isCarousel ? "carousel"
+          : "post";
         const savedTemplateContentId = await persistGeneratedContent({
           generatedContent: {
             title: templateTitle,
@@ -768,7 +793,7 @@ Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legen
             slides: templateSlides,
           },
           fallbackTitle: templateTitle,
-          contentType: isVideo ? "story" : isCarousel ? "carousel" : "post",
+          contentType: templateContentType,
           brandId: requestBrandId || null,
           brandSnapshot: templateBrandSnapshot,
           platform,
@@ -794,7 +819,7 @@ Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legen
 
         actionResult = savedTemplateContentId ? {
           content_id: savedTemplateContentId,
-          content_type: isVideo ? "story" : isCarousel ? "carousel" : "post",
+          content_type: templateContentType,
           platform,
           preview_image_url: blotatoImageUrls[0] || blotatoMediaUrl || undefined,
         } : null;

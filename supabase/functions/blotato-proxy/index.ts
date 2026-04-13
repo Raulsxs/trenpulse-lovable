@@ -154,9 +154,10 @@ Deno.serve(async (req) => {
 
     console.log(`[blotato-proxy] Creation started: id=${creationId}, polling...`);
 
-    // Video templates need longer polling (up to 120s vs 45s for images)
+    // Templates that need longer polling: videos (120s), tutorials/infographics (90s), others (50s)
     const isVideoTemplate = templateKey?.startsWith("video-") || templateId.includes("ai-story-video") || templateId.includes("ai-selfie-video");
-    const pollTimeout = isVideoTemplate ? 120000 : 45000;
+    const isSlowTemplate = templateKey?.startsWith("tutorial") || templateKey?.startsWith("infographic") || templateKey === "before-after";
+    const pollTimeout = isVideoTemplate ? 120000 : isSlowTemplate ? 90000 : 50000;
     const result = await pollVisualStatus(blotatoApiKey, creationId, pollTimeout);
 
     console.log(`[blotato-proxy] Result: status=${result.status}, images=${result.imageUrls.length}, mediaUrl=${!!result.mediaUrl}`);
