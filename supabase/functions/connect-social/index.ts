@@ -87,10 +87,12 @@ Deno.serve(async (req) => {
     const pfmApiKey = Deno.env.get("POSTFORME_API_KEY");
     if (!pfmApiKey) return respond({ error: "POSTFORME_API_KEY não configurada" }, 500);
 
+    const callbackUrl = `${supabaseUrl}/functions/v1/postforme-callback`;
     const requestBody: Record<string, any> = {
       platform,
       external_id: user.id,
       permissions: ["posts", "feeds"],
+      redirect_url: callbackUrl,
     };
 
     // PFM expects platform-specific config nested under platform_data
