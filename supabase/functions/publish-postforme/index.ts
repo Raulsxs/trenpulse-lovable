@@ -69,14 +69,43 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Load user's connected accounts
-    const { data: connections } = await svc
+    // Load user's connected accounts (try DB first, fallback to PFM API)
+    let connections: any[] = [];
+    const { data: dbConnections } = await svc
       .from("social_connections")
       .select("platform, pfm_account_id, status")
       .eq("user_id", user.id)
       .eq("status", "connected");
 
-    if (!connections?.length) {
+    if (dbConnections?.length) {
+      connections = dbConnections;
+    } else {
+      // DB empty — try PFM API directly
+      const pfmApiKey = Deno.env.get("POSTFORME_API_KEY");
+      if (pfmApiKey) {
+        try {
+          const pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts", {
+            headers: { "Authorization": `Bearer ${pfmApiKey}` },
+          });
+          if (pfmResp.ok) {
+            const pfmData = await pfmResp.json();
+            const pfmAccounts = Array.isArray(pfmData?.data) ? pfmData.data : [];
+            connections = pfmAccounts
+              .filter((a: any) => a.external_id === user.id && a.status === "connected")
+              .map((a: any) => ({
+                platform: a.platform,
+                pfm_account_id: a.id,
+                status: "connected",
+              }));
+            console.log(`[publish-postforme] Loaded ${connections.length} accounts from PFM API (DB was empty)`);
+          }
+        } catch (e: any) {
+          console.warn("[publish-postforme] PFM fallback failed:", e?.message);
+        }
+      }
+    }
+
+    if (!connections.length) {
       return new Response(JSON.stringify({ error: "Nenhuma rede social conectada. Vá em Perfil para conectar." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
