@@ -88,18 +88,18 @@ export default function ImageEditorModal({
     const iH = img.naturalHeight;
 
     if (autoRatio) {
-      // Adapt container ratio to image, then fit the whole image (contain)
-      setContainerRatio(iW / iH);
-      // After ratio change the container size will update — use requestAnimationFrame
-      // to read the new dimensions and set scale to 1 (image fills it exactly)
-      requestAnimationFrame(() => {
-        if (!containerRef.current) return;
-        const cW = containerRef.current.offsetWidth;
-        const cH = containerRef.current.offsetHeight;
-        setScale(Math.min(cW / iW, cH / iH));
-        setOffsetX(0);
-        setOffsetY(0);
-      });
+      // Adapt container ratio to image (capped so it's never impractically tall or wide).
+      // Cap: ratio between 1/3 (portrait) and 3/1 (landscape banner).
+      const naturalRatio = iW / iH;
+      const clampedRatio = Math.min(3, Math.max(1 / 3, naturalRatio));
+      setContainerRatio(clampedRatio);
+      // Calculate scale mathematically (no DOM read needed after ratio state update).
+      // After ratio update, container: width = cW, height = cW / clampedRatio.
+      const cW = container.offsetWidth;
+      const cH = cW / clampedRatio;
+      setScale(Math.min(cW / iW, cH / iH));
+      setOffsetX(0);
+      setOffsetY(0);
     } else {
       const cW = container.offsetWidth;
       const cH = container.offsetHeight;
@@ -220,7 +220,7 @@ export default function ImageEditorModal({
           <div
             ref={containerRef}
             className={`relative overflow-hidden rounded-xl bg-white dark:bg-zinc-900 border border-border/40 ${isDragging ? "cursor-grabbing" : "cursor-grab"} select-none`}
-            style={{ width: "100%", aspectRatio: String(containerRatio) }}
+            style={{ width: "100%", aspectRatio: String(containerRatio), minHeight: "160px" }}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
