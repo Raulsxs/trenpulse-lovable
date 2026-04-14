@@ -146,27 +146,21 @@ Deno.serve(async (req) => {
       try {
         console.log(`[publish-postforme] Publishing to ${targetPlatform}: account=${connection.pfm_account_id}, media=${mediaUrls.length}`);
 
+        // Build media array in PFM format: [{ url: "..." }]
+        const media = mediaUrls.map((url: string) => ({ url }));
+
         const postBody: any = {
-          account_id: connection.pfm_account_id,
-          content: caption,
-          media_urls: mediaUrls,
+          caption,
+          social_accounts: [connection.pfm_account_id],
+          media,
         };
-
-        // Platform-specific config
-        if (targetPlatform === "instagram") {
-          postBody.platform_options = {
-            post_type: content.content_type === "story" ? "STORY" : mediaUrls.length > 1 ? "CAROUSEL" : "FEED",
-          };
-        }
-
-        if (targetPlatform === "tiktok") {
-          postBody.platform_options = { privacy: "PUBLIC" };
-        }
 
         // Scheduled publish
         if (scheduledAt) {
           postBody.scheduled_at = scheduledAt;
         }
+
+        console.log(`[publish-postforme] PFM payload: caption=${caption.substring(0, 50)}..., accounts=${postBody.social_accounts}, media=${media.length}`);
 
         const pfmResp = await fetch("https://api.postforme.dev/v1/social-posts", {
           method: "POST",
