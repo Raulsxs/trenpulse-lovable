@@ -36,7 +36,24 @@
       "WebFetch(domain:hackceleration.com)",
       "WebFetch(domain:cloud.higgsfield.ai)",
       "WebFetch(domain:use-apify.com)",
-      "WebFetch(domain:apidog.com)"
+      "WebFetch(domain:apidog.com)",
+      "WebFetch(domain:docs.postfor.me)",
+      "WebFetch(domain:api.postforme.dev)",
+      "Bash(find /c/Users/rauls/trendpulse/src/pages -name \"*.tsx\" -exec wc -l {} +)",
+      "Bash(git commit:*)",
+      "Read(//c/Users/rauls/**)",
+      "Bash(gh repo:*)",
+      "Bash(git clone:*)",
+      "Bash(python3 -c \" import json, sys data = json.load\\(sys.stdin\\) items = data.get\\('items', []\\) for item in items: desc = item.get\\('description', ''\\) tid = item.get\\('id', ''\\) print\\(f'{tid} | {desc}'\\) \")",
+      "WebFetch(domain:help.blotato.com)",
+      "Bash(python3 -c \" import json, sys data = json.load\\(sys.stdin\\) items = data.get\\('items', []\\) for item in items: tid = item.get\\('id', ''\\) desc = item.get\\('description', ''\\) inputs = item.get\\('inputs', []\\) input_names = [i.get\\('name',''\\) for i in inputs] if inputs else [] print\\(f'--- {tid}'\\) print\\(f' DESC: {desc}'\\) print\\(f' INPUTS: {input_names}'\\) print\\(\\) \")",
+      "WebFetch(domain:vibemakers.com.br)",
+      "Bash(python3 -c \" import re, sys msg = sys.stdin.read\\(\\).strip\\(\\).lower\\(\\) pattern = r'\\\\b\\(tweet\\\\s*card|card\\\\s*de\\\\s*tweet|tweet\\\\s*visual|visual\\\\s*de\\\\s*tweet|estilo\\\\s*tweet|estilo\\\\s*twitter\\)\\\\b' match = re.search\\(pattern, msg\\) print\\(f'Message: {msg}'\\) print\\(f'Match: {match.group\\(\\) if match else None}'\\) \")",
+      "Bash(python3 -c ':*)",
+      "Bash(ls C:/Users/rauls/trendpulse/.env*)",
+      "Bash(python3 -c \" import json, sys data = json.load\\(sys.stdin\\) raul = '1294d060-6783-4f7a-9df4-3c5f567eded4' for a in data.get\\('data', []\\): if a.get\\('external_id'\\) == raul: print\\(f'MATCH: platform={a[\\\\\"platform\\\\\"]}, id={a[\\\\\"id\\\\\"]}, username={a.get\\(\\\\\"username\\\\\"\\)}, status={a[\\\\\"status\\\\\"]}'\\) print\\(f' token_expires: {a.get\\(\\\\\"access_token_expires_at\\\\\"\\)}'\\) \")",
+      "Bash(python3 -c \" import json, sys try: data = json.load\\(sys.stdin\\) rows = data.get\\('result', data.get\\('data', []\\)\\) if isinstance\\(rows, list\\): for r in rows[:30]: msg = r.get\\('event_message', ''\\) if '[connect-social]' in msg or 'PFM' in msg or 'Auth OK' in msg: print\\(msg\\) else: print\\(json.dumps\\(data\\)[:500]\\) except Exception as e: print\\(f'Parse error: {e}'\\) print\\(sys.stdin.read\\(\\)[:500]\\) \")",
+      "Bash(python3 -c \" import json, sys raw = sys.stdin.read\\(\\) try: data = json.loads\\(raw\\) rows = data.get\\('result', []\\) for r in rows: msg = r.get\\('event_message', ''\\) if 'connect-social' in msg.lower\\(\\) or 'pfm' in msg.lower\\(\\): print\\(msg[:200]\\) except: print\\(raw[:500]\\) \")"
     ]
   }
 }

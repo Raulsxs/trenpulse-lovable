@@ -22,10 +22,9 @@ TrendPulse is a SaaS for social media content generation. Users type in a chat i
 - `LOVABLE_API_KEY` — AI Gateway for Gemini (fallback)
 - `GOOGLE_AI_API_KEY` — Google AI Studio (fallback)
 - `POSTFORME_API_KEY` — Post for Me API for multi-platform publishing
+- `BLOTATO_API_KEY` — Blotato visual templates API ($29/mês, 1750 credits)
 - `APP_URL` — https://trendpulse.com.br
 - `FIRECRAWL_API_KEY` — Firecrawl for trend scraping
-- `META_APP_ID`, `META_APP_SECRET` — Instagram API (legacy, being replaced by PFM)
-- `LINKEDIN_CLIENT_ID`, `LINKEDIN_CLIENT_SECRET` — LinkedIn API (legacy, being replaced by PFM)
 - `ASAAS_API_KEY` — Payment provider
 
 ### AI Models & Costs (inference.sh)
@@ -55,21 +54,30 @@ User types in chat → ai-chat detects intent
 
 ### Multi-Platform Publishing (Post for Me)
 - **Single API key** for all users
-- Users connect accounts via OAuth in Profile → Social Connections
-- Publish to 9 platforms simultaneously
+- `connect-social` queries PFM API directly (`GET /social-accounts`) — NOT our DB
+- `publish-postforme` payload: `{ caption, social_accounts: ["spc_xxx"], media: [{ url }] }`
 - Platform-specific caption variants auto-generated (Instagram, LinkedIn, X, TikTok, Facebook)
+- Bilingual captions: user selects language + platforms in Profile (stored in `extra_context.bilingual_platforms`)
+- **IMPORTANT**: Use `getUser()` for auth in all edge functions — NEVER `getClaims()` (returns wrong user.id)
+
+### Blotato Visual Templates
+- **API**: `backend.blotato.com/v2`, key as `BLOTATO_API_KEY`
+- **0-credit templates** (unlimited): tweet-card, tutorial-carousel, quote-card
+- **Credit-based**: infographics (1-50), video (50-1250), product placement (1-50)
+- `blotato-proxy` edge function: proxy with server-side polling (45s/90s/120s timeouts)
+- Intent `GENERATE_TEMPLATE` in ai-chat: detects template keywords, uses minimax to structure inputs, calls blotato-proxy
+- Template detection runs AFTER all intent conversions (LINK_PARA_POST → GENERATE) so templates take priority
 
 ### Edge Functions (Active)
 
 | Function | Purpose |
 |---|---|
-| `ai-chat` | Main chat endpoint (~1700 lines). Handles GENERATE, CAROUSEL, EDIT, BRAND, CHAT |
+| `ai-chat` | Main chat endpoint (~2000 lines). Handles GENERATE_TEMPLATE, GENERATE, CAROUSEL, EDIT, BRAND, CHAT |
 | `generate-slide-images` | Image generation via inference.sh/Gemini. Accepts `customPrompt` |
-| `connect-social` | OAuth for 9 platforms via Post for Me |
-| `postforme-callback` | OAuth callback handler |
-| `publish-postforme` | Multi-platform publishing |
-| `publish-instagram` | Legacy Instagram publish (being replaced) |
-| `publish-linkedin` | Legacy LinkedIn publish (being replaced) |
+| `blotato-proxy` | Blotato visual template API proxy with server-side polling |
+| `connect-social` | Social account management — queries PFM API directly for connected accounts |
+| `publish-postforme` | Multi-platform publishing via PFM (correct payload format) |
+| `postforme-callback` | OAuth callback handler (legacy — PFM redirect goes to app URL now) |
 | `check-usage` | Subscription usage validation |
 | `admin-analytics` | Admin dashboard (restricted to owner) |
 | `scrape-trends` | Trend scraping |
@@ -80,9 +88,9 @@ User types in chat → ai-chat detects intent
 
 | Component | Purpose |
 |---|---|
-| `ChatWindow.tsx` (~1012 lines) | Main chat with brand selector, quick actions |
-| `ChatInput.tsx` (~308 lines) | Input with brand chip, image upload, URL detection |
-| `ActionCard.tsx` (~1030 lines) | Content preview, carousel nav, publish, adjust/redo |
+| `ChatWindow.tsx` | Main chat with 5 quick actions + Templates dropdown + brand selector |
+| `ChatInput.tsx` | Input with Templates button, brand selector, image upload |
+| `ActionCard.tsx` | Content preview with visible caption/hashtags, carousel nav, publish, Animar button |
 | `SocialConnections.tsx` | 9 platform cards with SVG icons, connect/disconnect |
 | `BrandEdit.tsx` | Brand editor with do/don't rules, visual preferences |
 | `DemoScenes.tsx` | 4 animated demo scenes for landing page |
