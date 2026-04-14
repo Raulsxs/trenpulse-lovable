@@ -222,9 +222,9 @@ export default function ActionCard({
     accountsFetchedRef.current = true;
     supabase.functions.invoke("connect-social", { body: { action: "list" } })
       .then(({ data }) => {
-        const list = data?.accounts || data || [];
-        const connected = Array.isArray(list) ? list.filter((a: ConnectedAccount) => a.connected) : [];
-        setConnectedAccounts(connected);
+        const list = data?.connections || data?.accounts || [];
+        const connected = Array.isArray(list) ? list.filter((a: any) => a.connected || a.status === "connected") : [];
+        setConnectedAccounts(connected.map((a: any) => ({ platform: a.platform, connected: true, account_name: a.account_name || a.username })));
         // Pre-select the content's platform if connected
         if (platform) {
           const match = connected.find((a: ConnectedAccount) => a.platform === platform);
@@ -876,15 +876,15 @@ export default function ActionCard({
             </Button>
           </div>
 
-          {/* Row 1b: Publish to connected platforms */}
+          {/* Publish — highlighted after approval */}
           {connectedAccounts.length > 0 && (
             <div className="mb-2">
               <Popover open={publishOpen} onOpenChange={setPublishOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     size="sm"
-                    variant="outline"
-                    className="w-full text-xs gap-1.5 border-primary/20 text-primary hover:bg-primary/5"
+                    variant={approved ? "default" : "outline"}
+                    className={`w-full text-xs gap-1.5 ${approved && !publishResults ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border-primary/20 text-primary hover:bg-primary/5"}`}
                     disabled={isPublishing}
                   >
                     {isPublishing ? (
