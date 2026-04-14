@@ -265,7 +265,7 @@ export default function ActionCard({
         }
       } else {
         // If no per-platform results, assume all succeeded
-        for (const p of selectedPlatforms) {
+        for (const p of selectedAccountIds) {
           results[p] = { success: true };
         }
       }
@@ -285,7 +285,7 @@ export default function ActionCard({
       console.error("[ActionCard] publish error:", err);
       toast.error("Erro ao publicar conteudo");
       const failResults: Record<string, { success: boolean; error?: string }> = {};
-      for (const p of selectedPlatforms) failResults[p] = { success: false, error: err.message };
+      for (const p of selectedAccountIds) failResults[p] = { success: false, error: err.message };
       setPublishResults(failResults);
     } finally {
       setIsPublishing(false);
@@ -971,14 +971,14 @@ export default function ActionCard({
                     size="sm"
                     className="w-full text-xs"
                     onClick={handlePublish}
-                    disabled={selectedPlatforms.length === 0 || isPublishing}
+                    disabled={selectedAccountIds.length === 0 || isPublishing}
                   >
                     {isPublishing ? (
                       <Loader2 className="w-3 h-3 animate-spin mr-1" />
                     ) : (
                       <Send className="w-3 h-3 mr-1" />
                     )}
-                    Publicar em {selectedPlatforms.length} plataforma{selectedPlatforms.length !== 1 ? "s" : ""}
+                    Publicar em {selectedAccountIds.length} conta{selectedAccountIds.length !== 1 ? "s" : ""}
                   </Button>
                 </PopoverContent>
               </Popover>
