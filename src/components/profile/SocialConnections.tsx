@@ -103,6 +103,7 @@ export interface ConnectedAccount {
   platform: string;
   connected: boolean;
   account_name?: string;
+  pfm_account_id?: string;
 }
 
 export default function SocialConnections() {

@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { contentId, platforms, scheduledAt } = await req.json();
+    const { contentId, platforms, accountIds, scheduledAt } = await req.json();
 
     if (!contentId) {
       return new Response(JSON.stringify({ error: "contentId is required" }), {
@@ -131,27 +131,41 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Publish to each platform
-    for (const targetPlatform of targetPlatforms) {
-      const connection = connections.find((c: any) => c.platform === targetPlatform);
+    // If accountIds provided, publish to those specific accounts; otherwise use platform matching
+    const publishTargets: Array<{ platform: string; pfm_account_id: string }> = [];
 
-      if (!connection) {
-        results.push({ platform: targetPlatform, success: false, error: `${targetPlatform} não conectado` });
-        continue;
+    if (accountIds?.length) {
+      // Specific accounts selected by user
+      for (const accId of accountIds) {
+        const conn = connections.find((c: any) => c.pfm_account_id === accId);
+        if (conn) publishTargets.push({ platform: conn.platform, pfm_account_id: accId });
       }
+    } else {
+      // Legacy: match by platform name
+      for (const tp of targetPlatforms) {
+        const conn = connections.find((c: any) => c.platform === tp);
+        if (conn?.pfm_account_id) publishTargets.push({ platform: tp, pfm_account_id: conn.pfm_account_id });
+      }
+    }
 
-      // Use platform-specific caption if available
-      const caption = platformCaptions?.[targetPlatform] || (defaultCaption + hashtagsStr);
+    if (publishTargets.length === 0) {
+      return new Response(JSON.stringify({ error: "Nenhuma conta selecionada para publicação." }), {
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Publish to each target account
+    for (const target of publishTargets) {
+      const caption = platformCaptions?.[target.platform] || (defaultCaption + hashtagsStr);
 
       try {
-        console.log(`[publish-postforme] Publishing to ${targetPlatform}: account=${connection.pfm_account_id}, media=${mediaUrls.length}`);
+        console.log(`[publish-postforme] Publishing to ${target.platform}: account=${target.pfm_account_id}, media=${mediaUrls.length}`);
 
-        // Build media array in PFM format: [{ url: "..." }]
         const media = mediaUrls.map((url: string) => ({ url }));
 
         const postBody: any = {
           caption,
-          social_accounts: [connection.pfm_account_id],
+          social_accounts: [target.pfm_account_id],
           media,
         };
 
@@ -174,16 +188,16 @@ Deno.serve(async (req) => {
         if (pfmResp.ok) {
           const pfmData = await pfmResp.json();
           const postId = pfmData.id || pfmData.post_id || pfmData.data?.id;
-          console.log(`[publish-postforme] Success on ${targetPlatform}: postId=${postId}`);
-          results.push({ platform: targetPlatform, success: true, postId });
+          console.log(`[publish-postforme] Success on ${target.platform}: postId=${postId}`);
+          results.push({ platform: target.platform, success: true, postId });
         } else {
           const errText = await pfmResp.text();
-          console.error(`[publish-postforme] Failed on ${targetPlatform}: ${pfmResp.status}`, errText.substring(0, 200));
-          results.push({ platform: targetPlatform, success: false, error: `Erro ${pfmResp.status}` });
+          console.error(`[publish-postforme] Failed on ${target.platform}: ${pfmResp.status}`, errText.substring(0, 200));
+          results.push({ platform: target.platform, success: false, error: `Erro ${pfmResp.status}` });
         }
       } catch (pubErr: any) {
-        console.error(`[publish-postforme] Error on ${targetPlatform}:`, pubErr?.message);
-        results.push({ platform: targetPlatform, success: false, error: pubErr?.message });
+        console.error(`[publish-postforme] Error on ${target.platform}:`, pubErr?.message);
+        results.push({ platform: target.platform, success: false, error: pubErr?.message });
       }
     }
 

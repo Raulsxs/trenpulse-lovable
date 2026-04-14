@@ -176,9 +176,9 @@ export default function ActionCard({
   const [isAnimating, setIsAnimating] = useState(false);
   const [animatedVideoUrl, setAnimatedVideoUrl] = useState<string | null>(null);
 
-  // Multi-platform publish state
+  // Multi-platform publish state — uses pfm_account_id for uniqueness (multiple accounts per platform)
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [publishOpen, setPublishOpen] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResults, setPublishResults] = useState<Record<string, { success: boolean; error?: string }> | null>(null);
@@ -224,23 +224,36 @@ export default function ActionCard({
       .then(({ data }) => {
         const list = data?.connections || data?.accounts || [];
         const connected = Array.isArray(list) ? list.filter((a: any) => a.connected || a.status === "connected") : [];
-        setConnectedAccounts(connected.map((a: any) => ({ platform: a.platform, connected: true, account_name: a.account_name || a.username })));
-        // Pre-select the content's platform if connected
+        const mapped = connected.map((a: any) => ({
+          platform: a.platform,
+          connected: true,
+          account_name: a.account_name || a.username || null,
+          pfm_account_id: a.pfm_account_id || a.id || null,
+        }));
+        setConnectedAccounts(mapped);
+        // Pre-select accounts matching the content's platform
         if (platform) {
-          const match = connected.find((a: ConnectedAccount) => a.platform === platform);
-          if (match) setSelectedPlatforms([platform]);
+          const matches = mapped.filter((a: ConnectedAccount) => a.platform === platform);
+          if (matches.length === 1 && matches[0].pfm_account_id) {
+            setSelectedAccountIds([matches[0].pfm_account_id]);
+          }
         }
       })
       .catch(() => { /* silent */ });
   }, [contentType, platform]);
 
   const handlePublish = async () => {
-    if (selectedPlatforms.length === 0) return;
+    if (selectedAccountIds.length === 0) return;
     setIsPublishing(true);
     setPublishResults(null);
     try {
+      // Map selected account IDs to platforms + account IDs for publish
+      const selectedAccounts = connectedAccounts.filter(a => a.pfm_account_id && selectedAccountIds.includes(a.pfm_account_id));
+      const platforms = [...new Set(selectedAccounts.map(a => a.platform))];
+      const accountIds = selectedAccounts.map(a => a.pfm_account_id).filter(Boolean);
+
       const { data, error } = await supabase.functions.invoke("publish-postforme", {
-        body: { contentId, platforms: selectedPlatforms },
+        body: { contentId, platforms, accountIds },
       });
       if (error) throw error;
 
@@ -279,11 +292,10 @@ export default function ActionCard({
     }
   };
 
-  const togglePlatformSelection = (platformId: string) => {
-    setSelectedPlatforms((prev) =>
-      prev.includes(platformId) ? prev.filter((p) => p !== platformId) : [...prev, platformId]
+  const toggleAccountSelection = (accountId: string) => {
+    setSelectedAccountIds((prev) =>
+      prev.includes(accountId) ? prev.filter((p) => p !== accountId) : [...prev, accountId]
     );
-    // Clear previous results when selection changes
     setPublishResults(null);
   };
 
@@ -906,19 +918,20 @@ export default function ActionCard({
                     {connectedAccounts.map((account) => {
                       const info = PLATFORMS.find((p) => p.id === account.platform);
                       if (!info) return null;
-                      const isSelected = selectedPlatforms.includes(account.platform);
+                      const accountKey = account.pfm_account_id || account.platform;
+                      const isSelected = selectedAccountIds.includes(accountKey);
                       const result = publishResults?.[account.platform];
 
                       return (
                         <label
-                          key={account.platform}
+                          key={accountKey}
                           className={`flex items-center gap-2.5 p-2 rounded-md cursor-pointer transition-colors ${
                             isSelected ? "bg-primary/5" : "hover:bg-muted/50"
                           }`}
                         >
                           <Checkbox
                             checked={isSelected}
-                            onCheckedChange={() => togglePlatformSelection(account.platform)}
+                            onCheckedChange={() => toggleAccountSelection(accountKey)}
                             disabled={isPublishing}
                           />
                           <div
@@ -926,7 +939,12 @@ export default function ActionCard({
                           >
                             <info.icon className="w-3.5 h-3.5" />
                           </div>
-                          <span className="text-xs flex-1">{info.name}</span>
+                          <div className="flex-1 min-w-0">
+                            <span className="text-xs font-medium block">{info.name}</span>
+                            {account.account_name && (
+                              <span className="text-[10px] text-muted-foreground block truncate">{account.account_name}</span>
+                            )}
+                          </div>
                           {result && (
                             result.success ? (
                               <Check className="w-3.5 h-3.5 text-green-500" />
