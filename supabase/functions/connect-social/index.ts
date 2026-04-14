@@ -44,16 +44,17 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const internalServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseAnonKey, {
       global: { headers: { Authorization: authHeader } },
     });
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
-    if (claimsError || !claimsData?.claims) return respond({ error: "Unauthorized" }, 401);
-    const user = { id: claimsData.claims.sub as string };
+    const { data: { user: authUser }, error: authError } = await supabase.auth.getUser();
+    if (authError || !authUser) return respond({ error: "Unauthorized" }, 401);
+    const user = { id: authUser.id };
+    console.log(`[connect-social] Auth OK: user=${user.id}, action=${action || "connect"}`);
 
-    const svc = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const svc = createClient(supabaseUrl, internalServiceKey);
 
     // ── LIST ──
     if (action === "list") {
