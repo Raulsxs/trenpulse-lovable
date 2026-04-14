@@ -78,12 +78,17 @@ Deno.serve(async (req) => {
               : Array.isArray(pfmData?.accounts) ? pfmData.accounts
               : [];
 
+            console.log(`[connect-social] PFM parsed ${pfmAccounts.length} accounts`);
             if (pfmAccounts.length > 0) {
               // Filter accounts that belong to this user (by external_id)
+              // Log each account's external_id for debugging
+              for (const a of pfmAccounts) {
+                console.log(`[connect-social] account: platform=${a.platform}, username=${a.username}, ext_id=${a.external_id}, match=${a.external_id === user.id}`);
+              }
               const userAccounts = pfmAccounts.filter((a: any) =>
                 a.external_id === user.id || !a.external_id
               );
-              console.log(`[connect-social] PFM accounts total: ${pfmAccounts.length}, for user ${user.id}: ${userAccounts.length}`);
+              console.log(`[connect-social] Filtered: ${userAccounts.length} accounts for user ${user.id}`);
 
               const connections = userAccounts.map((a: any) => ({
                 user_id: user.id,
