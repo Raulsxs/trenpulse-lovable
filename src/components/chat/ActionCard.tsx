@@ -217,32 +217,18 @@ export default function ActionCard({
     }
   }, []);
 
-  // ── Fetch connected social accounts for publish ──
-  const accountsFetchedRef = useRef(false);
+  // ── Sync connected accounts from shared cache ──
   useEffect(() => {
-    if (contentType === "cron_config" || accountsFetchedRef.current) return;
-    accountsFetchedRef.current = true;
-    supabase.functions.invoke("connect-social", { body: { action: "list" } })
-      .then(({ data }) => {
-        const list = data?.connections || data?.accounts || [];
-        const connected = Array.isArray(list) ? list.filter((a: any) => a.connected || a.status === "connected") : [];
-        const mapped = connected.map((a: any) => ({
-          platform: a.platform,
-          connected: true,
-          account_name: a.account_name || a.username || null,
-          pfm_account_id: a.pfm_account_id || a.id || null,
-        }));
-        setConnectedAccounts(mapped);
-        // Pre-select accounts matching the content's platform
-        if (platform) {
-          const matches = mapped.filter((a: ConnectedAccount) => a.platform === platform);
-          if (matches.length === 1 && matches[0].pfm_account_id) {
-            setSelectedAccountIds([matches[0].pfm_account_id]);
-          }
-        }
-      })
-      .catch(() => { /* silent */ });
-  }, [contentType, platform]);
+    if (contentType === "cron_config" || sharedAccounts.length === 0) return;
+    setConnectedAccounts(sharedAccounts);
+    // Pre-select accounts matching the content's platform
+    if (platform && selectedAccountIds.length === 0) {
+      const matches = sharedAccounts.filter((a: ConnectedAccount) => a.platform === platform);
+      if (matches.length === 1 && matches[0].pfm_account_id) {
+        setSelectedAccountIds([matches[0].pfm_account_id]);
+      }
+    }
+  }, [sharedAccounts, contentType, platform]);
 
   const handlePublish = async () => {
     if (selectedAccountIds.length === 0) return;
