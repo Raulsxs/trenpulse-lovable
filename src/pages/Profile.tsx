@@ -28,6 +28,7 @@ interface ProfileRow {
   preferred_tone: string;
   preferred_audience: string;
   rss_sources: string[];
+  interest_areas: string[];
 }
 
 const VOICE_OPTIONS = [
