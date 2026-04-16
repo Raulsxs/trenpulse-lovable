@@ -26,7 +26,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Auth
+    // Auth — supports user JWT (from UI) or service_role (internal calls from scheduler)
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -36,15 +36,26 @@ Deno.serve(async (req) => {
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } },
-    });
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const bearerToken = authHeader.slice("Bearer ".length).trim();
+    const isInternalCall = bearerToken === serviceRoleKey;
 
-    const { data: { user }, error: userError } = await supabase.auth.getUser();
-    if (userError || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const svc = createClient(supabaseUrl, serviceRoleKey);
+
+    // Resolve user: user-JWT path uses getUser(); internal path derives from content.user_id
+    let userId: string | null = null;
+
+    if (!isInternalCall) {
+      const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } },
       });
+      const { data: { user }, error: userError } = await supabase.auth.getUser();
+      if (userError || !user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      userId = user.id;
     }
 
     const pfmApiKey = Deno.env.get("POSTFORME_API_KEY");
@@ -54,12 +65,10 @@ Deno.serve(async (req) => {
       });
     }
 
-    const svc = createClient(supabaseUrl, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-
-    // Load content
+    // Load content (also resolves user_id for internal calls)
     const { data: content, error: contentError } = await svc
       .from("generated_contents")
-      .select("title, caption, hashtags, image_urls, slides, platform, content_type, platform_captions")
+      .select("title, caption, hashtags, image_urls, slides, platform, content_type, platform_captions, user_id")
       .eq("id", contentId)
       .single();
 
@@ -69,39 +78,55 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (isInternalCall) {
+      userId = (content as any).user_id;
+    } else if (userId !== (content as any).user_id) {
+      // Prevent cross-user publishing
+      return new Response(JSON.stringify({ error: "Forbidden" }), {
+        status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!userId) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     // Load user's connected accounts (try DB first, fallback to PFM API)
     let connections: any[] = [];
     const { data: dbConnections } = await svc
       .from("social_connections")
       .select("platform, pfm_account_id, status")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .eq("status", "connected");
 
     if (dbConnections?.length) {
       connections = dbConnections;
     } else {
       // DB empty — try PFM API directly
-      const pfmApiKey = Deno.env.get("POSTFORME_API_KEY");
-      if (pfmApiKey) {
-        try {
-          const pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts", {
-            headers: { "Authorization": `Bearer ${pfmApiKey}` },
-          });
-          if (pfmResp.ok) {
-            const pfmData = await pfmResp.json();
-            const pfmAccounts = Array.isArray(pfmData?.data) ? pfmData.data : [];
-            connections = pfmAccounts
-              .filter((a: any) => a.external_id === user.id && a.status === "connected")
-              .map((a: any) => ({
-                platform: a.platform,
-                pfm_account_id: a.id,
-                status: "connected",
-              }));
-            console.log(`[publish-postforme] Loaded ${connections.length} accounts from PFM API (DB was empty)`);
-          }
-        } catch (e: any) {
-          console.warn("[publish-postforme] PFM fallback failed:", e?.message);
+      try {
+        const pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts", {
+          headers: { "Authorization": `Bearer ${pfmApiKey}` },
+        });
+        if (pfmResp.ok) {
+          const pfmData = await pfmResp.json();
+          const pfmAccounts = Array.isArray(pfmData?.data) ? pfmData.data : [];
+          // Filter aligned with connect-social list: match user OR unowned (legacy) accounts
+          connections = pfmAccounts
+            .filter((a: any) => a.status === "connected")
+            .filter((a: any) => a.external_id === userId || !a.external_id)
+            .map((a: any) => ({
+              platform: a.platform,
+              pfm_account_id: a.id,
+              status: "connected",
+            }));
+          console.log(`[publish-postforme] Loaded ${connections.length} accounts from PFM API (DB was empty) for user ${userId}`);
+        } else {
+          console.warn(`[publish-postforme] PFM fallback HTTP ${pfmResp.status}`);
         }
+      } catch (e: any) {
+        console.warn("[publish-postforme] PFM fallback failed:", e?.message);
       }
     }
 
