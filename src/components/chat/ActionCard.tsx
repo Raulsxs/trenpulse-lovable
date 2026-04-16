@@ -177,7 +177,8 @@ export default function ActionCard({
   const [isAnimating, setIsAnimating] = useState(false);
   const [animatedVideoUrl, setAnimatedVideoUrl] = useState<string | null>(null);
 
-  // Multi-platform publish state — uses pfm_account_id for uniqueness (multiple accounts per platform)
+  // Multi-platform publish state — uses shared cache to avoid N parallel connect-social calls
+  const { accounts: sharedAccounts } = useConnectedAccounts(contentType === "cron_config");
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccount[]>([]);
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [publishOpen, setPublishOpen] = useState(false);
