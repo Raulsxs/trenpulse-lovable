@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Checkbox } from "@/components/ui/checkbox";
 import { PLATFORMS } from "@/components/profile/SocialConnections";
 import type { ConnectedAccount } from "@/components/profile/SocialConnections";
+import { useConnectedAccounts } from "@/hooks/useConnectedAccounts";
 
 interface ActionCardProps {
   contentId: string;
