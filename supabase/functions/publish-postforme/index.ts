@@ -188,13 +188,21 @@ Deno.serve(async (req) => {
 
         const media = mediaUrls.map((url: string) => ({ url }));
 
+        const contentType = (content as any).content_type || "post";
+        const isStory = contentType === "story" || contentType === "reels";
+
         const postBody: any = {
-          caption,
+          caption: isStory ? "" : caption,
           social_accounts: [target.pfm_account_id],
           media,
         };
 
-        // Scheduled publish
+        if (isStory) {
+          postBody.platform_configurations = {
+            [target.platform]: { placement: "stories" },
+          };
+        }
+
         if (scheduledAt) {
           postBody.scheduled_at = scheduledAt;
         }
