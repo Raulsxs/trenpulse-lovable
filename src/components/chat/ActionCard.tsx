@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, RefreshCw, X, Send, ChevronDown, Play } from "lucide-react";
+import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, RefreshCw, X, Send, ChevronDown, Play, ArrowRightLeft } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import ScheduleModal from "@/components/content/ScheduleModal";
 import SlideBgOverlayRenderer from "@/components/content/SlideBgOverlayRenderer";
@@ -30,6 +30,7 @@ interface ActionCardProps {
   onRegenerate?: () => void;
   onReject?: () => void;
   onAddMessage?: (content: string) => void;
+  onAdapt?: (contentId: string, platform: string, contentType: string) => void;
 }
 
 const DAYS = [
@@ -43,6 +44,18 @@ const DAYS = [
 ];
 
 const HOURS = Array.from({ length: 17 }, (_, i) => i + 6);
+
+const ADAPT_FORMATS = [
+  { platform: "instagram", contentType: "post", label: "Post Instagram", dim: "1080×1080" },
+  { platform: "instagram", contentType: "story", label: "Story Instagram", dim: "1080×1920" },
+  { platform: "instagram", contentType: "carousel", label: "Carrossel Instagram", dim: "1080×1080" },
+  { platform: "linkedin", contentType: "post", label: "Post LinkedIn", dim: "1200×1200" },
+  { platform: "linkedin", contentType: "story", label: "Story LinkedIn", dim: "1080×1920" },
+  { platform: "linkedin", contentType: "document", label: "Documento LinkedIn", dim: "1080×1350" },
+  { platform: "tiktok", contentType: "story", label: "TikTok", dim: "1080×1920" },
+  { platform: "facebook", contentType: "post", label: "Post Facebook", dim: "1080×1080" },
+  { platform: "facebook", contentType: "story", label: "Story Facebook", dim: "1080×1920" },
+];
 
 const PHASE_MESSAGES = [
   "Criando o roteiro do conteúdo... ✍️",
@@ -160,6 +173,7 @@ export default function ActionCard({
   onRegenerate,
   onReject,
   onAddMessage,
+  onAdapt,
 }: ActionCardProps) {
   const navigate = useNavigate();
   const [resolvedPlatform, setResolvedPlatform] = useState(platform || "instagram");
@@ -983,6 +997,33 @@ export default function ActionCard({
               <RefreshCw className="w-3 h-3" />
               Refazer
             </Button>
+            {onAdapt && contentType !== "cron_config" && (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button size="sm" variant="outline" className="flex-1 text-xs">
+                    <ArrowRightLeft className="w-3 h-3" />
+                    Adaptar
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-56 p-2" align="start">
+                  <p className="text-xs font-medium mb-1.5 px-1">Adaptar para:</p>
+                  <div className="space-y-0.5 max-h-52 overflow-y-auto">
+                    {ADAPT_FORMATS
+                      .filter(f => !(f.platform === effectivePlatform && f.contentType === contentType))
+                      .map(f => (
+                        <button
+                          key={`${f.platform}-${f.contentType}`}
+                          className="w-full text-left px-2 py-1.5 text-xs rounded-md hover:bg-muted/80 transition-colors flex justify-between items-center"
+                          onClick={() => onAdapt(contentId, f.platform, f.contentType)}
+                        >
+                          <span>{f.label}</span>
+                          <span className="text-[10px] text-muted-foreground">{f.dim}</span>
+                        </button>
+                      ))}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            )}
             {composedImageUrls?.[0] && !animatedVideoUrl && (
               <Button
                 size="sm"

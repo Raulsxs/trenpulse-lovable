@@ -30,6 +30,7 @@ interface ChatMessageProps {
   onRegenerate?: () => void;
   onReject?: () => void;
   onAddMessage?: (content: string) => void;
+  onAdapt?: (contentId: string, platform: string, contentType: string) => void;
   isRetryable?: boolean;
   onRetry?: () => void;
   whatsappConfirm?: string | null;
@@ -48,6 +49,7 @@ export default function ChatMessage({
   onRegenerate,
   onReject,
   onAddMessage,
+  onAdapt,
   isRetryable,
   onRetry,
   whatsappConfirm,
@@ -173,6 +175,7 @@ export default function ChatMessage({
               onRegenerate={onRegenerate}
               onReject={onReject}
               onAddMessage={onAddMessage}
+              onAdapt={onAdapt}
             />
           </div>
         )}

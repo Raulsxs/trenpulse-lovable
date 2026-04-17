@@ -1550,8 +1550,9 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
 
         const instruction = editInstruction || message;
         const currentImage = existing.image_urls?.[0];
-        const existingPlatform = existing.platform || "instagram";
-        const existingFormat = existing.content_type || "post";
+        const existingPlatform = generationParams?.newPlatform || existing.platform || "instagram";
+        const existingFormat = generationParams?.newContentType || existing.content_type || "post";
+        const isAdapting = !!(generationParams?.newPlatform || generationParams?.newContentType);
 
         // Load brand context for edit prompt
         let editBrandContext = "";
@@ -1583,7 +1584,22 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
         const platformLabel = existingPlatform === "linkedin" ? "LinkedIn" : "Instagram";
 
         // Build edit prompt — include dimensions at top so inference.sh respects aspect ratio
-        const editPrompt = `FORMATO OBRIGATÓRIO: ${dimLabel}. Gere a imagem EXATAMENTE neste formato.
+        const editPrompt = isAdapting
+          ? `FORMATO OBRIGATÓRIO: ${dimLabel}. Gere a imagem EXATAMENTE neste formato.
+
+Você está ADAPTANDO um conteúdo existente para ${platformLabel} (${existingFormat}).
+A imagem de referência fornecida é o conteúdo original — recrie o MESMO conceito visual adaptado ao novo formato.
+
+INSTRUÇÃO: Adapte este conteúdo para ${platformLabel} ${existingFormat}. ${instruction}
+${editBrandContext ? `\nIDENTIDADE VISUAL DA MARCA:\n${editBrandContext}\n` : ""}
+REGRAS:
+- Mantenha o mesmo conceito, tema, textos e estilo visual do original.
+- Adapte o layout para o formato ${dimLabel}.
+- Para story (9:16): redistribua os elementos verticalmente, use texto grande e legível.
+- Para post (1:1): use layout equilibrado com boa hierarquia visual.
+- Mantenha qualidade profissional, tipografia legível e identidade do conteúdo.
+- NÃO inclua URLs, QR codes ou logotipos externos.`
+          : `FORMATO OBRIGATÓRIO: ${dimLabel}. Gere a imagem EXATAMENTE neste formato.
 
 Você está editando uma imagem de ${platformLabel} (${existingFormat}).
 A imagem de referência fornecida é o conteúdo atual — use-a como base visual.
@@ -1635,19 +1651,28 @@ REGRAS:
             ? [{ ...existing.slides[0], image_url: newImageUrl, background_image_url: newImageUrl }]
             : [{ headline: "", body: "", bullets: [], image_url: newImageUrl, background_image_url: newImageUrl, render_mode: "ai_full_design" }];
 
-          await svc.from("generated_contents").update({
+          const updatePayload: Record<string, any> = {
             image_urls: [newImageUrl],
             slides: updatedSlides,
-          }).eq("id", targetId);
+          };
+          if (isAdapting) {
+            updatePayload.platform = existingPlatform;
+            updatePayload.content_type = existingFormat;
+          }
+          await svc.from("generated_contents").update(updatePayload).eq("id", targetId);
 
-          replyOverride = "Imagem atualizada! Confira o resultado.";
+          replyOverride = isAdapting
+            ? `Conteúdo adaptado para ${platformLabel} ${existingFormat}! Confira o resultado.`
+            : "Imagem atualizada! Confira o resultado.";
         } else {
-          replyOverride = "Não consegui editar a imagem. Tente novamente com uma instrução diferente.";
+          replyOverride = isAdapting
+            ? "Não consegui adaptar o conteúdo. Tente novamente."
+            : "Não consegui editar a imagem. Tente novamente com uma instrução diferente.";
         }
 
         actionResult = {
           content_id: targetId,
-          content_type: existing.content_type,
+          content_type: existingFormat,
           platform: existingPlatform,
           edited: true,
           preview_image_url: newImageUrl,

@@ -985,6 +985,14 @@ export default function ChatWindow() {
                   onAddMessage={(content: string) => {
                     setMessages(prev => [...prev, { role: "assistant" as const, content, timestamp: new Date().toISOString() }]);
                   }}
+                  onAdapt={(cid: string, newPlatform: string, newContentType: string) => {
+                    const labels: Record<string, string> = { instagram: "Instagram", linkedin: "LinkedIn", tiktok: "TikTok", facebook: "Facebook" };
+                    handleSend(`Adapte este conteúdo para ${labels[newPlatform] || newPlatform} ${newContentType}`, {
+                      intent_hint: "EDIT_CONTENT",
+                      editInstruction: `Adapte para ${labels[newPlatform] || newPlatform} ${newContentType}`,
+                      generationParams: { contentId: cid, newPlatform, newContentType },
+                    });
+                  }}
                   isRetryable={msg.isRetryable}
                   onRetry={msg.retryText ? () => handleRetry(msg.retryText!) : undefined}
                   whatsappConfirm={msg.whatsappConfirm}
