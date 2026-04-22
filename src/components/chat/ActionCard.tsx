@@ -178,10 +178,8 @@ export default function ActionCard({
   const navigate = useNavigate();
   const [resolvedPlatform, setResolvedPlatform] = useState(platform || "instagram");
   const effectivePlatform = resolvedPlatform;
-  const [isApproving, setIsApproving] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
-  const [approved, setApproved] = useState(false);
   const [isRejected, setIsRejected] = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [isRegeneratingText, setIsRegeneratingText] = useState(false);
@@ -258,6 +256,9 @@ export default function ActionCard({
         body: { contentId, platforms, accountIds },
       });
       if (error) throw error;
+
+      // Auto-approve: clicking Publish implies user approval of the content
+      await supabase.from("generated_contents").update({ status: "approved" }).eq("id", contentId);
 
       // Parse results per platform
       const results: Record<string, { success: boolean; error?: string }> = {};
@@ -551,22 +552,6 @@ export default function ActionCard({
     return 1080 / 1350; // Instagram post/carousel
   };
   const aspectRatio = getAspectRatio();
-
-  const handleApprove = async () => {
-    setIsApproving(true);
-    try {
-      await supabase
-        .from("generated_contents")
-        .update({ status: "approved" })
-        .eq("id", contentId);
-      setApproved(true);
-      toast.success("Conteúdo aprovado!");
-    } catch {
-      toast.error("Erro ao aprovar conteúdo");
-    } finally {
-      setIsApproving(false);
-    }
-  };
 
   const handleSchedule = async (date: Date) => {
     setIsScheduling(true);
@@ -869,36 +854,15 @@ export default function ActionCard({
             <p className="mb-2 text-xs text-muted-foreground">📅 Agendado: {new Date(scheduledAt).toLocaleDateString("pt-BR")}</p>
           )}
 
-          {/* Row 1: Primary actions */}
+          {/* Row 1: Primary actions — Publicar agora / Agendar / Studio */}
           <div className="flex gap-2 mb-2">
-            <Button size="sm" variant={approved ? "secondary" : "default"} className="flex-1 text-xs" onClick={handleApprove} disabled={isApproving || approved}>
-              {isApproving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-              {approved ? "Aprovado" : "Aprovar"}
-            </Button>
-            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => setScheduleOpen(true)}>
-              <CalendarDays className="w-3 h-3" />
-              Agendar
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="flex-1 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => navigate(`/content/${contentId}`)}
-            >
-              <ExternalLink className="w-3 h-3" />
-              Studio
-            </Button>
-          </div>
-
-          {/* Publish — highlighted after approval */}
-          {connectedAccounts.length > 0 && (
-            <div className="mb-2">
+            {connectedAccounts.length > 0 ? (
               <Popover open={publishOpen} onOpenChange={setPublishOpen}>
                 <PopoverTrigger asChild>
                   <Button
                     size="sm"
-                    variant={approved ? "default" : "outline"}
-                    className={`w-full text-xs gap-1.5 ${approved && !publishResults ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border-primary/20 text-primary hover:bg-primary/5"}`}
+                    variant="default"
+                    className="flex-1 text-xs gap-1.5"
                     disabled={isPublishing}
                   >
                     {isPublishing ? (
@@ -910,7 +874,7 @@ export default function ActionCard({
                       ? "Publicando..."
                       : publishResults
                         ? "Publicado"
-                        : "Publicar"}
+                        : "Publicar agora"}
                     <ChevronDown className="w-3 h-3 ml-auto" />
                   </Button>
                 </PopoverTrigger>
@@ -984,8 +948,32 @@ export default function ActionCard({
                   </Button>
                 </PopoverContent>
               </Popover>
-            </div>
-          )}
+            ) : (
+              <Button
+                size="sm"
+                variant="default"
+                className="flex-1 text-xs gap-1.5"
+                onClick={() => navigate("/profile")}
+                title="Conecte uma rede social em Meu Perfil"
+              >
+                <Send className="w-3 h-3" />
+                Publicar agora
+              </Button>
+            )}
+            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => setScheduleOpen(true)}>
+              <CalendarDays className="w-3 h-3" />
+              Agendar
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="flex-1 text-xs text-muted-foreground hover:text-foreground"
+              onClick={() => navigate(`/content/${contentId}`)}
+            >
+              <ExternalLink className="w-3 h-3" />
+              Studio
+            </Button>
+          </div>
 
           {/* Row 2: Regeneration + Animate actions */}
           <div className="flex gap-2 mb-2">
