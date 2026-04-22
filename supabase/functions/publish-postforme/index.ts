@@ -192,16 +192,22 @@ Deno.serve(async (req) => {
         const isStory = contentType === "story" || contentType === "reels";
 
         const postBody: any = {
-          caption: caption || ".",
+          caption: isStory ? "" : (caption || "."),
           social_accounts: [target.pfm_account_id],
           media,
         };
+
+        if (isStory) {
+          postBody.platform_configurations = {
+            [target.platform]: { placement: "stories" },
+          };
+        }
 
         if (scheduledAt) {
           postBody.scheduled_at = scheduledAt;
         }
 
-        console.log(`[publish-postforme] PFM payload: caption=${caption.substring(0, 50)}..., accounts=${postBody.social_accounts}, media=${media.length}`);
+        console.log(`[publish-postforme] PFM payload: type=${contentType}, isStory=${isStory}, caption=${(postBody.caption || "").substring(0, 50)}..., accounts=${postBody.social_accounts}, media=${media.length}`);
 
         const pfmResp = await fetch("https://api.postforme.dev/v1/social-posts", {
           method: "POST",

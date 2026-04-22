@@ -365,6 +365,18 @@ Mensagem: "${message}"`;
       if (urlMatch && detectedIntent === "CHAT") {
         detectedIntent = "LINK_PARA_POST";
       }
+
+      // Guard against CRIAR_MARCA false positives: quick-action templates ("Crie um post/story/carrossel...")
+      // are content generation requests, never brand creation. The AI classifier sometimes misfires when
+      // the post body mentions words like "marca", "estilo" or quoted terms.
+      if (detectedIntent === "CRIAR_MARCA" && /^\s*crie\s+(um|uma)\s+/i.test(message)) {
+        console.log("[ai-chat] CRIAR_MARCA false positive on quick-action message, re-routing");
+        if (/\b(carrossel|m[úu]ltiplos\s+slides|s[eé]rie|documento)\b/i.test(message)) {
+          detectedIntent = "GENERATE_CAROUSEL";
+        } else {
+          detectedIntent = "GENERATE";
+        }
+      }
     }
 
     // LINK_PARA_POST is treated as GENERATE (with URL extraction)
@@ -1765,10 +1777,15 @@ REGRAS:
           const extractExplicitBrandName = (input: string): string | null => {
             const text = normalizeSpaces(input);
 
-            const quoted = text.match(/["""'`´]([^"""'`´]{2,60})["""'`´]/);
-            if (quoted?.[1]) {
-              const quotedName = sanitizeBrandName(quoted[1]);
-              if (quotedName) return quotedName;
+            // Only accept quoted candidates if the message clearly talks about a brand.
+            // Prevents false positives like the word "boost" in a post about energy drinks.
+            const hasBrandContext = /\b(marca|empresa|logo|identidade\s+visual)\b/i.test(text);
+            if (hasBrandContext) {
+              const quoted = text.match(/["""'`´]([^"""'`´]{2,60})["""'`´]/);
+              if (quoted?.[1]) {
+                const quotedName = sanitizeBrandName(quoted[1]);
+                if (quotedName) return quotedName;
+              }
             }
 
             const patterns = [
