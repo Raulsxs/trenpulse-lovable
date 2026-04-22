@@ -182,6 +182,7 @@ export default function ActionCard({
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [adaptOpen, setAdaptOpen] = useState(false);
   const [isAdapting, setIsAdapting] = useState(false);
+  const [isRefazendo, setIsRefazendo] = useState(false);
   const [isRejected, setIsRejected] = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [isRegeneratingText, setIsRegeneratingText] = useState(false);
@@ -983,9 +984,22 @@ export default function ActionCard({
               {isRegeneratingImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pencil className="w-3 h-3" />}
               Ajustar
             </Button>
-            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={onRegenerate}>
-              <RefreshCw className="w-3 h-3" />
-              Refazer
+            <Button
+              size="sm"
+              variant="outline"
+              className="flex-1 text-xs"
+              disabled={isRefazendo}
+              onClick={() => {
+                setIsRefazendo(true);
+                toast.success("Refazendo conteúdo do zero...", {
+                  description: "O novo visual vai aparecer no chat em instantes.",
+                });
+                onRegenerate?.();
+                setTimeout(() => setIsRefazendo(false), 3000);
+              }}
+            >
+              {isRefazendo ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
+              {isRefazendo ? "Refazendo..." : "Refazer"}
             </Button>
             {onAdapt && (contentType as string) !== "cron_config" && (
               <Popover open={adaptOpen} onOpenChange={setAdaptOpen}>
