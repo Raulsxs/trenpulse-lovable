@@ -997,7 +997,7 @@ export default function ActionCard({
               <RefreshCw className="w-3 h-3" />
               Refazer
             </Button>
-            {onAdapt && contentType !== "cron_config" && (
+            {onAdapt && (contentType as string) !== "cron_config" && (
               <Popover>
                 <PopoverTrigger asChild>
                   <Button size="sm" variant="outline" className="flex-1 text-xs">
