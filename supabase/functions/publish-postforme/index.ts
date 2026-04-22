@@ -207,7 +207,10 @@ Deno.serve(async (req) => {
           postBody.scheduled_at = scheduledAt;
         }
 
-        console.log(`[publish-postforme] PFM payload: type=${contentType}, isStory=${isStory}, caption=${(postBody.caption || "").substring(0, 50)}..., accounts=${postBody.social_accounts}, media=${media.length}`);
+        console.log(`[publish-postforme] PFM payload type=${contentType} isStory=${isStory} platform=${target.platform} media=${media.length}`);
+        if (isStory) {
+          console.log(`[publish-postforme] Story full payload:`, JSON.stringify(postBody));
+        }
 
         const pfmResp = await fetch("https://api.postforme.dev/v1/social-posts", {
           method: "POST",
@@ -225,8 +228,17 @@ Deno.serve(async (req) => {
           results.push({ platform: target.platform, success: true, postId });
         } else {
           const errText = await pfmResp.text();
-          console.error(`[publish-postforme] Failed on ${target.platform}: ${pfmResp.status}`, errText.substring(0, 200));
-          results.push({ platform: target.platform, success: false, error: `Erro ${pfmResp.status}` });
+          console.error(`[publish-postforme] Failed on ${target.platform} status=${pfmResp.status} body=${errText}`);
+          // Surface PFM error body to the UI so the user can see what's wrong
+          let friendlyError = `Erro ${pfmResp.status}`;
+          try {
+            const errJson = JSON.parse(errText);
+            const msg = errJson?.message || errJson?.error?.message || errJson?.error || errJson?.errors?.[0]?.message;
+            if (msg) friendlyError = `${friendlyError}: ${msg}`;
+          } catch {
+            if (errText) friendlyError = `${friendlyError}: ${errText.substring(0, 200)}`;
+          }
+          results.push({ platform: target.platform, success: false, error: friendlyError });
         }
       } catch (pubErr: any) {
         console.error(`[publish-postforme] Error on ${target.platform}:`, pubErr?.message);
