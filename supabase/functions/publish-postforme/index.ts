@@ -192,16 +192,10 @@ Deno.serve(async (req) => {
         const isStory = contentType === "story" || contentType === "reels";
 
         const postBody: any = {
-          caption: isStory ? "" : caption,
+          caption: caption || ".",
           social_accounts: [target.pfm_account_id],
           media,
         };
-
-        if (isStory) {
-          postBody.platform_configurations = {
-            [target.platform]: { placement: "stories" },
-          };
-        }
 
         if (scheduledAt) {
           postBody.scheduled_at = scheduledAt;
