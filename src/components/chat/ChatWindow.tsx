@@ -9,6 +9,7 @@ import { Sparkles, ArrowDown, X, MessageSquarePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import SmartNudge from "./SmartNudge";
+import BrandCreationModal from "./BrandCreationModal";
 import { useNotification } from "@/hooks/useNotification";
 
 interface ActionResult {
@@ -114,6 +115,7 @@ export default function ChatWindow() {
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [cronBanner, setCronBanner] = useState<Message | null>(null);
   const [brandCreationStep, setBrandCreationStep] = useState<number | null>(null);
+  const [brandModalOpen, setBrandModalOpen] = useState(false);
   const [nudgeContext, setNudgeContext] = useState({ hasBrand: true, hasSocialConnection: true, contentCount: 0 });
   const [brands, setBrands] = useState<Array<{ id: string; name: string }>>([]);
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
@@ -922,6 +924,7 @@ export default function ChatWindow() {
             hasBrand={nudgeContext.hasBrand}
             hasSocialConnection={nudgeContext.hasSocialConnection}
             contentCount={nudgeContext.contentCount}
+            onCreateBrandClick={() => setBrandModalOpen(true)}
           />
         </div>
         <div className="max-w-3xl mx-auto pt-8">
@@ -947,7 +950,7 @@ export default function ChatWindow() {
                   </button>
                 ))}
                 <button
-                  onClick={() => handleSend('Quero criar uma nova marca')}
+                  onClick={() => setBrandModalOpen(true)}
                   className="border border-border/60 bg-background text-foreground/80 rounded-xl px-4 py-2.5 text-[13px] hover:bg-primary/5 hover:border-primary/30 hover:text-foreground transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
                 >
                   🎨 Criar marca
@@ -1032,7 +1035,7 @@ export default function ChatWindow() {
               {action.emoji} {action.label}
             </button>
           ))}
-          <button onClick={() => handleSend('Quero criar uma nova marca')}
+          <button onClick={() => setBrandModalOpen(true)}
             className="text-[11px] px-3 py-1.5 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150 whitespace-nowrap shrink-0">
             🎨 Criar marca
           </button>
@@ -1066,6 +1069,24 @@ export default function ChatWindow() {
                   ? "Envie imagens ou digite 'pronto'..."
                   : "Cole um link ou descreva o conteúdo..."
         }
+      />
+
+      <BrandCreationModal
+        open={brandModalOpen}
+        onOpenChange={setBrandModalOpen}
+        onCreated={(newBrandId) => {
+          if (!userId) return;
+          supabase.from("brands").select("id, name").eq("owner_user_id", userId)
+            .order("created_at", { ascending: false })
+            .then(({ data }) => {
+              if (data) {
+                setBrands(data);
+                setSelectedBrandId(newBrandId);
+              }
+            });
+          setNudgeContext(prev => ({ ...prev, hasBrand: true }));
+          toast.success("Marca criada com sucesso! 🎨");
+        }}
       />
     </div>
   );

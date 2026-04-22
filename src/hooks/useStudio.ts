@@ -47,7 +47,7 @@ export function useCreateBrand() {
 
       const brandId = crypto.randomUUID();
 
-      const insertPayload = {
+      const insertPayload: any = {
         id: brandId,
         name: brand.name || 'Nova Marca',
         owner_user_id: userId,
@@ -57,6 +57,9 @@ export function useCreateBrand() {
         do_rules: brand.do_rules,
         dont_rules: brand.dont_rules,
         logo_url: brand.logo_url || null,
+        creation_mode: (brand as any).creation_mode ?? null,
+        default_visual_style: (brand as any).default_visual_style ?? null,
+        visual_preferences: (brand as any).visual_preferences ?? null,
       };
 
       const { error } = await supabase

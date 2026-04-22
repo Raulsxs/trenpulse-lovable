@@ -13,7 +13,7 @@ interface NudgeConfig {
   title: string;
   description: string;
   cta: string;
-  action: "navigate" | "dismiss";
+  action: "navigate" | "dismiss" | "create-brand";
   href?: string;
 }
 
@@ -22,9 +22,9 @@ const NUDGES: NudgeConfig[] = [
     id: "create-brand",
     icon: <Palette className="w-5 h-5 text-primary" />,
     title: "Crie sua marca para resultados melhores",
-    description: "Com uma marca configurada, toda imagem gerada segue suas cores, fontes e estilo visual. Basta dizer \"criar minha marca\" aqui no chat e enviar exemplos de posts.",
+    description: "Com uma marca configurada, toda imagem gerada segue suas cores, fontes e estilo visual.",
     cta: "Criar marca agora",
-    action: "dismiss",
+    action: "create-brand",
   },
   {
     id: "connect-social",
@@ -41,9 +41,10 @@ interface SmartNudgeProps {
   hasBrand: boolean;
   hasSocialConnection: boolean;
   contentCount: number;
+  onCreateBrandClick?: () => void;
 }
 
-export default function SmartNudge({ hasBrand, hasSocialConnection, contentCount }: SmartNudgeProps) {
+export default function SmartNudge({ hasBrand, hasSocialConnection, contentCount, onCreateBrandClick }: SmartNudgeProps) {
   const navigate = useNavigate();
   const [activeNudge, setActiveNudge] = useState<NudgeConfig | null>(null);
 
@@ -73,6 +74,8 @@ export default function SmartNudge({ hasBrand, hasSocialConnection, contentCount
   const handleAction = () => {
     if (activeNudge?.action === "navigate" && activeNudge.href) {
       navigate(activeNudge.href);
+    } else if (activeNudge?.action === "create-brand" && onCreateBrandClick) {
+      onCreateBrandClick();
     }
     dismissNudge();
   };
