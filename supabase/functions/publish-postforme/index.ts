@@ -191,8 +191,10 @@ Deno.serve(async (req) => {
         const contentType = (content as any).content_type || "post";
         const isStory = contentType === "story" || contentType === "reels";
 
+        // PFM requires caption on every post, even for stories (the caption doesn't show
+        // on the IG story itself, but the field is required by the API).
         const postBody: any = {
-          caption: isStory ? "" : (caption || "."),
+          caption: caption || content.title || ".",
           social_accounts: [target.pfm_account_id],
           media,
         };
