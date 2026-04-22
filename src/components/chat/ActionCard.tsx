@@ -180,6 +180,8 @@ export default function ActionCard({
   const effectivePlatform = resolvedPlatform;
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [adaptOpen, setAdaptOpen] = useState(false);
+  const [isAdapting, setIsAdapting] = useState(false);
   const [isRejected, setIsRejected] = useState(false);
   const [showRejectConfirm, setShowRejectConfirm] = useState(false);
   const [isRegeneratingText, setIsRegeneratingText] = useState(false);
@@ -986,11 +988,11 @@ export default function ActionCard({
               Refazer
             </Button>
             {onAdapt && (contentType as string) !== "cron_config" && (
-              <Popover>
+              <Popover open={adaptOpen} onOpenChange={setAdaptOpen}>
                 <PopoverTrigger asChild>
-                  <Button size="sm" variant="outline" className="flex-1 text-xs">
-                    <ArrowRightLeft className="w-3 h-3" />
-                    Adaptar
+                  <Button size="sm" variant="outline" className="flex-1 text-xs" disabled={isAdapting}>
+                    {isAdapting ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowRightLeft className="w-3 h-3" />}
+                    {isAdapting ? "Adaptando..." : "Adaptar"}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-56 p-2" align="start">
@@ -1002,7 +1004,15 @@ export default function ActionCard({
                         <button
                           key={`${f.platform}-${f.contentType}`}
                           className="w-full text-left px-2 py-1.5 text-xs rounded-md hover:bg-muted/80 transition-colors flex justify-between items-center"
-                          onClick={() => onAdapt(contentId, f.platform, f.contentType)}
+                          onClick={() => {
+                            setAdaptOpen(false);
+                            setIsAdapting(true);
+                            toast.success(`Adaptando para ${f.label}...`, {
+                              description: `Formato ${f.dim}. O novo conteúdo vai aparecer no chat em instantes.`,
+                            });
+                            onAdapt(contentId, f.platform, f.contentType);
+                            setTimeout(() => setIsAdapting(false), 3000);
+                          }}
                         >
                           <span>{f.label}</span>
                           <span className="text-[10px] text-muted-foreground">{f.dim}</span>
