@@ -237,17 +237,28 @@ Deno.serve(async (req) => {
           let externalPostUrl: string | null = null;
 
           if (postId && !scheduledAt) {
-            for (let attempt = 0; attempt < 6; attempt++) {
+            // PFM query param is post_id (not social_post_id). Also scope by social_account_id to
+            // get only the result for this specific account, not the whole post's results.
+            const pollUrl = `https://api.postforme.dev/v1/social-post-results?post_id=${encodeURIComponent(postId)}&social_account_id=${encodeURIComponent(target.pfm_account_id)}`;
+            for (let attempt = 0; attempt < 8; attempt++) {
               await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 3000));
               try {
-                const statusResp = await fetch(
-                  `https://api.postforme.dev/v1/social-post-results?social_post_id=${encodeURIComponent(postId)}`,
-                  { headers: { "Authorization": `Bearer ${pfmApiKey}` } },
-                );
-                if (!statusResp.ok) continue;
+                const pollController = new AbortController();
+                const pollTimer = setTimeout(() => pollController.abort(), 5000);
+                const statusResp = await fetch(pollUrl, {
+                  headers: { "Authorization": `Bearer ${pfmApiKey}` },
+                  signal: pollController.signal,
+                });
+                clearTimeout(pollTimer);
+                if (!statusResp.ok) {
+                  console.warn(`[publish-postforme] poll ${attempt} http=${statusResp.status}`);
+                  continue;
+                }
                 const statusData = await statusResp.json();
-                const items = Array.isArray(statusData?.data) ? statusData.data : Array.isArray(statusData) ? statusData : [];
-                const ours = items.find((r: any) => r.social_account_id === target.pfm_account_id) || items[0];
+                const items = Array.isArray(statusData?.data) ? statusData.data
+                  : Array.isArray(statusData?.results) ? statusData.results
+                  : Array.isArray(statusData) ? statusData : [];
+                const ours = items[0]; // already filtered by social_account_id
                 if (!ours) continue;
 
                 if (ours.success === true) {
@@ -263,7 +274,7 @@ Deno.serve(async (req) => {
                   break;
                 }
               } catch (pollErr: any) {
-                console.warn(`[publish-postforme] poll attempt ${attempt} failed: ${pollErr?.message}`);
+                console.warn(`[publish-postforme] poll ${attempt} failed: ${pollErr?.name === "AbortError" ? "timeout" : pollErr?.message}`);
               }
             }
           }
