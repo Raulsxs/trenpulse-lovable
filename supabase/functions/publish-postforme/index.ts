@@ -226,8 +226,64 @@ Deno.serve(async (req) => {
         if (pfmResp.ok) {
           const pfmData = await pfmResp.json();
           const postId = pfmData.id || pfmData.post_id || pfmData.data?.id;
-          console.log(`[publish-postforme] Success on ${target.platform}: postId=${postId}`);
-          results.push({ platform: target.platform, success: true, postId });
+          console.log(`[publish-postforme] PFM accepted on ${target.platform}: postId=${postId}`);
+
+          // PFM returning 200 only means the job was accepted. Instagram/etc publish is async —
+          // it can still fail downstream (bad media, missing permissions, etc) and leave us with
+          // a "success" in the DB while nothing actually landed on the user's feed.
+          // Poll social-post-results until we see a concrete success/failure verdict.
+          let verdict: "success" | "failed" | "pending" = "pending";
+          let verdictError: string | null = null;
+          let externalPostUrl: string | null = null;
+
+          if (postId && !scheduledAt) {
+            for (let attempt = 0; attempt < 6; attempt++) {
+              await new Promise(r => setTimeout(r, attempt === 0 ? 2000 : 3000));
+              try {
+                const statusResp = await fetch(
+                  `https://api.postforme.dev/v1/social-post-results?social_post_id=${encodeURIComponent(postId)}`,
+                  { headers: { "Authorization": `Bearer ${pfmApiKey}` } },
+                );
+                if (!statusResp.ok) continue;
+                const statusData = await statusResp.json();
+                const items = Array.isArray(statusData?.data) ? statusData.data : Array.isArray(statusData) ? statusData : [];
+                const ours = items.find((r: any) => r.social_account_id === target.pfm_account_id) || items[0];
+                if (!ours) continue;
+
+                if (ours.success === true) {
+                  verdict = "success";
+                  externalPostUrl = ours.platform_data?.url || ours.platform_data?.permalink || null;
+                  break;
+                }
+                if (ours.success === false) {
+                  verdict = "failed";
+                  verdictError = typeof ours.error === "string"
+                    ? ours.error
+                    : (ours.error?.message || JSON.stringify(ours.error)?.substring(0, 200) || "Publicação rejeitada pela plataforma");
+                  break;
+                }
+              } catch (pollErr: any) {
+                console.warn(`[publish-postforme] poll attempt ${attempt} failed: ${pollErr?.message}`);
+              }
+            }
+          }
+
+          if (verdict === "success") {
+            console.log(`[publish-postforme] Confirmed published on ${target.platform}: postId=${postId}`);
+            results.push({ platform: target.platform, success: true, postId, url: externalPostUrl ?? undefined });
+          } else if (verdict === "failed") {
+            console.error(`[publish-postforme] Platform rejected on ${target.platform}: ${verdictError}`);
+            results.push({ platform: target.platform, success: false, error: verdictError || "Rejeitado pela plataforma" });
+          } else {
+            // Still pending after ~17s total — tell the UI it's processing so we don't mark a fake "published"
+            console.warn(`[publish-postforme] Still pending on ${target.platform} after polling: postId=${postId}`);
+            results.push({
+              platform: target.platform,
+              success: false,
+              error: "Publicação em processamento. Verifique sua conta em alguns minutos.",
+              pending: true,
+            } as any);
+          }
         } else {
           const errText = await pfmResp.text();
           console.error(`[publish-postforme] Failed on ${target.platform} status=${pfmResp.status} body=${errText}`);
@@ -248,22 +304,29 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Update content status
+    // Update content status — only mark "published" when we have at least one confirmed success.
+    // If everything is still pending, mark as "processing" so the UI doesn't lie to the user.
     const anySuccess = results.some(r => r.success);
+    const anyPending = results.some((r: any) => r.pending === true);
     if (anySuccess) {
       await svc.from("generated_contents").update({
         status: scheduledAt ? "scheduled" : "published",
         published_at: scheduledAt ? null : new Date().toISOString(),
         scheduled_at: scheduledAt || null,
       }).eq("id", contentId);
+    } else if (anyPending && !scheduledAt) {
+      await svc.from("generated_contents").update({ status: "processing" }).eq("id", contentId);
     }
 
     const successCount = results.filter(r => r.success).length;
+    const pendingCount = results.filter((r: any) => r.pending === true).length;
     const message = successCount === targetPlatforms.length
       ? `✅ Publicado em ${successCount} plataforma(s)!`
       : successCount > 0
         ? `⚠️ Publicado em ${successCount}/${targetPlatforms.length} plataformas.`
-        : "❌ Falha na publicação.";
+        : pendingCount > 0
+          ? `⏳ ${pendingCount} publicação(ões) em processamento. Verifique em alguns minutos.`
+          : "❌ Falha na publicação.";
 
     return new Response(JSON.stringify({
       success: anySuccess,

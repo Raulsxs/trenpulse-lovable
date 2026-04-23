@@ -390,6 +390,18 @@ Mensagem: "${message}"`;
       detectedIntent = "GENERATE_TEMPLATE";
     }
 
+    // Format-aware re-route: if the message/params indicate a multi-slide format (carousel or
+    // LinkedIn document), but the classifier sent us to GENERATE, upgrade to GENERATE_CAROUSEL.
+    // GENERATE's handler hard-codes totalSlides=1 — so this is the only way a carousel gets
+    // generated when the URL detection or LINK_PARA_POST collapsed the intent down.
+    if (detectedIntent === "GENERATE") {
+      const effectiveFormat = requestFormat || detectFormat(message);
+      if (effectiveFormat === "carousel" || effectiveFormat === "document") {
+        console.log(`[ai-chat] re-route GENERATE → GENERATE_CAROUSEL (format=${effectiveFormat})`);
+        detectedIntent = "GENERATE_CAROUSEL";
+      }
+    }
+
     // ── Process intent-specific actions ──
     let replyOverride: string | null = null;
     let quickReplies: string[] | null = null;

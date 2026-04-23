@@ -199,6 +199,8 @@ export default function ActionCard({
   const [publishOpen, setPublishOpen] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [publishResults, setPublishResults] = useState<Record<string, { success: boolean; error?: string }> | null>(null);
+  // At least one platform confirmed as truly published (used to permanently lock the publish button)
+  const publishedSuccessfully = !!publishResults && Object.values(publishResults).some((r) => r.success === true);
 
   // Slide data for client-side rendering (same component as studio)
   const [slideData, setSlideData] = useState<any>(null);
@@ -866,19 +868,21 @@ export default function ActionCard({
                     size="sm"
                     variant="default"
                     className="flex-1 text-xs gap-1.5"
-                    disabled={isPublishing}
+                    disabled={isPublishing || publishedSuccessfully}
                   >
                     {isPublishing ? (
                       <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : publishedSuccessfully ? (
+                      <Check className="w-3 h-3" />
                     ) : (
                       <Send className="w-3 h-3" />
                     )}
                     {isPublishing
                       ? "Publicando..."
-                      : publishResults
+                      : publishedSuccessfully
                         ? "Publicado"
                         : "Publicar agora"}
-                    <ChevronDown className="w-3 h-3 ml-auto" />
+                    {!publishedSuccessfully && <ChevronDown className="w-3 h-3 ml-auto" />}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-64 p-3" align="start">
@@ -940,14 +944,16 @@ export default function ActionCard({
                     size="sm"
                     className="w-full text-xs"
                     onClick={handlePublish}
-                    disabled={selectedAccountIds.length === 0 || isPublishing}
+                    disabled={selectedAccountIds.length === 0 || isPublishing || publishedSuccessfully}
                   >
                     {isPublishing ? (
                       <Loader2 className="w-3 h-3 animate-spin mr-1" />
                     ) : (
                       <Send className="w-3 h-3 mr-1" />
                     )}
-                    Publicar em {selectedAccountIds.length} conta{selectedAccountIds.length !== 1 ? "s" : ""}
+                    {publishedSuccessfully
+                      ? "Já publicado"
+                      : `Publicar em ${selectedAccountIds.length} conta${selectedAccountIds.length !== 1 ? "s" : ""}`}
                   </Button>
                 </PopoverContent>
               </Popover>
