@@ -1066,14 +1066,48 @@ export default function ActionCard({
                       },
                     });
                     if (error) throw error;
-                    if (data?.mediaUrl) {
-                      setAnimatedVideoUrl(data.mediaUrl);
-                      toast.success("Video animado gerado!");
-                    } else if (data?.imageUrls?.[0]) {
-                      setAnimatedVideoUrl(data.imageUrls[0]);
-                      toast.success("Animação gerada!");
+
+                    // If done immediately (quick template)
+                    if (data?.status === "done") {
+                      const url = data.mediaUrl || data.imageUrls?.[0];
+                      if (url) {
+                        setAnimatedVideoUrl(url);
+                        toast.success("Video animado gerado!");
+                      } else {
+                        toast.error("Não foi possível gerar a animação");
+                      }
+                      return;
+                    }
+
+                    // Async polling for slow templates
+                    if (data?.creationId && (data?.status === "processing" || data?.status === "timeout")) {
+                      toast.info("⏳ Gerando animação... isso pode levar até 2 minutos.");
+                      const cid = data.creationId;
+                      const maxAttempts = 48; // 48 * 5s = 240s max
+                      for (let i = 0; i < maxAttempts; i++) {
+                        await new Promise(r => setTimeout(r, 5000));
+                        const { data: poll, error: pollErr } = await supabase.functions.invoke("blotato-proxy", {
+                          body: { action: "poll_status", creationId: cid },
+                        });
+                        if (pollErr) continue;
+                        if (poll?.status === "done") {
+                          const url = poll.mediaUrl || poll.imageUrls?.[0];
+                          if (url) {
+                            setAnimatedVideoUrl(url);
+                            toast.success("Video animado gerado!");
+                          } else {
+                            toast.error("Animação concluída mas sem mídia");
+                          }
+                          return;
+                        }
+                        if (poll?.status === "failed") {
+                          toast.error("Falha ao gerar animação");
+                          return;
+                        }
+                      }
+                      toast.error("Animação demorou demais. Tente novamente.");
                     } else {
-                      toast.error("Não foi possível gerar a animação");
+                      toast.error("Não foi possível iniciar a animação");
                     }
                   } catch (err: any) {
                     console.error("[ActionCard] Animate error:", err);
