@@ -198,9 +198,12 @@ export default function ActionCard({
   const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
   const [publishOpen, setPublishOpen] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
-  const [publishResults, setPublishResults] = useState<Record<string, { success: boolean; error?: string }> | null>(null);
+  const [publishResults, setPublishResults] = useState<Record<string, { success: boolean; error?: string; pending?: boolean }> | null>(null);
   // At least one platform confirmed as truly published (used to permanently lock the publish button)
   const publishedSuccessfully = !!publishResults && Object.values(publishResults).some((r) => r.success === true);
+  // Any pending platform waiting for downstream confirmation — lock button to prevent duplicate publishes
+  const publishHasPending = !!publishResults && Object.values(publishResults).some((r) => r.pending === true);
+  const publishLocked = publishedSuccessfully || publishHasPending;
 
   // Slide data for client-side rendering (same component as studio)
   const [slideData, setSlideData] = useState<any>(null);
@@ -262,30 +265,38 @@ export default function ActionCard({
       });
       if (error) throw error;
 
-      // Auto-approve: clicking Publish implies user approval of the content
-      await supabase.from("generated_contents").update({ status: "approved" }).eq("id", contentId);
-
-      // Parse results per platform
-      const results: Record<string, { success: boolean; error?: string }> = {};
+      // Parse results per platform. The backend already marks content status correctly
+      // (published on confirmed success, processing on pending) — no frontend auto-approve.
+      const results: Record<string, { success: boolean; error?: string; pending?: boolean }> = {};
+      let successCount = 0;
+      let pendingCount = 0;
+      let failCount = 0;
       if (data?.results) {
         for (const r of data.results) {
-          results[r.platform] = { success: r.success !== false, error: r.error };
+          const isSuccess = r.success === true;
+          const isPending = r.pending === true;
+          results[r.platform] = { success: isSuccess, error: r.error, pending: isPending };
+          if (isSuccess) successCount++;
+          else if (isPending) pendingCount++;
+          else failCount++;
         }
       } else {
-        // If no per-platform results, assume all succeeded
         for (const p of selectedAccountIds) {
           results[p] = { success: true };
+          successCount++;
         }
       }
       setPublishResults(results);
 
-      const successCount = Object.values(results).filter((r) => r.success).length;
-      const failCount = Object.values(results).filter((r) => !r.success).length;
-
-      if (failCount === 0) {
+      if (failCount === 0 && pendingCount === 0) {
         toast.success(`Publicado em ${successCount} plataforma${successCount > 1 ? "s" : ""}!`);
       } else if (successCount > 0) {
-        toast.warning(`Publicado em ${successCount}, falhou em ${failCount} plataforma${failCount > 1 ? "s" : ""}`);
+        const bits: string[] = [`Publicado em ${successCount}`];
+        if (pendingCount > 0) bits.push(`${pendingCount} em processamento`);
+        if (failCount > 0) bits.push(`${failCount} falhou`);
+        toast.warning(bits.join(", "));
+      } else if (pendingCount > 0 && failCount === 0) {
+        toast.info(`${pendingCount} publicação(ões) em processamento. Verifique sua rede em alguns minutos.`);
       } else {
         toast.error("Falha ao publicar em todas as plataformas");
       }
@@ -868,12 +879,14 @@ export default function ActionCard({
                     size="sm"
                     variant="default"
                     className="flex-1 text-xs gap-1.5"
-                    disabled={isPublishing || publishedSuccessfully}
+                    disabled={isPublishing || publishLocked}
                   >
                     {isPublishing ? (
                       <Loader2 className="w-3 h-3 animate-spin" />
                     ) : publishedSuccessfully ? (
                       <Check className="w-3 h-3" />
+                    ) : publishHasPending ? (
+                      <Loader2 className="w-3 h-3" />
                     ) : (
                       <Send className="w-3 h-3" />
                     )}
@@ -881,8 +894,10 @@ export default function ActionCard({
                       ? "Publicando..."
                       : publishedSuccessfully
                         ? "Publicado"
-                        : "Publicar agora"}
-                    {!publishedSuccessfully && <ChevronDown className="w-3 h-3 ml-auto" />}
+                        : publishHasPending
+                          ? "Em processamento"
+                          : "Publicar agora"}
+                    {!publishLocked && <ChevronDown className="w-3 h-3 ml-auto" />}
                   </Button>
                 </PopoverTrigger>
                 <PopoverContent className="w-64 p-3" align="start">
@@ -944,7 +959,7 @@ export default function ActionCard({
                     size="sm"
                     className="w-full text-xs"
                     onClick={handlePublish}
-                    disabled={selectedAccountIds.length === 0 || isPublishing || publishedSuccessfully}
+                    disabled={selectedAccountIds.length === 0 || isPublishing || publishLocked}
                   >
                     {isPublishing ? (
                       <Loader2 className="w-3 h-3 animate-spin mr-1" />
@@ -953,7 +968,9 @@ export default function ActionCard({
                     )}
                     {publishedSuccessfully
                       ? "Já publicado"
-                      : `Publicar em ${selectedAccountIds.length} conta${selectedAccountIds.length !== 1 ? "s" : ""}`}
+                      : publishHasPending
+                        ? "Em processamento"
+                        : `Publicar em ${selectedAccountIds.length} conta${selectedAccountIds.length !== 1 ? "s" : ""}`}
                   </Button>
                 </PopoverContent>
               </Popover>
