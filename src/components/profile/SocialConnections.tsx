@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Link2, Unlink } from "lucide-react";
+import { Loader2, Link2, Unlink, Plus } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -107,10 +107,11 @@ export interface ConnectedAccount {
 }
 
 export default function SocialConnections() {
+  // One entry per connected account (a user can have multiple accounts on the same platform)
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [connectingPlatform, setConnectingPlatform] = useState<string | null>(null);
-  const [disconnectingPlatform, setDisconnectingPlatform] = useState<string | null>(null);
+  const [disconnectingAccountId, setDisconnectingAccountId] = useState<string | null>(null);
 
   const fetchAccounts = useCallback(async () => {
     try {
@@ -119,16 +120,16 @@ export default function SocialConnections() {
       });
       if (error) throw error;
       const connections = data?.connections || [];
-      // Map DB connections to ConnectedAccount format
-      const mapped = PLATFORMS.map((p) => {
-        const conn = connections.find((c: any) => c.platform === p.id && c.status === "connected");
-        return {
-          platform: p.id,
-          connected: !!conn,
-          account_name: conn?.account_name,
-        };
-      });
-      setAccounts(mapped);
+      setAccounts(
+        connections
+          .filter((c: any) => c.status === "connected")
+          .map((c: any) => ({
+            platform: c.platform,
+            connected: true,
+            account_name: c.account_name,
+            pfm_account_id: c.pfm_account_id,
+          })),
+      );
     } catch (err) {
       console.error("[SocialConnections] list error:", err);
     } finally {
@@ -151,6 +152,10 @@ export default function SocialConnections() {
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 
   const handleConnect = async (platformId: string) => {
+    // Snapshot the current count for this platform so the poll can detect a NEW account
+    // (instead of just "any connected account exists" — important for multi-account users).
+    const accountsBefore = accounts.filter((a) => a.platform === platformId).length;
+
     setConnectingPlatform(platformId);
     try {
       const { data, error } = await supabase.functions.invoke("connect-social", {
@@ -169,8 +174,8 @@ export default function SocialConnections() {
           try {
             const { data: listData } = await supabase.functions.invoke("connect-social", { body: { action: "list" } });
             const connections = listData?.connections || [];
-            const conn = connections.find((c: any) => c.platform === platformId && c.status === "connected");
-            if (conn) {
+            const newCount = connections.filter((c: any) => c.platform === platformId && c.status === "connected").length;
+            if (newCount > accountsBefore) {
               clearInterval(pollRef.current!);
               pollRef.current = null;
               toast.success(`${platformId} conectado com sucesso!`);
@@ -193,25 +198,21 @@ export default function SocialConnections() {
     }
   };
 
-  const handleDisconnect = async (platformId: string) => {
-    setDisconnectingPlatform(platformId);
+  const handleDisconnect = async (pfmAccountId: string, platformId: string) => {
+    setDisconnectingAccountId(pfmAccountId);
     try {
       const { error } = await supabase.functions.invoke("connect-social", {
-        body: { action: "disconnect", platform: platformId },
+        body: { action: "disconnect", platform: platformId, pfm_account_id: pfmAccountId },
       });
       if (error) throw error;
-      setAccounts((prev) =>
-        prev.map((a) => (a.platform === platformId ? { ...a, connected: false, account_name: undefined } : a))
-      );
+      setAccounts((prev) => prev.filter((a) => a.pfm_account_id !== pfmAccountId));
       toast.success("Conta desconectada");
     } catch (err: any) {
-      toast.error(`Erro ao desconectar ${platformId}`);
+      toast.error(err?.message || `Erro ao desconectar`);
     } finally {
-      setDisconnectingPlatform(null);
+      setDisconnectingAccountId(null);
     }
   };
-
-  const getAccount = (platformId: string) => accounts.find((a) => a.platform === platformId);
 
   return (
     <Card>
@@ -232,58 +233,89 @@ export default function SocialConnections() {
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {PLATFORMS.map((p) => {
-              const account = getAccount(p.id);
-              const connected = account?.connected || false;
+              const platformAccounts = accounts.filter((a) => a.platform === p.id);
+              const hasAccounts = platformAccounts.length > 0;
               const isConnecting = connectingPlatform === p.id;
-              const isDisconnecting = disconnectingPlatform === p.id;
               const IconComp = p.icon;
 
               return (
                 <div
                   key={p.id}
-                  className={`flex items-center gap-3 p-3 rounded-xl border transition-all ${
-                    connected
+                  className={`p-3 rounded-xl border transition-all ${
+                    hasAccounts
                       ? "border-green-500/30 bg-green-500/5"
                       : "border-border hover:border-primary/30 hover:bg-muted/30"
                   }`}
                 >
-                  <div className={`w-9 h-9 rounded-lg ${p.bgColor} flex items-center justify-center shrink-0`}>
-                    <IconComp className={`w-4.5 h-4.5 ${p.iconColor}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-medium">{p.name}</span>
-                      {connected && (
-                        <div className="w-2 h-2 rounded-full bg-green-500 shrink-0" />
-                      )}
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className={`w-9 h-9 rounded-lg ${p.bgColor} flex items-center justify-center shrink-0`}>
+                      <IconComp className={`w-4.5 h-4.5 ${p.iconColor}`} />
                     </div>
-                    {account?.account_name && (
-                      <p className="text-[11px] text-muted-foreground truncate">{account.account_name}</p>
+                    <span className="text-sm font-medium flex-1">{p.name}</span>
+                    {hasAccounts && (
+                      <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                        {platformAccounts.length}
+                      </Badge>
                     )}
                   </div>
-                  <div className="shrink-0">
-                    {connected ? (
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        className="text-xs text-muted-foreground hover:text-destructive h-7 px-2"
-                        onClick={() => handleDisconnect(p.id)}
-                        disabled={isDisconnecting}
-                      >
-                        {isDisconnecting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Unlink className="w-3 h-3" />}
-                      </Button>
-                    ) : (
+
+                  {hasAccounts ? (
+                    <div className="space-y-1.5">
+                      {platformAccounts.map((account) => {
+                        const isDisc = disconnectingAccountId === account.pfm_account_id;
+                        return (
+                          <div
+                            key={account.pfm_account_id || `${p.id}-unknown`}
+                            className="flex items-center gap-2 p-2 rounded-md bg-background/50 border border-border/50"
+                          >
+                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                            <span className="text-xs flex-1 truncate" title={account.account_name || ""}>
+                              {account.account_name || "Conta conectada"}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-muted-foreground hover:text-destructive h-6 w-6 p-0"
+                              onClick={() => account.pfm_account_id && handleDisconnect(account.pfm_account_id, p.id)}
+                              disabled={isDisc || !account.pfm_account_id}
+                              title="Desconectar esta conta"
+                            >
+                              {isDisc ? <Loader2 className="w-3 h-3 animate-spin" /> : <Unlink className="w-3 h-3" />}
+                            </Button>
+                          </div>
+                        );
+                      })}
                       <Button
                         size="sm"
                         variant="outline"
-                        className="text-xs h-7 px-3"
+                        className="w-full text-xs h-7 mt-1"
                         onClick={() => handleConnect(p.id)}
                         disabled={isConnecting}
                       >
-                        {isConnecting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Conectar"}
+                        {isConnecting ? (
+                          <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                        ) : (
+                          <Plus className="w-3 h-3 mr-1" />
+                        )}
+                        Adicionar outra
                       </Button>
-                    )}
-                  </div>
+                    </div>
+                  ) : (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="w-full text-xs h-7"
+                      onClick={() => handleConnect(p.id)}
+                      disabled={isConnecting}
+                    >
+                      {isConnecting ? (
+                        <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                      ) : (
+                        <Link2 className="w-3 h-3 mr-1" />
+                      )}
+                      Conectar
+                    </Button>
+                  )}
                 </div>
               );
             })}

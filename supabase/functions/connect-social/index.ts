@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
   try {
     let body: any = {};
     try { body = await req.json(); } catch { /* empty body is ok for some actions */ }
-    const { platform, action } = body;
+    const { platform, action, pfm_account_id } = body;
 
     // Auth
     const authHeader = req.headers.get("Authorization");
@@ -96,8 +96,37 @@ Deno.serve(async (req) => {
     }
 
     // ── DISCONNECT ──
+    // Two modes:
+    //  - pfm_account_id provided → revoke that specific account on PFM (multi-account aware)
+    //  - only platform provided → legacy: mark every connection for that platform as disconnected
+    //    in our DB cache (PFM stays as-is — user can clean up later)
     if (action === "disconnect") {
-      if (!platform) return respond({ error: "platform is required" }, 400);
+      if (pfm_account_id) {
+        const pfmApiKey = Deno.env.get("POSTFORME_API_KEY");
+        if (!pfmApiKey) return respond({ error: "POSTFORME_API_KEY não configurada" }, 500);
+
+        const disconnectResp = await fetch(
+          `https://api.postforme.dev/v1/social-accounts/${encodeURIComponent(pfm_account_id)}/disconnect`,
+          { method: "POST", headers: { "Authorization": `Bearer ${pfmApiKey}` } },
+        );
+        const disconnectText = await disconnectResp.text();
+        console.log(`[connect-social] PFM disconnect ${pfm_account_id}: status=${disconnectResp.status}, body=${disconnectText.substring(0, 200)}`);
+
+        if (!disconnectResp.ok) {
+          let detail = disconnectText;
+          try { detail = JSON.parse(disconnectText)?.message || disconnectText; } catch {}
+          return respond({ error: `Erro ao desconectar: ${detail}` }, 502);
+        }
+
+        // Best-effort cache update (the list endpoint reads from PFM anyway)
+        await svc.from("social_connections")
+          .update({ status: "disconnected", updated_at: new Date().toISOString() })
+          .eq("user_id", user.id)
+          .eq("pfm_account_id", pfm_account_id);
+        return respond({ success: true });
+      }
+
+      if (!platform) return respond({ error: "platform or pfm_account_id is required" }, 400);
       await svc.from("social_connections")
         .update({ status: "disconnected", updated_at: new Date().toISOString() })
         .eq("user_id", user.id)
