@@ -960,6 +960,31 @@ Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legen
         // For quote/frase style: prompt focused ONLY on the phrase — never add niche/brand context
         const visualContext = contentStyle === "quote" ? extractVisualContext(message) : "";
 
+        // When the brand has reference images (style_copy/inspired modes), tell Gemini explicitly
+        // to copy their style. Without this instruction, the references are attached but ignored.
+        // This was lost when ai-chat started sending customPrompt directly (commit 4d6ce3d).
+        const hasStyleRefs = referenceImageUrls.length > 0 && !isPhotoBackground;
+        const referencesInstruction = hasStyleRefs
+          ? `IMAGENS DE REFERÊNCIA ANEXADAS — REGRA DE FIDELIDADE VISUAL:
+As imagens em anexo são exemplos REAIS do estilo desta marca. COPIE EXATAMENTE delas:
+- Paleta de cores e gradientes
+- Tipografia, peso e hierarquia
+- Layout, composição e proporções
+- Mockups, cards, formas decorativas e estilo geral
+
+NÃO copie textos das referências (categorias, hashtags, datas, rodapés, nomes de programas). O texto da imagem é SOMENTE o do TEMA acima.
+
+`
+          : "";
+
+        // Brand palette/fonts as concrete hints for the photo-background mode (which otherwise
+        // only sees the personal photo and a generic prompt).
+        const brandPalette = (brandSnapshot?.palette as any[] | undefined || [])
+          .map((c: any) => (typeof c === "string" ? c : c?.hex || c?.name))
+          .filter(Boolean)
+          .slice(0, 5);
+        const brandHeadingFont = (brandSnapshot?.fonts as any)?.headings || null;
+
         let imagePrompt: string;
 
         if (isPhotoBackground && photoBackgroundUrls.length > 0) {
@@ -979,7 +1004,8 @@ REGRAS OBRIGATÓRIAS:
 - A foto da pessoa deve permanecer INTACTA e INALTERADA — é a foto real do criador
 - Adicione um gradiente sutil escuro na parte inferior para legibilidade do texto
 - O texto deve ficar na parte inferior da imagem, sobre o gradiente
-- Tipografia elegante, profissional e legível
+- Tipografia elegante, profissional e legível${brandHeadingFont && brandHeadingFont !== "Inter" ? ` (preferência por fonte similar a ${brandHeadingFont})` : ""}
+${brandPalette.length > 0 ? `- Cores da marca (use no gradiente e no texto sobreposto): ${brandPalette.join(", ")}` : ""}
 - Estilo de post de coaching/liderança — limpo e sofisticado
 - NÃO gere outra pessoa. NÃO altere o rosto. A foto é SAGRADA.
 - NÃO adicione logos, URLs ou QR codes`;
@@ -1008,12 +1034,12 @@ Crie uma imagem profissional pronta para publicar como ${formatLabel} de ${platf
 
 TEMA: ${userTopic}
 
-${brandContext ? `IDENTIDADE VISUAL:\n${brandContext}\n` : ""}${userCtx?.business_niche ? `Nicho do criador: ${userCtx.business_niche}. ` : ""}${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}. ` : ""}
+${referencesInstruction}${brandContext ? `IDENTIDADE VISUAL:\n${brandContext}\n` : ""}${userCtx?.business_niche ? `Nicho do criador: ${userCtx.business_niche}. ` : ""}${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}. ` : ""}
 
 REGRAS:
 - A imagem deve ter texto integrado visível e legível sobre o tema acima.
 - Use tipografia profissional, hierarquia visual clara, cores harmônicas.
-- NÃO inclua URLs, QR codes ou logotipos de terceiros.
+${hasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas.\n" : ""}- NÃO inclua URLs, QR codes ou logotipos de terceiros.
 - Gere APENAS a imagem final, sem bordas ou mockups.`;
         }
 
@@ -1402,6 +1428,12 @@ Responda em JSON:
           const slide = slides[i];
           console.log(`[ai-chat] GENERATE_CAROUSEL: generating slide ${i + 1}/${slides.length}`);
 
+          const carouselHasStyleRefs = referenceImageUrls.length > 0;
+          const carouselRefsBlock = carouselHasStyleRefs
+            ? `\nIMAGENS DE REFERÊNCIA ANEXADAS — REGRA DE FIDELIDADE VISUAL:
+As imagens em anexo são exemplos REAIS do estilo desta marca. COPIE EXATAMENTE delas a paleta de cores, tipografia, layout, mockups, cards, formas decorativas e estilo geral. NÃO copie textos das referências (categorias, hashtags, datas, rodapés). O texto da imagem é SOMENTE o do headline/body/bullets acima.\n`
+            : "";
+
           const slidePrompt = `Crie a imagem do slide ${i + 1} de ${slides.length} de um carrossel para ${platform === "linkedin" ? "LinkedIn" : "Instagram"} (${dims.w}x${dims.h}px).
 
 CONTEXTO DO CARROSSEL: ${carouselTitle}
@@ -1409,13 +1441,13 @@ SLIDE ${i + 1}/${slides.length} (${slide.role}):
 Headline: ${slide.headline}
 ${slide.body ? `Body: ${slide.body}` : ""}
 ${slide.bullets?.length ? `Bullets:\n${slide.bullets.map((b: string) => `- ${b}`).join("\n")}` : ""}
-
+${carouselRefsBlock}
 ${brandContext ? `IDENTIDADE DA MARCA:\n${brandContext}\n` : ""}
 REGRAS:
 - Imagem COMPLETA com texto integrado, pronta para publicar
 - Manter identidade visual consistente entre slides
 - Texto legível, fonte profissional
-- Safe area: margem mínima de 80px em todas as bordas
+${carouselHasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas.\n" : ""}- Safe area: margem mínima de 80px em todas as bordas
 - NUNCA inclua URLs, QR codes, @handles inventados
 - Formato: ${dims.w}x${dims.h}px
 ${i === 0 ? "- Este é o COVER: título grande, impactante" : ""}
