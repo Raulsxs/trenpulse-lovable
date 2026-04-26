@@ -1094,6 +1094,15 @@ ${hasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das im
           const mainBilingual = secondaryLang && bilingualPlatforms.includes(platform)
             ? `\nIMPORTANTE: A legenda DEVE ser bilíngue — primeiro em português, depois "---" e a versão em ${secondaryLangName}.`
             : "";
+          const sourceUrl = urlMatch?.[0] || null;
+          // Story IG/Reels can't have clickable links; feed posts (IG/LinkedIn) can have
+          // the source URL appended at the end of the caption.
+          const isStoryFormat = format === "story";
+          const sourceFooterRule = sourceUrl && !isStoryFormat
+            ? `\nFONTE OBRIGATÓRIA: Termine a legenda com uma linha em branco e depois exatamente "🔗 Fonte: ${sourceUrl}" (use a URL completa, sem encurtar).`
+            : "";
+          const noBioLinkRule = `\nPROIBIDO: NUNCA escreva "link na bio", "link no perfil", "link nas histórias", "link no story", "arrasta pra cima", "swipe up", "veja mais nos stories" ou variações. Stories do Instagram não suportam link clicável e não temos um botão "link na bio" — não promete o que não dá pra entregar.`;
+
           const platformRules = platform === "linkedin"
             ? `REGRAS LINKEDIN:
 - Tom profissional e corporativo, como um especialista compartilhando insight valioso
@@ -1112,6 +1121,7 @@ ${hasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das im
           const captionPrompt = `Você é um especialista em copywriting para redes sociais. Gere uma legenda de alta qualidade para ${platform === "linkedin" ? "LinkedIn" : "Instagram"}.
 
 ${platformRules}
+${noBioLinkRule}${sourceFooterRule}
 
 ${userCtx?.business_niche ? `NICHO DO AUTOR: ${userCtx.business_niche} — use como contexto de fundo para adaptar a linguagem e exemplos.` : ""}
 ${userCtx?.brand_voice ? `TOM DE VOZ: ${userCtx.brand_voice}` : ""}
@@ -1173,6 +1183,11 @@ JSON: { "title": "...", "caption": "...", "hashtags": ["#..."] }`;
             ? `\n\nIMPORTANTE — LEGENDAS BILÍNGUES: Para as plataformas [${bilingualPlatforms.join(", ")}], a legenda DEVE ser bilíngue: primeiro o texto em português, depois uma linha "---" e o texto traduzido para ${secondaryLangName}. As outras plataformas ficam somente em português.`
             : "";
 
+          const variantSourceRule = urlMatch?.[0] && format !== "story"
+            ? `\nFONTE: Para instagram, linkedin, facebook, tiktok — termine a legenda com uma linha em branco e depois exatamente "🔗 Fonte: ${urlMatch[0]}". Para X (Twitter), inclua a URL no final como link nu (sem o prefixo "🔗 Fonte:") já que o limite de 280 chars é apertado.`
+            : "";
+          const variantNoBioRule = `\nPROIBIDO em TODAS as plataformas: nunca escreva "link na bio", "link no perfil", "arrasta pra cima", "swipe up", "veja mais nos stories" ou variações. Stories não têm link clicável.`;
+
           const variantPrompt = `Você é um copywriter especialista em cada rede social. Adapte a legenda abaixo mantendo a essência mas otimizando RADICALMENTE para cada plataforma. NÃO é tradução — cada versão deve parecer nativa daquela rede.
 
 LEGENDA ORIGINAL:
@@ -1186,6 +1201,7 @@ REGRAS POR PLATAFORMA:
 - x: Conciso, opinião forte, provocativo. Máx 280 chars. 0-2 hashtags. Sem emojis excessivos.
 - tiktok: Super informal, enérgico, com urgência. CTA direto ("salve agora!", "manda pra alguém!"). Emojis ok. Máx 2200 chars.
 - facebook: Tom amigável e conversacional. Pergunta aberta no início OU final para comentários. Pode ser mais longo. Máx 2000 chars.
+${variantNoBioRule}${variantSourceRule}
 ${bilingualNote}
 
 Responda APENAS em JSON:
@@ -1509,10 +1525,17 @@ Responda APENAS com a imagem gerada.`;
           const carouselBilingual = secondaryLang && bilingualPlatforms.includes(platform)
             ? `\nIMPORTANTE: A legenda DEVE ser bilíngue — primeiro em português, depois "---" e a versão em ${secondaryLangName}.`
             : "";
+          // Story carousels (each slide = a separate IG story) can't have clickable links,
+          // so we don't append a source footer. Feed carousels and LinkedIn documents do.
+          const carouselSourceRule = urlMatch?.[0] && !isStoryCarousel
+            ? `\nFONTE OBRIGATÓRIA: Termine a legenda com uma linha em branco e depois exatamente "🔗 Fonte: ${urlMatch[0]}".`
+            : "";
+          const carouselNoBioRule = `\nPROIBIDO: nunca escreva "link na bio", "link no perfil", "arrasta pra cima", "swipe up", "veja mais nos stories" ou variações.`;
+
           const captionPrompt = `Gere uma legenda para um carrossel de ${platform === "linkedin" ? "LinkedIn" : "Instagram"} sobre: "${message}"
 ${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
 ${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}
-Legenda curta e engajante. Inclua 5-8 hashtags relevantes no final.${carouselBilingual}
+Legenda curta e engajante. Inclua 5-8 hashtags relevantes no final.${carouselBilingual}${carouselNoBioRule}${carouselSourceRule}
 Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
 
           const captionResp = await aiGatewayFetch({
