@@ -83,6 +83,7 @@ const QUICK_ACTIONS = [
 // Default prompt templates: richer prompts for better results
 const DEFAULT_TEMPLATES = [
   { id: "carousel-ig", emoji: "🎠", label: "Carrossel Instagram", template: "Crie um carrossel de 5 slides educativos e visualmente impactantes para Instagram sobre: " },
+  { id: "story-carousel", emoji: "📱", label: "Carrossel de Stories", template: "Crie um carrossel de 5 stories sequenciais para Instagram, cada story 9:16, contando uma narrativa completa sobre: " },
   { id: "carousel-li", emoji: "📊", label: "Carrossel LinkedIn", template: "Crie um carrossel profissional para LinkedIn com dados, insights e tom corporativo sobre: " },
   { id: "tutorial", emoji: "📚", label: "Tutorial Passo a Passo", template: "Crie um carrossel tutorial passo a passo com slides educativos, cada slide explicando uma etapa clara sobre: " },
   { id: "tweet-thread", emoji: "🐦", label: "Tweet Thread", template: "Crie um tweet card visual estilo Twitter com frase de autoridade e impacto, posicionando como especialista sobre: " },

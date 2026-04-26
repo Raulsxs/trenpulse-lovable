@@ -211,6 +211,7 @@ serve(async (req) => {
       visualMode,
       brandSnapshot,
       platform,
+      generationMetadata,
     }: {
       generatedContent: any;
       fallbackTitle: string;
@@ -220,6 +221,7 @@ serve(async (req) => {
       visualMode?: string | null;
       brandSnapshot?: Record<string, any> | null;
       platform?: string | null;
+      generationMetadata?: Record<string, any> | null;
     }) => {
       const buildPayload = (safeTemplateSetId: string | null) => ({
         user_id: userId,
@@ -239,6 +241,7 @@ serve(async (req) => {
         source_summary: generatedContent?.sourceSummary || null,
         key_insights: Array.isArray(generatedContent?.keyInsights) ? generatedContent.keyInsights : null,
         platform_captions: generatedContent?.platformCaptions || null,
+        generation_metadata: generationMetadata || null,
       });
 
       const requestedTemplateSetId = typeof templateSetId === "string" && templateSetId.trim()
@@ -1266,8 +1269,14 @@ Responda APENAS em JSON:
         // 1. Detect platform and format
         const platform = requestPlatform || detectPlatform(message);
         const format = requestFormat || (platform === "linkedin" ? "document" : "carousel");
+        // Detect "carousel of stories": multiple sequential 9:16 stories instead of a feed carousel.
+        // Triggered by the "Carrossel de Stories" template or explicit user phrasing.
+        const isStoryCarousel = /carrossel\s+(de\s+)?stor(y|ies)|stor(y|ies)\s+sequenciais|stor(y|ies)\s+em\s+carrossel/i.test(message);
+        // Slides are rendered in 9:16 when this flag is on. content_type stays "carousel" so the
+        // ActionCard navigation works; publish-postforme reads the flag to publish N stories.
+        const effectiveSlideFormat = isStoryCarousel ? "story" : format;
         const slideCount = generationParams?.slideCount || 5;
-        console.log(`[ai-chat] GENERATE_CAROUSEL: platform=${platform}, format=${format}, slides=${slideCount}`);
+        console.log(`[ai-chat] GENERATE_CAROUSEL: platform=${platform}, format=${format}, effectiveSlideFormat=${effectiveSlideFormat}, isStoryCarousel=${isStoryCarousel}, slides=${slideCount}`);
 
         // 2. Load brand if brandId provided
         let brandContext = "";
@@ -1417,8 +1426,8 @@ Responda em JSON:
           ];
         }
 
-        // 5. Get content dimensions
-        const dims = getContentDimensions(platform, format);
+        // 5. Get content dimensions (9:16 for story carousels, otherwise platform default)
+        const dims = getContentDimensions(platform, effectiveSlideFormat);
 
         // 6. Generate images for each slide
         const imageUrls_arr: string[] = [];
@@ -1434,7 +1443,7 @@ Responda em JSON:
 As imagens em anexo são exemplos REAIS do estilo desta marca. COPIE EXATAMENTE delas a paleta de cores, tipografia, layout, mockups, cards, formas decorativas e estilo geral. NÃO copie textos das referências (categorias, hashtags, datas, rodapés). O texto da imagem é SOMENTE o do headline/body/bullets acima.\n`
             : "";
 
-          const slidePrompt = `Crie a imagem do slide ${i + 1} de ${slides.length} de um carrossel para ${platform === "linkedin" ? "LinkedIn" : "Instagram"} (${dims.w}x${dims.h}px).
+          const slidePrompt = `Crie a imagem do ${isStoryCarousel ? `story ${i + 1} de ${slides.length} (sequência narrativa de stories vertical 9:16)` : `slide ${i + 1} de ${slides.length} de um carrossel`} para ${platform === "linkedin" ? "LinkedIn" : "Instagram"} (${dims.w}x${dims.h}px).
 
 CONTEXTO DO CARROSSEL: ${carouselTitle}
 SLIDE ${i + 1}/${slides.length} (${slide.role}):
@@ -1464,7 +1473,7 @@ Responda APENAS com a imagem gerada.`;
                 slide,
                 slideIndex: i,
                 totalSlides: slides.length,
-                contentFormat: format,
+                contentFormat: effectiveSlideFormat,
                 platform,
                 backgroundOnly: false,
                 customPrompt: slidePrompt,
@@ -1540,6 +1549,9 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
         }
 
         // 8. Save to generated_contents
+        // NOTE: For story carousels we keep content_type="carousel" so the ActionCard's slide
+        // navigation works as usual; the story_carousel flag in generation_metadata tells
+        // publish-postforme to publish each slide as an independent story.
         const savedContentId = await persistGeneratedContent({
           generatedContent: {
             title: carouselTitle,
@@ -1553,6 +1565,7 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
           brandSnapshot,
           platform,
           visualMode: "ai_full_design",
+          generationMetadata: isStoryCarousel ? { is_story_carousel: true } : null,
         });
 
         // 9. Update image_urls
@@ -1565,10 +1578,11 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
         // 10. Set reply
         const generatedCount = imageUrls_arr.length;
         const totalCount = slides.length;
+        const noun = isStoryCarousel ? "stories" : "slides";
         replyOverride = generatedCount === totalCount
-          ? `Carrossel de ${totalCount} slides gerado! Confira abaixo.`
+          ? `Carrossel de ${totalCount} ${noun} gerado! Confira abaixo.`
           : generatedCount > 0
-            ? `Carrossel gerado com ${generatedCount} de ${totalCount} imagens. Algumas falharam.`
+            ? `Carrossel gerado com ${generatedCount} de ${totalCount} ${noun}. Alguns falharam.`
             : "O carrossel foi criado mas as imagens não foram geradas. Tente novamente.";
 
         actionResult = savedContentId ? {
@@ -1576,6 +1590,7 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
           content_type: format === "document" ? "document" : "carousel",
           platform,
           preview_image_url: imageUrls_arr[0] || null,
+          is_story_carousel: isStoryCarousel || undefined,
         } : null;
 
         console.log("[ai-chat] GENERATE_CAROUSEL: done, contentId=", savedContentId, "images=", generatedCount);
