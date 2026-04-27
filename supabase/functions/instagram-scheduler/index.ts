@@ -89,7 +89,129 @@ Deno.serve(async (req) => {
       }
     }
 
-    return new Response(JSON.stringify({ processed: results.length, results }), {
+    // ── Recurring schedules ──────────────────────────────────────────────
+    // Pick up active recurring rules whose configured day-of-week matches today and whose
+    // hour_utc has been reached, but haven't fired yet today. For each, clone the source
+    // content into a one-shot scheduled entry so the loop above publishes it on the next tick.
+    const recurringResults: Array<{ id: string; status: string; spawnedContentId?: string; error?: string }> = [];
+    try {
+      const nowDate = new Date();
+      const dow = nowDate.getUTCDay(); // 0=Sun ... 6=Sat
+      const hourNow = nowDate.getUTCHours();
+      const todayUtcDateStr = nowDate.toISOString().slice(0, 10); // YYYY-MM-DD
+
+      const { data: dueRecurring, error: recErr } = await supabase
+        .from("recurring_schedules")
+        .select("id, user_id, content_id, platforms, hour_utc, jitter_minutes, last_run_at")
+        .eq("active", true)
+        .contains("days_of_week", [dow])
+        .lte("hour_utc", hourNow);
+
+      if (recErr) {
+        console.error("[scheduler] recurring query error:", recErr.message);
+      } else if (dueRecurring?.length) {
+        console.log(`[scheduler] ${dueRecurring.length} recurring schedule(s) candidate for today (dow=${dow}, hour=${hourNow})`);
+
+        for (const sched of dueRecurring) {
+          try {
+            const todayAtSchedHour = new Date(Date.UTC(
+              nowDate.getUTCFullYear(),
+              nowDate.getUTCMonth(),
+              nowDate.getUTCDate(),
+              sched.hour_utc,
+              0, 0, 0,
+            ));
+            // Already fired today? skip.
+            if (sched.last_run_at && new Date(sched.last_run_at) >= todayAtSchedHour) {
+              continue;
+            }
+
+            // Clone the source content as a fresh scheduled entry.
+            const { data: src, error: srcErr } = await supabase
+              .from("generated_contents")
+              .select("user_id, title, caption, hashtags, image_urls, slides, platform, content_type, platform_captions, brand_id, brand_snapshot, visual_mode, generation_metadata, include_cta")
+              .eq("id", sched.content_id)
+              .single();
+
+            if (srcErr || !src) {
+              console.warn(`[scheduler] recurring ${sched.id}: source content ${sched.content_id} not found`);
+              recurringResults.push({ id: sched.id, status: "skipped", error: "source not found" });
+              continue;
+            }
+
+            // Stagger the actual publish time within jitter_minutes after the configured hour
+            // so daily recurring posts don't fire at the exact same minute every day.
+            const jitter = (sched as any).jitter_minutes ?? 15;
+            const offsetMs = jitter > 0 ? Math.floor(Math.random() * jitter * 60_000) : 0;
+            const spawnedAtMs = Date.now() + offsetMs;
+            const spawnedAt = new Date(spawnedAtMs).toISOString();
+            const { data: spawned, error: spawnErr } = await supabase
+              .from("generated_contents")
+              .insert({
+                user_id: sched.user_id,
+                title: src.title,
+                caption: src.caption,
+                hashtags: src.hashtags,
+                image_urls: src.image_urls,
+                slides: src.slides,
+                platform: src.platform,
+                content_type: src.content_type,
+                platform_captions: src.platform_captions,
+                brand_id: src.brand_id,
+                brand_snapshot: src.brand_snapshot,
+                visual_mode: src.visual_mode,
+                include_cta: src.include_cta,
+                status: "scheduled",
+                scheduled_at: spawnedAt,
+                generation_metadata: {
+                  ...((src.generation_metadata as Record<string, any>) || {}),
+                  recurring_schedule_id: sched.id,
+                  spawned_for_date: todayUtcDateStr,
+                  jitter_offset_minutes: Math.round(offsetMs / 60_000),
+                },
+              })
+              .select("id")
+              .maybeSingle();
+
+            if (spawnErr || !spawned) {
+              console.error(`[scheduler] recurring ${sched.id}: spawn failed:`, spawnErr?.message);
+              recurringResults.push({ id: sched.id, status: "spawn_failed", error: spawnErr?.message });
+              continue;
+            }
+
+            // If the recurring rule overrides platforms, write that into the spawned entry too.
+            if (Array.isArray(sched.platforms) && sched.platforms.length > 0) {
+              await supabase
+                .from("generated_contents")
+                .update({ platform: sched.platforms[0] })
+                .eq("id", spawned.id);
+            }
+
+            // Mark the schedule as fired *now* (not at spawnedAt) so the same-day dedup check
+            // works regardless of jitter — last_run_at being >= todayAtSchedHour is the gate.
+            await supabase
+              .from("recurring_schedules")
+              .update({ last_run_at: new Date().toISOString() })
+              .eq("id", sched.id);
+
+            console.log(`[scheduler] recurring ${sched.id}: spawned content ${spawned.id} from source ${sched.content_id}`);
+            recurringResults.push({ id: sched.id, status: "spawned", spawnedContentId: spawned.id });
+          } catch (err: any) {
+            console.error(`[scheduler] recurring ${sched.id} error:`, err?.message);
+            recurringResults.push({ id: sched.id, status: "error", error: err?.message });
+          }
+        }
+      }
+    } catch (err: any) {
+      console.error("[scheduler] recurring loop fatal:", err?.message);
+    }
+
+    return new Response(JSON.stringify({
+      processed: results.length,
+      results,
+      recurring_processed: recurringResults.length,
+      recurring_results: recurringResults,
+    }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (error: any) {

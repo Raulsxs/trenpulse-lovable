@@ -33,6 +33,7 @@ import {
 import SlideTemplateRenderer from "@/components/content/SlideTemplateRenderer";
 import SlideBgOverlayRenderer from "@/components/content/SlideBgOverlayRenderer";
 import OffScreenSlideRenderer from "@/components/content/OffScreenSlideRenderer";
+import RecurringSchedules from "@/components/calendar/RecurringSchedules";
 import { getSlideRenderMode } from "@/lib/slideUtils";
 import { useSlideCapture } from "@/hooks/useSlideCapture";
 import {
@@ -223,11 +224,14 @@ const Calendar = () => {
     );
   }, []);
 
+  const [userId, setUserId] = useState<string | null>(null);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
+      setUserId(user.id);
 
       const { data: brandsData } = await supabase
         .from("brands")
@@ -619,6 +623,9 @@ const Calendar = () => {
             </Select>
           </div>
         </div>
+
+        {/* Recurring schedules — same content posted on a weekly cadence */}
+        {userId && <RecurringSchedules userId={userId} />}
 
         {/* Filters + Stats */}
         <div className="flex flex-wrap items-center justify-between gap-3">
