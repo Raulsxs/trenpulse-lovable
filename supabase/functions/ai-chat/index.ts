@@ -39,6 +39,96 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+// ──────────────────────────────────────────────────────────────────────────────
+// URL article extraction
+// Handles Google redirect wrappers (google.com/url?url=... or ?q=...) and
+// uses Firecrawl when available for clean content extraction.
+// ──────────────────────────────────────────────────────────────────────────────
+function unwrapUrl(rawUrl: string): string {
+  try {
+    const u = new URL(rawUrl);
+    // Google redirect: /url?url=... or ?q=...
+    if (/(^|\.)google\.[^/]+$/i.test(u.hostname) && u.pathname === "/url") {
+      const inner = u.searchParams.get("url") || u.searchParams.get("q");
+      if (inner && /^https?:\/\//i.test(inner)) return inner;
+    }
+    return rawUrl;
+  } catch {
+    return rawUrl;
+  }
+}
+
+async function extractArticleContent(rawUrl: string, tag: string): Promise<string> {
+  const url = unwrapUrl(rawUrl);
+  console.log(`[ai-chat] ${tag}: fetching URL ${url}${url !== rawUrl ? " (unwrapped from Google redirect)" : ""}`);
+  const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
+
+  // 1) Try Firecrawl (best quality)
+  if (firecrawlKey) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 15000);
+      const fcResp = await fetch("https://api.firecrawl.dev/v1/scrape", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${firecrawlKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ url, formats: ["markdown"], onlyMainContent: true }),
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (fcResp.ok) {
+        const data = await fcResp.json();
+        const md = (data?.data?.markdown || data?.markdown || "").toString().trim();
+        if (md.length > 200) {
+          console.log(`[ai-chat] ${tag}: Firecrawl extracted ${md.length} chars`);
+          return md.substring(0, 4000);
+        }
+        console.warn(`[ai-chat] ${tag}: Firecrawl returned only ${md.length} chars, falling back`);
+      } else {
+        console.warn(`[ai-chat] ${tag}: Firecrawl status ${fcResp.status}`);
+      }
+    } catch (err: any) {
+      console.warn(`[ai-chat] ${tag}: Firecrawl failed:`, err?.message);
+    }
+  }
+
+  // 2) Fallback: direct fetch with redirect follow + browser UA
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 12000);
+    const resp = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml",
+        "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
+      },
+      redirect: "follow",
+      signal: controller.signal,
+    });
+    clearTimeout(timer);
+    if (!resp.ok) {
+      console.warn(`[ai-chat] ${tag}: fetch status ${resp.status}`);
+      return "";
+    }
+    const html = await resp.text();
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, "")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    console.log(`[ai-chat] ${tag}: HTML fetch extracted ${text.length} chars`);
+    return text.substring(0, 4000);
+  } catch (err: any) {
+    console.warn(`[ai-chat] ${tag}: HTML fetch failed:`, err?.message);
+    return "";
+  }
+}
+
 const INTENTS = [
   "GENERATE_TEMPLATE",
   "GENERATE",
