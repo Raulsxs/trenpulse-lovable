@@ -1765,7 +1765,9 @@ REGRAS:
 - Para story (9:16): redistribua os elementos verticalmente, use texto grande e legível.
 - Para post (1:1): use layout equilibrado com boa hierarquia visual.
 - Mantenha qualidade profissional, tipografia legível e identidade do conteúdo.
-- NÃO inclua URLs, QR codes ou logotipos externos.`
+- NÃO inclua URLs, QR codes ou logotipos externos.
+
+${SAFE_AREA_RULES}`
           : `FORMATO OBRIGATÓRIO: ${dimLabel}. Gere a imagem EXATAMENTE neste formato.
 
 Você está editando uma imagem de ${platformLabel} (${existingFormat}).
