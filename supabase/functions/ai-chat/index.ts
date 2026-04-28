@@ -1781,7 +1781,9 @@ REGRAS:
 - Se pede mudança de texto: altere o texto mantendo estilo visual.
 - Se pede mudança visual/estilo: altere o visual mantendo os textos.
 - Mantenha qualidade profissional, tipografia legível e identidade do conteúdo.
-- NÃO inclua URLs, QR codes ou logotipos externos.`;
+- NÃO inclua URLs, QR codes ou logotipos externos.
+
+${SAFE_AREA_RULES}`;
 
         // Call generate-slide-images with edit prompt + current image as reference
         let newImageUrl: string | null = null;
