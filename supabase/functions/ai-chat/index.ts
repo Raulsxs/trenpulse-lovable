@@ -1008,27 +1008,7 @@ Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legen
         let articleContent = "";
         const urlMatch = message.match(/https?:\/\/[^\s]+/);
         if (urlMatch) {
-          try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 12000);
-            const resp = await fetch(urlMatch[0], {
-              headers: { "User-Agent": "TrendPulse/1.0" },
-              signal: controller.signal,
-            });
-            clearTimeout(timer);
-            if (resp.ok) {
-              const html = await resp.text();
-              articleContent = html
-                .replace(/<script[\s\S]*?<\/script>/gi, "")
-                .replace(/<style[\s\S]*?<\/style>/gi, "")
-                .replace(/<[^>]+>/g, " ")
-                .replace(/\s+/g, " ")
-                .trim()
-                .substring(0, 4000);
-            }
-          } catch (fetchErr: any) {
-            console.warn("[ai-chat] GENERATE: URL fetch failed:", fetchErr?.message);
-          }
+          articleContent = await extractArticleContent(urlMatch[0], "GENERATE");
         }
 
         // 4. Get content dimensions
