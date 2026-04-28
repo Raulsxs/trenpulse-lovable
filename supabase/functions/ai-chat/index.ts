@@ -1125,7 +1125,9 @@ REGRAS:
 - A imagem deve ter texto integrado visível e legível sobre o tema acima.
 - Use tipografia profissional, hierarquia visual clara, cores harmônicas.
 ${hasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas.\n" : ""}- NÃO inclua URLs, QR codes ou logotipos de terceiros.
-- Gere APENAS a imagem final, sem bordas ou mockups.`;
+- Gere APENAS a imagem final, sem bordas ou mockups.
+
+${SAFE_AREA_RULES}`;
         }
 
         // 6. Call generate-slide-images
