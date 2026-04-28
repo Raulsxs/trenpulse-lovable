@@ -1414,27 +1414,7 @@ Responda APENAS em JSON:
         let articleContent = "";
         const urlMatch = message.match(/https?:\/\/[^\s]+/);
         if (urlMatch) {
-          try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 12000);
-            const resp = await fetch(urlMatch[0], {
-              headers: { "User-Agent": "TrendPulse/1.0" },
-              signal: controller.signal,
-            });
-            clearTimeout(timer);
-            if (resp.ok) {
-              const html = await resp.text();
-              articleContent = html
-                .replace(/<script[\s\S]*?<\/script>/gi, "")
-                .replace(/<style[\s\S]*?<\/style>/gi, "")
-                .replace(/<[^>]+>/g, " ")
-                .replace(/\s+/g, " ")
-                .trim()
-                .substring(0, 4000);
-            }
-          } catch (fetchErr: any) {
-            console.warn("[ai-chat] GENERATE_CAROUSEL: URL fetch failed:", fetchErr?.message);
-          }
+          articleContent = await extractArticleContent(urlMatch[0], "GENERATE_CAROUSEL");
         }
 
         // 4. Generate slide structure with minimax
