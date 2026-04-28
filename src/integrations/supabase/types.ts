@@ -1029,6 +1029,59 @@ export type Database = {
           },
         ]
       }
+      recurring_schedules: {
+        Row: {
+          active: boolean
+          content_id: string
+          created_at: string
+          days_of_week: number[]
+          hour_utc: number
+          id: string
+          jitter_minutes: number
+          last_run_at: string | null
+          name: string | null
+          platforms: string[]
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          content_id: string
+          created_at?: string
+          days_of_week?: number[]
+          hour_utc?: number
+          id?: string
+          jitter_minutes?: number
+          last_run_at?: string | null
+          name?: string | null
+          platforms?: string[]
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          content_id?: string
+          created_at?: string
+          days_of_week?: number[]
+          hour_utc?: number
+          id?: string
+          jitter_minutes?: number
+          last_run_at?: string | null
+          name?: string | null
+          platforms?: string[]
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recurring_schedules_content_id_fkey"
+            columns: ["content_id"]
+            isOneToOne: false
+            referencedRelation: "generated_contents"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       saved_trends: {
         Row: {
           id: string
