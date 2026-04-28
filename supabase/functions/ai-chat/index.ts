@@ -149,8 +149,10 @@ function detectPlatform(msg: string): string {
 
 // ── Helper: detect format from message ──
 function detectFormat(msg: string): string {
-  if (/story|stories/i.test(msg)) return "story";
+  // "carrossel de stories" / "stories sequenciais" / "stories em carrossel" → carousel (story-carousel handled later)
+  if (/carrossel\s+(de\s+)?stor(y|ies)|stor(y|ies)\s+sequenciais|stor(y|ies)\s+em\s+carrossel|s[eé]rie\s+de\s+stor(y|ies)|m[uú]ltiplos\s+stor(y|ies)|v[aá]rios\s+stor(y|ies)/i.test(msg)) return "carousel";
   if (/carrossel|carousel|slides|documento|document/i.test(msg)) return "carousel";
+  if (/story|stories/i.test(msg)) return "story";
   return "post";
 }
 
