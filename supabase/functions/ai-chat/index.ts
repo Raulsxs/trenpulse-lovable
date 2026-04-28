@@ -2602,10 +2602,15 @@ Mensagem: "${message}"` }],
 
     try {
       const messagesToInsert: any[] = [];
+      // Use explicit timestamps to guarantee user message is ordered BEFORE assistant reply
+      // (otherwise both rows can share the same created_at and reload order becomes unstable)
+      const nowMs = Date.now();
+      const userTs = new Date(nowMs).toISOString();
+      const assistantTs = new Date(nowMs + 50).toISOString();
 
       // Only save user message if it's real user input (not an internal trigger)
       if (!isInternalMessage) {
-        messagesToInsert.push({ user_id: userId, role: "user", content: message });
+        messagesToInsert.push({ user_id: userId, role: "user", content: message, created_at: userTs });
       }
 
       // Always save assistant reply (unless it's empty)
@@ -2616,6 +2621,7 @@ Mensagem: "${message}"` }],
           content: reply,
           intent: detectedIntent,
           metadata: actionResult ? { action_result: actionResult, quick_replies: quickReplies } : quickReplies ? { quick_replies: quickReplies } : {},
+          created_at: assistantTs,
         });
       }
 
