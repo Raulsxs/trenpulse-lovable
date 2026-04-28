@@ -129,6 +129,14 @@ async function extractArticleContent(rawUrl: string, tag: string): Promise<strin
   }
 }
 
+// Strong safe-area rules to prevent text being cropped at edges
+const SAFE_AREA_RULES = `SAFE AREA — REGRA CRÍTICA (não pode ser violada):
+- Reserve uma margem interna de PELO MENOS 12% da altura/largura em TODAS as bordas (topo, base, esquerda, direita) onde NENHUM texto, letra, número, logo ou elemento essencial pode aparecer.
+- TODO o texto (títulos, subtítulos, frases, CTAs) deve estar 100% DENTRO da área central segura — NUNCA encostando ou sendo cortado pelas bordas.
+- Se o texto for grande, REDUZA o tamanho da fonte para caber inteiro dentro da safe area, em vez de estender até as bordas.
+- A imagem é quadrada/vertical fechada — não há "fora do quadro". Tudo que importa precisa estar visível inteiro.
+- Verifique mentalmente: a primeira e a última letra de cada linha de texto estão longe das bordas? Se não, recompor.`;
+
 const INTENTS = [
   "GENERATE_TEMPLATE",
   "GENERATE",
@@ -1117,7 +1125,9 @@ REGRAS:
 - A imagem deve ter texto integrado visível e legível sobre o tema acima.
 - Use tipografia profissional, hierarquia visual clara, cores harmônicas.
 ${hasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas.\n" : ""}- NÃO inclua URLs, QR codes ou logotipos de terceiros.
-- Gere APENAS a imagem final, sem bordas ou mockups.`;
+- Gere APENAS a imagem final, sem bordas ou mockups.
+
+${SAFE_AREA_RULES}`;
         }
 
         // 6. Call generate-slide-images
@@ -1529,6 +1539,8 @@ ${carouselHasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composiçã
 ${i === 0 ? "- Este é o COVER: título grande, impactante" : ""}
 ${slide.role === "cta" ? "- Este é o ÚLTIMO slide: chamada para ação clara" : ""}
 
+${SAFE_AREA_RULES}
+
 Responda APENAS com a imagem gerada.`;
 
             let slideImageUrl: string | null = null;
@@ -1753,7 +1765,9 @@ REGRAS:
 - Para story (9:16): redistribua os elementos verticalmente, use texto grande e legível.
 - Para post (1:1): use layout equilibrado com boa hierarquia visual.
 - Mantenha qualidade profissional, tipografia legível e identidade do conteúdo.
-- NÃO inclua URLs, QR codes ou logotipos externos.`
+- NÃO inclua URLs, QR codes ou logotipos externos.
+
+${SAFE_AREA_RULES}`
           : `FORMATO OBRIGATÓRIO: ${dimLabel}. Gere a imagem EXATAMENTE neste formato.
 
 Você está editando uma imagem de ${platformLabel} (${existingFormat}).
@@ -1767,7 +1781,9 @@ REGRAS:
 - Se pede mudança de texto: altere o texto mantendo estilo visual.
 - Se pede mudança visual/estilo: altere o visual mantendo os textos.
 - Mantenha qualidade profissional, tipografia legível e identidade do conteúdo.
-- NÃO inclua URLs, QR codes ou logotipos externos.`;
+- NÃO inclua URLs, QR codes ou logotipos externos.
+
+${SAFE_AREA_RULES}`;
 
         // Call generate-slide-images with edit prompt + current image as reference
         let newImageUrl: string | null = null;
