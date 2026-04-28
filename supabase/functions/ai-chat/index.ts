@@ -1539,6 +1539,8 @@ ${carouselHasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composiçã
 ${i === 0 ? "- Este é o COVER: título grande, impactante" : ""}
 ${slide.role === "cta" ? "- Este é o ÚLTIMO slide: chamada para ação clara" : ""}
 
+${SAFE_AREA_RULES}
+
 Responda APENAS com a imagem gerada.`;
 
             let slideImageUrl: string | null = null;
