@@ -1445,21 +1445,18 @@ Responda em JSON:
         // 5. Get content dimensions (9:16 for story carousels, otherwise platform default)
         const dims = getContentDimensions(platform, effectiveSlideFormat);
 
-        // 6. Generate images for each slide
-        const imageUrls_arr: string[] = [];
-        const updatedSlides: any[] = [];
+        // 6. Generate images for ALL slides IN PARALLEL (avoids 150s idle timeout)
+        console.log(`[ai-chat] GENERATE_CAROUSEL: generating ${slides.length} slides in parallel`);
 
-        for (let i = 0; i < slides.length; i++) {
-          const slide = slides[i];
-          console.log(`[ai-chat] GENERATE_CAROUSEL: generating slide ${i + 1}/${slides.length}`);
-
-          const carouselHasStyleRefs = referenceImageUrls.length > 0;
-          const carouselRefsBlock = carouselHasStyleRefs
-            ? `\nIMAGENS DE REFERÊNCIA ANEXADAS — REGRA DE FIDELIDADE VISUAL:
+        const slideResults = await Promise.all(
+          slides.map(async (slide: any, i: number) => {
+            const carouselHasStyleRefs = referenceImageUrls.length > 0;
+            const carouselRefsBlock = carouselHasStyleRefs
+              ? `\nIMAGENS DE REFERÊNCIA ANEXADAS — REGRA DE FIDELIDADE VISUAL:
 As imagens em anexo são exemplos REAIS do estilo desta marca. COPIE EXATAMENTE delas a paleta de cores, tipografia, layout, mockups, cards, formas decorativas e estilo geral. NÃO copie textos das referências (categorias, hashtags, datas, rodapés). O texto da imagem é SOMENTE o do headline/body/bullets acima.\n`
-            : "";
+              : "";
 
-          const slidePrompt = `Crie a imagem do ${isStoryCarousel ? `story ${i + 1} de ${slides.length} (sequência narrativa de stories vertical 9:16)` : `slide ${i + 1} de ${slides.length} de um carrossel`} para ${platform === "linkedin" ? "LinkedIn" : "Instagram"} (${dims.w}x${dims.h}px).
+            const slidePrompt = `Crie a imagem do ${isStoryCarousel ? `story ${i + 1} de ${slides.length} (sequência narrativa de stories vertical 9:16)` : `slide ${i + 1} de ${slides.length} de um carrossel`} para ${platform === "linkedin" ? "LinkedIn" : "Instagram"} (${dims.w}x${dims.h}px).
 
 CONTEXTO DO CARROSSEL: ${carouselTitle}
 SLIDE ${i + 1}/${slides.length} (${slide.role}):
@@ -1480,43 +1477,53 @@ ${slide.role === "cta" ? "- Este é o ÚLTIMO slide: chamada para ação clara" 
 
 Responda APENAS com a imagem gerada.`;
 
-          let slideImageUrl: string | null = null;
-          try {
-            const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-slide-images`, {
-              method: "POST",
-              headers: internalHeaders,
-              body: JSON.stringify({
-                slide,
-                slideIndex: i,
-                totalSlides: slides.length,
-                contentFormat: effectiveSlideFormat,
-                platform,
-                backgroundOnly: false,
-                customPrompt: slidePrompt,
-                brandId: requestBrandId || null,
-                referenceImageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
-              }),
-            });
+            let slideImageUrl: string | null = null;
+            try {
+              const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-slide-images`, {
+                method: "POST",
+                headers: internalHeaders,
+                body: JSON.stringify({
+                  slide,
+                  slideIndex: i,
+                  totalSlides: slides.length,
+                  contentFormat: effectiveSlideFormat,
+                  platform,
+                  backgroundOnly: false,
+                  customPrompt: slidePrompt,
+                  brandId: requestBrandId || null,
+                  referenceImageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
+                }),
+              });
 
-            if (genResp.ok) {
-              const genData = await genResp.json();
-              slideImageUrl = genData.imageUrl || genData.bgImageUrl || null;
-            } else {
-              console.error(`[ai-chat] GENERATE_CAROUSEL: slide ${i + 1} generation failed:`, genResp.status);
+              if (genResp.ok) {
+                const genData = await genResp.json();
+                slideImageUrl = genData.imageUrl || genData.bgImageUrl || null;
+              } else {
+                console.error(`[ai-chat] GENERATE_CAROUSEL: slide ${i + 1} generation failed:`, genResp.status);
+              }
+            } catch (slideErr: any) {
+              console.error(`[ai-chat] GENERATE_CAROUSEL: slide ${i + 1} error:`, slideErr?.message);
             }
-          } catch (slideErr: any) {
-            console.error(`[ai-chat] GENERATE_CAROUSEL: slide ${i + 1} error:`, slideErr?.message);
-          }
 
-          if (slideImageUrl) imageUrls_arr.push(slideImageUrl);
+            return {
+              index: i,
+              slideImageUrl,
+              updatedSlide: {
+                ...slide,
+                image_url: slideImageUrl,
+                background_image_url: slideImageUrl,
+                render_mode: "ai_full_design",
+              },
+            };
+          })
+        );
 
-          updatedSlides.push({
-            ...slide,
-            image_url: slideImageUrl,
-            background_image_url: slideImageUrl,
-            render_mode: "ai_full_design",
-          });
-        }
+        // Preserve order
+        slideResults.sort((a, b) => a.index - b.index);
+        const imageUrls_arr: string[] = slideResults
+          .map((r) => r.slideImageUrl)
+          .filter((u): u is string => !!u);
+        const updatedSlides: any[] = slideResults.map((r) => r.updatedSlide);
 
         // 7. Generate caption
         let caption = "";
