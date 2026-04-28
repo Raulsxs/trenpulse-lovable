@@ -129,6 +129,14 @@ async function extractArticleContent(rawUrl: string, tag: string): Promise<strin
   }
 }
 
+// Strong safe-area rules to prevent text being cropped at edges
+const SAFE_AREA_RULES = `SAFE AREA — REGRA CRÍTICA (não pode ser violada):
+- Reserve uma margem interna de PELO MENOS 12% da altura/largura em TODAS as bordas (topo, base, esquerda, direita) onde NENHUM texto, letra, número, logo ou elemento essencial pode aparecer.
+- TODO o texto (títulos, subtítulos, frases, CTAs) deve estar 100% DENTRO da área central segura — NUNCA encostando ou sendo cortado pelas bordas.
+- Se o texto for grande, REDUZA o tamanho da fonte para caber inteiro dentro da safe area, em vez de estender até as bordas.
+- A imagem é quadrada/vertical fechada — não há "fora do quadro". Tudo que importa precisa estar visível inteiro.
+- Verifique mentalmente: a primeira e a última letra de cada linha de texto estão longe das bordas? Se não, recompor.`;
+
 const INTENTS = [
   "GENERATE_TEMPLATE",
   "GENERATE",
