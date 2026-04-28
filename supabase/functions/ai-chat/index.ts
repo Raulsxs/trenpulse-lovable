@@ -490,9 +490,11 @@ Mensagem: "${message}"`;
     // GENERATE's handler hard-codes totalSlides=1 — so this is the only way a carousel gets
     // generated when the URL detection or LINK_PARA_POST collapsed the intent down.
     if (detectedIntent === "GENERATE") {
-      const effectiveFormat = requestFormat || detectFormat(message);
+      // Message-level override: "carrossel de stories" beats requestFormat="story"
+      const msgIsStoryCarousel = /carrossel\s+(de\s+)?stor(y|ies)|stor(y|ies)\s+sequenciais|stor(y|ies)\s+em\s+carrossel|s[eé]rie\s+de\s+stor(y|ies)/i.test(message);
+      const effectiveFormat = msgIsStoryCarousel ? "carousel" : (requestFormat || detectFormat(message));
       if (effectiveFormat === "carousel" || effectiveFormat === "document") {
-        console.log(`[ai-chat] re-route GENERATE → GENERATE_CAROUSEL (format=${effectiveFormat})`);
+        console.log(`[ai-chat] re-route GENERATE → GENERATE_CAROUSEL (format=${effectiveFormat}, storyCarousel=${msgIsStoryCarousel})`);
         detectedIntent = "GENERATE_CAROUSEL";
       }
     }
