@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.publish-postforme]
 verify_jwt = false
+
+[functions.render-template]
+verify_jwt = false
