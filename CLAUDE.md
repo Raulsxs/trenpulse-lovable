@@ -4,7 +4,7 @@
 
 TrendPulse is a SaaS for social media content generation. Users type in a chat interface what they want → AI generates professional visual content (posts, carousels, stories) → ready to publish on Instagram, LinkedIn, TikTok, X, Facebook, Pinterest, Bluesky, Threads, and YouTube.
 
-**Owner:** Raul Silva (raul@trendpulse.app)
+**Owner:** Raul Seixas (raul@trendpulse.app)
 **Stack:** React + Vite + TypeScript (frontend), Supabase Edge Functions in Deno (backend)
 **Status:** Post-refactor. Major simplification completed April 2026.
 
@@ -183,6 +183,17 @@ npx supabase functions deploy generate-slide-images --project-ref qdmhqxpazffmax
 npx supabase functions deploy connect-social --project-ref qdmhqxpazffmaxleyzxs
 npx supabase functions deploy publish-postforme --project-ref qdmhqxpazffmaxleyzxs
 ```
+
+## Routing Fork — `account_type`
+
+A partir do refactor template-first (Maio 2026), a coluna `public.profiles.account_type` separa duas experiências de UI no mesmo backend:
+
+- **`white_glove`** (default): UI atual completa (chat-as-home, brand wizard, photo overlay modes, brand examples). Maikon e usuários existentes ficam aqui. Comportamento idêntico ao pré-refactor.
+- **`self_serve`**: nova UI template-first (galeria de templates virais, generator com source flexível). Em construção via branch `refactor/template-first` (Fases 0–4 documentadas em `REFACTOR_PLAN.md` e `IMPLEMENTATION_PLAN.md`).
+
+A flag é refletida automaticamente no JWT (`app_metadata.account_type`) via trigger em `public.profiles`. O front lê via hook `useAccountType()` e o `App.tsx` faz routing fork no root entre as duas experiências.
+
+Default segue `white_glove` até a Fase 2 fechar o loop de templates → publicar/agendar — só então flipa para `self_serve` em novos signups.
 
 ## Key Patterns
 
