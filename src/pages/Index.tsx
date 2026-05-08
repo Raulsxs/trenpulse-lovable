@@ -20,7 +20,9 @@ const Index = () => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        navigate("/chat");
+        // Routing fork: self_serve users vão pra Discover (template-first); white_glove (default) mantém chat.
+        const accountType = (session.user.app_metadata?.account_type as string) ?? "white_glove";
+        navigate(accountType === "self_serve" ? "/discover" : "/chat");
       }
       setIsLoading(false);
     };

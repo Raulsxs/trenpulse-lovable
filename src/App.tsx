@@ -33,6 +33,8 @@ import Analytics from "./pages/Analytics";
 import Onboarding from "./pages/Onboarding";
 import AdminAnalytics from "./pages/AdminAnalytics";
 import SelfServePlaceholder from "./pages/SelfServePlaceholder";
+import Discover from "./pages/Discover";
+import TemplateGenerator from "./pages/TemplateGenerator";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +60,9 @@ const RoutedApp = () => {
         <Route path="/privacy" element={<PrivacyPolicy />} />
         <Route path="/auth/instagram/callback" element={<InstagramCallback />} />
         <Route path="/auth/linkedin/callback" element={<LinkedInCallback />} />
+        {/* Fase 1: rotas template-first ativas. Outras paginas (publish, library) chegam na Fase 2+. */}
+        <Route path="/discover" element={<Discover />} />
+        <Route path="/templates/:slug" element={<TemplateGenerator />} />
         <Route path="*" element={<SelfServePlaceholder />} />
       </Routes>
     );
