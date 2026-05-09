@@ -124,6 +124,19 @@ export async function callBlotato(
     throw new Error(`Template ${template.slug} missing blotato_template_id`);
   }
   const f = deps.fetchImpl ?? fetch;
+  // blotato-proxy aceita templateKey (lookup no registry interno) OU templateId raw.
+  // Se o valor armazenado parece um path "/base/v2/..." ou UUID puro, mandamos como
+  // templateId pra contornar templates novos que ainda não foram adicionados ao registry.
+  const looksRaw = template.blotato_template_id.startsWith("/") ||
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(template.blotato_template_id);
+  const blotatoBody: Record<string, unknown> = {
+    action: "create_visual",
+    inputs,
+    prompt: typeof inputs.prompt === "string" ? inputs.prompt : "",
+  };
+  if (looksRaw) blotatoBody.templateId = template.blotato_template_id;
+  else blotatoBody.templateKey = template.blotato_template_id;
+
   const resp = await f(`${deps.supabaseUrl}/functions/v1/blotato-proxy`, {
     method: "POST",
     headers: {
@@ -131,12 +144,7 @@ export async function callBlotato(
       "Content-Type": "application/json",
       apikey: deps.serviceRoleKey,
     },
-    body: JSON.stringify({
-      action: "create_visual",
-      templateKey: template.blotato_template_id,
-      inputs,
-      prompt: typeof inputs.prompt === "string" ? inputs.prompt : "",
-    }),
+    body: JSON.stringify(blotatoBody),
   });
   if (!resp.ok) {
     const text = await resp.text();
