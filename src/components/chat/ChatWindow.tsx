@@ -1005,11 +1005,13 @@ export default function ChatWindow() {
                   }}
                   onAdapt={(cid: string, newPlatform: string, newContentType: string) => {
                     const labels: Record<string, string> = { instagram: "Instagram", linkedin: "LinkedIn", tiktok: "TikTok", facebook: "Facebook" };
+                    // silent:false mostra a msg do usuário no chat — sem isso o Maikon não via nada acontecer
+                    // depois que o toast de 3s sumia, achava que estava quebrado.
                     handleSend(`Adapte este conteúdo para ${labels[newPlatform] || newPlatform} ${newContentType}`, {
                       intent_hint: "EDIT_CONTENT",
                       editInstruction: `Adapte para ${labels[newPlatform] || newPlatform} ${newContentType}`,
                       generationParams: { contentId: cid, newPlatform, newContentType },
-                      silent: true,
+                      silent: false,
                     });
                   }}
                   isRetryable={msg.isRetryable}

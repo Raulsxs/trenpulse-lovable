@@ -1045,10 +1045,13 @@ export default function ActionCard({
                             setAdaptOpen(false);
                             setIsAdapting(true);
                             toast.success(`Adaptando para ${f.label}...`, {
-                              description: `Formato ${f.dim}. O novo conteúdo vai aparecer no chat em instantes.`,
+                              description: `Formato ${f.dim}. O novo conteúdo vai aparecer no chat em até 30s.`,
                             });
                             onAdapt(contentId, f.platform, f.contentType);
-                            setTimeout(() => setIsAdapting(false), 3000);
+                            // Geração via EDIT_CONTENT demora ~15-20s; 3s era curto demais — Maikon
+                            // achava que estava quebrado quando o botão voltava ao normal e o conteúdo
+                            // ainda nem tinha sido gerado. 30s cobre o pior caso típico.
+                            setTimeout(() => setIsAdapting(false), 30000);
                           }}
                         >
                           <span>{f.label}</span>
