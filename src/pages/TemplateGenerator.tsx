@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { TemplateForm, type Template as FormTemplate } from "@/components/templates/TemplateForm";
+import TemplatePublishActions from "@/components/templates/TemplatePublishActions";
 import { supabase } from "@/integrations/supabase/client";
 
 type DbTemplate = FormTemplate & {
@@ -173,12 +174,12 @@ export default function TemplateGenerator() {
                       </div>
                     ))}
                   </div>
+                  <div className="pt-2">
+                    <TemplatePublishActions contentId={result.contentId} />
+                  </div>
                   <div className="flex gap-2 pt-2">
                     <Button variant="outline" onClick={goBackToForm} data-testid="generator-back-to-form">
                       Voltar e ajustar
-                    </Button>
-                    <Button disabled data-testid="generator-publish" title="Disponivel na Fase 2">
-                      Publicar (em breve)
                     </Button>
                   </div>
                 </CardContent>
