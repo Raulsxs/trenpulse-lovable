@@ -46,6 +46,16 @@ vi.mock("sonner", () => ({
   },
 }));
 
+// TemplatePublishActions tem seus proprios testes — aqui mockamos pra isolar
+// e nao depender do hook useConnectedAccounts.
+vi.mock("@/components/templates/TemplatePublishActions", () => ({
+  default: ({ contentId }: { contentId: string }) => (
+    <div data-testid="publish-actions-stub" data-content-id={contentId}>
+      [TemplatePublishActions stub]
+    </div>
+  ),
+}));
+
 import TemplateGenerator from "@/pages/TemplateGenerator";
 
 // ── Fixtures ─────────────────────────────────────────────────────
@@ -152,7 +162,7 @@ describe("TemplateGenerator", () => {
     });
     expect(screen.getByTestId("generator-media-0")).toBeInTheDocument();
     expect(screen.getByTestId("generator-media-1")).toBeInTheDocument();
-    expect(screen.getByTestId("generator-publish")).toBeDisabled();
+    expect(screen.getByTestId("publish-actions-stub")).toHaveAttribute("data-content-id", "content-123");
   });
 
   it("5) submit que falha mostra toast e mantem form", async () => {
