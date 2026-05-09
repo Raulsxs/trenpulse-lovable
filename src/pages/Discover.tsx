@@ -7,7 +7,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { Sparkles } from "lucide-react";
+import { ImageIcon, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { TemplateGallery, type GalleryTemplate } from "@/components/templates/TemplateGallery";
 import { supabase } from "@/integrations/supabase/client";
@@ -56,17 +56,23 @@ export default function Discover() {
   return (
     <div className="min-h-screen bg-background">
       <header className="border-b" data-testid="discover-header">
-        <div className="max-w-7xl mx-auto px-4 py-6">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="inline-flex items-center justify-center h-9 w-9 rounded-md bg-primary/10">
-              <Sparkles className="h-5 w-5 text-primary" />
+        <div className="max-w-7xl mx-auto px-4 py-6 flex items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-3 mb-2">
+              <div className="inline-flex items-center justify-center h-9 w-9 rounded-md bg-primary/10">
+                <Sparkles className="h-5 w-5 text-primary" />
+              </div>
+              <h1 className="text-2xl font-bold">Descobrir</h1>
             </div>
-            <h1 className="text-2xl font-bold">Descobrir</h1>
+            <p className="text-muted-foreground text-sm max-w-2xl">
+              Escolha um template e gere conteúdo a partir de um link, PDF ou texto livre.
+              Cada template foi validado em alta performance no feed.
+            </p>
           </div>
-          <p className="text-muted-foreground text-sm max-w-2xl">
-            Escolha um template e gere conteúdo a partir de um link, PDF ou texto livre.
-            Cada template foi validado em alta performance no feed.
-          </p>
+          <Button variant="outline" size="sm" onClick={() => navigate("/library")} data-testid="discover-library-link">
+            <ImageIcon className="h-4 w-4 mr-1" />
+            Biblioteca
+          </Button>
         </div>
       </header>
 
