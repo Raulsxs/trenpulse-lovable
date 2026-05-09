@@ -291,6 +291,39 @@ Deno.test("renderPromptTemplate: {{json}} dump tudo", () => {
   assertEquals(out, 'Inputs: {"x":1,"y":"z"}');
 });
 
+// ── UUID raw em blotato_template_id ──────────────────────────────
+
+Deno.test("renderTemplate: blotato com UUID raw envia templateId em vez de templateKey", async () => {
+  const uuidTemplate: TemplateRow = {
+    ...tweetCardTemplate,
+    id: "44444444-4444-4444-4444-444444444444",
+    slug: "newspaper-infographic",
+    blotato_template_id: "07a5b5c5-387c-49e3-86b1-de822cd2dfc7",
+    input_schema: { fields: [{ name: "description", type: "textarea", required: true }] },
+  };
+  let captured: any = null;
+  const fakeFetch = mockFetch((url, init) => {
+    if (url.endsWith("/functions/v1/blotato-proxy")) {
+      captured = JSON.parse(init.body as string);
+      return new Response(
+        JSON.stringify({ status: "done", creationId: "c-uuid", imageUrls: ["https://x/y.png"] }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
+    return new Response("not mocked", { status: 599 });
+  });
+  const { fn: insert } = makeInsertContent();
+  await renderTemplate(
+    { templateId: uuidTemplate.id, inputs: { description: "Tema do post" } },
+    "user-x",
+    makeLoadTemplate(uuidTemplate),
+    insert,
+    { ...engineDepsBase, fetchImpl: fakeFetch },
+  );
+  assertEquals(captured.templateId, "07a5b5c5-387c-49e3-86b1-de822cd2dfc7");
+  assertEquals(captured.templateKey, undefined);
+});
+
 // ── 8. callBlotato propaga erro de upstream ──────────────────────
 
 Deno.test("callBlotato: lança quando upstream retorna 500", async () => {
