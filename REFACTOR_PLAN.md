@@ -239,17 +239,61 @@ Como Lovable só detecta `main`, **cada fase merge pra main gated pelo `account_
 4. Fase 2 estável: migration adicional flipa default pra self_serve em novos cadastros
 5. Maikon e existentes ficam white_glove indefinidamente; podem migrar manualmente quando quiserem
 
+## Pós-v1 — Fase 7: Public API for Agents
+
+**Goal:** expor TrendPulse como produto programático que agentes externos (Claude Code, n8n, OpenAI Operator, Manus, fluxos próprios do usuário) possam usar pra **gerar e publicar conteúdo via API**.
+
+**Por que:** o produto ganha uma segunda camada de monetização (API tier) e vira "infraestrutura de conteúdo" pra outros builders, não só interface direta. Caso de uso típico: agente do usuário detecta uma notícia relevante → chama TrendPulse pra renderizar template + publicar nas redes conectadas dele, sem abrir a UI.
+
+### Entregas previstas
+
+| Entrega | Notas |
+|---|---|
+| Tabela `api_tokens` (user_id, token_hash, name, scopes[], rate_limit, created_at, last_used_at, revoked_at) | Token gerado client-side, exibido 1x, hash armazenado |
+| Edge function `api-v1-generate` | POST `/api/v1/generate` — wrapper de `render-template` autenticado por API token |
+| Edge function `api-v1-publish` | POST `/api/v1/publish` — wrapper de `publish-postforme` |
+| Edge function `api-v1-content` | GET `/api/v1/content/:id` — status + media URLs |
+| Edge function `api-v1-templates` | GET `/api/v1/templates` — catálogo público (filtra por scope do token) |
+| Página `/settings/api-tokens` | UI pra criar/revogar tokens, ver requests usados, copiar token |
+| Rate limiting por token | Plano API tem cota separada (não consome créditos do plano UI) |
+| Documentação (OpenAPI spec + exemplos) | Hospedada em `/docs/api` ou Mintlify |
+| MCP Server "trendpulse-mcp" | Wrapper MCP que expõe os endpoints como tools pra Claude Code / Claude Desktop usarem direto |
+
+### Modelo de cobrança
+
+- **Plano API** separado (ex: $49/mês, 1000 generates + 1000 publishes), ou
+- **Pay-per-use** com pacotes de créditos consumíveis também via API
+- Decisão depende do redesign de pricing (Fase 3) ficar maduro
+
+### Casos de uso âncora
+
+1. **Agente do Raul/Maikon** monitora calendário editorial em Notion → gera + agenda automaticamente
+2. **n8n workflow** pega novas postagens de blog → cria carrossel + agenda na semana
+3. **Claude Code MCP** → "gere um Tweet Card sobre X e publique no LinkedIn da minha marca"
+4. **White-label parceiros** que quiserem oferecer geração de conteúdo dentro do produto deles
+
+### Pré-requisitos antes de começar
+
+- v1 pública estável (Fases 0-4 entregues)
+- Pricing redesign concluído (Fase 3) pra ter cota separável
+- Pelo menos 50 usuários ativos pra justificar investir na API antes do core
+
+**Estimativa:** 3–4 semanas após v1.
+
+---
+
 ## Status atual
 
 | Fase | Status | Notas |
 |---|---|---|
-| 0. Foundation | Não iniciada | — |
-| 1. Gallery + Generator | Não iniciada | — |
+| 0. Foundation | ✅ Em produção | Migrations aplicadas, RoutedApp ativo, Maikon white_glove |
+| 1. Gallery + Generator | 🟡 Em progresso | 1.3 (TemplateForm), 1.5 (TemplateGenerator), 1.6 (render-template) prontos. Falta 1.1 (seed completo), 1.2 (Gallery), 1.4 (Discover), 1.7 (rotas) |
 | 2. Last Mile | Não iniciada | — |
 | 3. Billing créditos | Não iniciada | — |
 | 4. Templates pessoais | Não iniciada | — |
 | 5. Trends entry | v2 | Adiado |
 | 6. Go-to-market | Não iniciada | Paralelo a 4–5 |
+| **7. Public API for Agents** | **Pós-v1** | **Adicionada 2026-05-08 — gera + publica via API + MCP** |
 
 ## Open questions / decisões para revisitar
 
