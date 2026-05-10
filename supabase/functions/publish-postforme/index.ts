@@ -112,10 +112,11 @@ Deno.serve(async (req) => {
         if (pfmResp.ok) {
           const pfmData = await pfmResp.json();
           const pfmAccounts = Array.isArray(pfmData?.data) ? pfmData.data : [];
-          // Filter aligned with connect-social list: match user OR unowned (legacy) accounts
+          // STRICT: exige external_id === userId. Antes aceitava unowned (sem external_id),
+          // o que vazava contas do Raul pra publicacoes do Maikon (bug 2026-05-09).
           connections = pfmAccounts
             .filter((a: any) => a.status === "connected")
-            .filter((a: any) => a.external_id === userId || !a.external_id)
+            .filter((a: any) => a.external_id === userId)
             .map((a: any) => ({
               platform: a.platform,
               pfm_account_id: a.id,
