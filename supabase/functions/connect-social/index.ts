@@ -75,10 +75,18 @@ Deno.serve(async (req) => {
         const pfmData = await pfmResp.json();
         const allAccounts = pfmData?.data || [];
 
-        // Map ALL PFM accounts to connection format (filter by external_id for multi-user)
-        const connections = allAccounts
-          .filter((a: any) => a.status === "connected")
-          .filter((a: any) => a.external_id === user.id || !a.external_id)
+        // CRITICAL: filtro STRICT por external_id evita vazamento de contas entre users.
+        // Antes: contas sem external_id ficavam visiveis pra todos (bug Maikon -> Raul).
+        // Agora: so retorna contas explicitamente associadas ao user.id via external_id no PFM.
+        // Contas legacy sem external_id ficam ocultas — user reconecta uma vez pelo perfil.
+        const connectedAccounts = allAccounts.filter((a: any) => a.status === "connected");
+        const orphanCount = connectedAccounts.filter((a: any) => !a.external_id).length;
+        const otherUserCount = connectedAccounts.filter(
+          (a: any) => a.external_id && a.external_id !== user.id,
+        ).length;
+
+        const connections = connectedAccounts
+          .filter((a: any) => a.external_id === user.id)
           .map((a: any) => ({
             user_id: user.id,
             platform: a.platform,
@@ -87,7 +95,9 @@ Deno.serve(async (req) => {
             account_name: a.username || a.name || null,
           }));
 
-        console.log(`[connect-social] PFM: ${allAccounts.length} total, ${connections.length} for user ${user.id}`);
+        console.log(
+          `[connect-social] PFM list for user=${user.id}: total=${allAccounts.length}, connected=${connectedAccounts.length}, mine=${connections.length}, orphan_no_external_id=${orphanCount}, owned_by_others=${otherUserCount}`,
+        );
         return respond({ connections });
       } catch (err: any) {
         console.error("[connect-social] PFM fetch error:", err?.message);
