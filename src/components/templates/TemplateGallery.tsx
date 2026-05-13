@@ -1,16 +1,6 @@
-/**
- * TemplateGallery — grid de cards de templates clicaveis (Fase 1.2).
- *
- * Cada card: thumbnail, nome, badge de cost_credits, viral_views formatado.
- * Hover scale sutil. Click invoca onTemplateClick(slug).
- *
- * Props sao deliberadamente "burras" (recebe array pronto de templates).
- * O fetch + filtros sao responsabilidade da pagina pai (Discover).
- */
-import { Eye } from "lucide-react";
-import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
+import { Sparkles, Play, Image, FileText } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { cn } from "@/lib/utils";
 
 export type GalleryTemplate = {
   id: string;
@@ -32,11 +22,30 @@ export type TemplateGalleryProps = {
   onTemplateClick: (slug: string) => void;
 };
 
-function formatViews(n: number | null): string | null {
-  if (n === null || n === undefined) return null;
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
-  return String(n);
+const CATEGORY_ICON: Record<string, React.ElementType> = {
+  infographic: FileText,
+  video: Play,
+  slideshow: Play,
+  social: Sparkles,
+  card: Sparkles,
+  quote: Image,
+  photo_quote: Image,
+};
+
+const BADGE_STYLE: Record<string, string> = {
+  FREE: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-400",
+  PRO: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-400",
+  VIDEO: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400",
+};
+
+function getBadge(t: GalleryTemplate): { label: string; style: string } {
+  if (t.format === "video" || t.category === "video") {
+    return { label: "VIDEO", style: BADGE_STYLE.VIDEO };
+  }
+  if (t.cost_credits === 0) {
+    return { label: "FREE", style: BADGE_STYLE.FREE };
+  }
+  return { label: "PRO", style: BADGE_STYLE.PRO };
 }
 
 export function TemplateGallery({
@@ -48,11 +57,11 @@ export function TemplateGallery({
   if (loading) {
     return (
       <div
-        className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
+        className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
         data-testid="template-gallery-loading"
       >
-        {Array.from({ length: 5 }).map((_, i) => (
-          <Skeleton key={i} className="aspect-[3/4] w-full rounded-md" />
+        {Array.from({ length: 8 }).map((_, i) => (
+          <Skeleton key={i} className="h-40 w-full rounded-2xl" />
         ))}
       </div>
     );
@@ -71,56 +80,51 @@ export function TemplateGallery({
 
   return (
     <div
-      className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4"
+      className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
       data-testid="template-gallery"
     >
       {templates.map((t) => {
-        const views = formatViews(t.viral_views);
-        const isFree = t.cost_credits === 0;
+        const Icon = CATEGORY_ICON[t.category] ?? CATEGORY_ICON[t.format] ?? Sparkles;
+        const isVideo = t.format === "video" || t.category === "video";
+        const badge = getBadge(t);
+
         return (
-          <Card
+          <button
             key={t.id}
-            className="group overflow-hidden cursor-pointer transition-transform hover:scale-[1.02] hover:shadow-lg"
             onClick={() => onTemplateClick(t.slug)}
             data-testid={`template-card-${t.slug}`}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onTemplateClick(t.slug);
-              }
-            }}
+            className={cn(
+              "group relative flex flex-col items-start p-4 rounded-2xl border border-border text-left",
+              "bg-card hover:bg-muted/50 hover:border-primary/40 transition-all duration-200",
+              "hover:shadow-md hover:scale-[1.02] active:scale-[0.99]"
+            )}
           >
-            <div className="aspect-[3/4] bg-gradient-to-br from-slate-800 to-slate-900 relative overflow-hidden">
-              <img
-                src={t.preview_url}
-                alt={t.name}
-                className="absolute inset-0 h-full w-full object-cover transition-opacity group-hover:opacity-90"
-                loading="lazy"
-                onError={(e) => { e.currentTarget.style.display = "none"; }}
-              />
-              <div className="absolute top-2 left-2">
-                <Badge variant={isFree ? "secondary" : "default"} className="text-xs">
-                  {isFree ? "Free" : `${t.cost_credits} créditos`}
-                </Badge>
-              </div>
-              {views && (
-                <div className="absolute bottom-2 left-2 flex items-center gap-1 bg-black/60 text-white text-xs px-2 py-0.5 rounded">
-                  <Eye className="h-3 w-3" />
-                  <span data-testid={`template-views-${t.slug}`}>{views}</span>
-                </div>
-              )}
+            <span className={cn(
+              "absolute top-3 right-3 text-[10px] font-semibold px-2 py-0.5 rounded-full",
+              badge.style
+            )}>
+              {badge.label}
+            </span>
+
+            <div className={cn(
+              "w-full rounded-xl mb-3 flex items-center justify-center h-20",
+              isVideo ? "bg-blue-50 dark:bg-blue-950/30" : "bg-muted/60"
+            )}>
+              <Icon className={cn(
+                "w-8 h-8",
+                isVideo ? "text-blue-500" : "text-muted-foreground/60"
+              )} />
             </div>
-            <div className="p-3">
-              <h3 className="font-medium text-sm leading-tight">{t.name}</h3>
-              {t.description && (
-                <p className="text-xs text-muted-foreground mt-1 line-clamp-2">
-                  {t.description}
-                </p>
-              )}
-            </div>
-          </Card>
+
+            <p className="text-sm font-semibold text-foreground leading-tight mb-1">
+              {t.name}
+            </p>
+            {t.description && (
+              <p className="text-xs text-muted-foreground line-clamp-2 leading-relaxed">
+                {t.description}
+              </p>
+            )}
+          </button>
         );
       })}
     </div>

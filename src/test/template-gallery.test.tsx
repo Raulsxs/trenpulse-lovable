@@ -1,13 +1,13 @@
 /**
- * Tests para TemplateGallery (Fase 1.2).
+ * Tests para TemplateGallery (design icon-based).
  *
  * Cobre:
  *   1) Renderiza skeleton em loading
  *   2) Renderiza empty state quando lista vazia
- *   3) Renderiza um card por template com nome + thumbnail
+ *   3) Renderiza um card por template com nome visivel
  *   4) Click no card chama onTemplateClick com o slug correto
- *   5) Cost_credits=0 vira badge "Free"; >0 vira "X créditos"
- *   6) viral_views grandes formatados (1.5M, 433K)
+ *   5) cost_credits=0 → badge FREE; format=video → badge VIDEO; >0 → badge PRO
+ *   6) Descricao renderiza quando presente; nao renderiza quando null
  */
 import { describe, it, expect, vi } from "vitest";
 import { render, screen, fireEvent } from "@testing-library/react";
@@ -39,12 +39,25 @@ const newspaper: GalleryTemplate = {
   viral_views: 1_500_000,
 };
 
-const noViewsTemplate: GalleryTemplate = {
-  ...newspaper,
+const videoTemplate: GalleryTemplate = {
   id: "33",
-  slug: "no-views",
-  name: "Sem views",
+  slug: "story-video",
+  name: "Story 9:16",
+  description: "Video vertical para Stories",
+  category: "video",
+  format: "video",
+  preview_url: "https://placeholder/video.png",
+  preview_video_url: null,
+  cost_credits: 1,
   viral_views: null,
+};
+
+const noDescTemplate: GalleryTemplate = {
+  ...tweetCard,
+  id: "44",
+  slug: "no-desc",
+  name: "Sem descricao",
+  description: null,
 };
 
 describe("TemplateGallery", () => {
@@ -58,12 +71,12 @@ describe("TemplateGallery", () => {
     expect(screen.getByTestId("template-gallery-empty")).toHaveTextContent("Vazio aqui");
   });
 
-  it("3) renderiza um card por template com nome + thumbnail", () => {
+  it("3) renderiza um card por template com nome visivel", () => {
     render(<TemplateGallery templates={[tweetCard, newspaper]} onTemplateClick={vi.fn()} />);
     expect(screen.getByTestId("template-card-tweet-card")).toBeInTheDocument();
     expect(screen.getByTestId("template-card-newspaper")).toBeInTheDocument();
     expect(screen.getByText("Tweet Card")).toBeInTheDocument();
-    expect(screen.getByAltText("Tweet Card")).toHaveAttribute("src", tweetCard.preview_url);
+    expect(screen.getByText("Newspaper Infographic")).toBeInTheDocument();
   });
 
   it("4) click chama onTemplateClick com slug correto", () => {
@@ -73,20 +86,17 @@ describe("TemplateGallery", () => {
     expect(onClick).toHaveBeenCalledWith("newspaper");
   });
 
-  it("5) cost_credits 0 = Free, >0 = X créditos", () => {
-    render(<TemplateGallery templates={[tweetCard, newspaper]} onTemplateClick={vi.fn()} />);
-    const tweetCardEl = screen.getByTestId("template-card-tweet-card");
-    expect(tweetCardEl).toHaveTextContent("Free");
-    const newspaperEl = screen.getByTestId("template-card-newspaper");
-    expect(newspaperEl).toHaveTextContent("1 crédito");
+  it("5) badges: FREE para 0 creditos, VIDEO para format=video, PRO para paid", () => {
+    render(<TemplateGallery templates={[tweetCard, newspaper, videoTemplate]} onTemplateClick={vi.fn()} />);
+    expect(screen.getByTestId("template-card-tweet-card")).toHaveTextContent("FREE");
+    expect(screen.getByTestId("template-card-newspaper")).toHaveTextContent("PRO");
+    expect(screen.getByTestId("template-card-story-video")).toHaveTextContent("VIDEO");
   });
 
-  it("6) viral_views formatados em K e M; null nao renderiza views", () => {
-    render(
-      <TemplateGallery templates={[tweetCard, newspaper, noViewsTemplate]} onTemplateClick={vi.fn()} />,
-    );
-    expect(screen.getByTestId("template-views-tweet-card")).toHaveTextContent("433K");
-    expect(screen.getByTestId("template-views-newspaper")).toHaveTextContent("1.5M");
-    expect(screen.queryByTestId("template-views-no-views")).toBeNull();
+  it("6) descricao renderiza quando presente; nao renderiza quando null", () => {
+    render(<TemplateGallery templates={[tweetCard, noDescTemplate]} onTemplateClick={vi.fn()} />);
+    expect(screen.getByText("Quote em formato de tweet")).toBeInTheDocument();
+    const noDescCard = screen.getByTestId("template-card-no-desc");
+    expect(noDescCard.querySelector("p + p")).toBeNull();
   });
 });
