@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BackgroundGenerationProvider } from "@/contexts/BackgroundGenerationContext";
 import { useAccountType } from "@/hooks/useAccountType";
+import SelfServeLayout from "@/components/layout/SelfServeLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -62,10 +63,11 @@ const RoutedApp = () => {
         <Route path="/auth/instagram/callback" element={<InstagramCallback />} />
         <Route path="/auth/linkedin/callback" element={<LinkedInCallback />} />
         {/* Fase 1: rotas template-first ativas. Fase 2: Library adicionada. */}
-        <Route path="/discover" element={<Discover />} />
-        <Route path="/templates/:slug" element={<TemplateGenerator />} />
-        <Route path="/library" element={<Library />} />
-        <Route path="*" element={<SelfServePlaceholder />} />
+        <Route path="/discover" element={<SelfServeLayout><Discover /></SelfServeLayout>} />
+        <Route path="/templates/:slug" element={<SelfServeLayout><TemplateGenerator /></SelfServeLayout>} />
+        <Route path="/library" element={<SelfServeLayout><Library /></SelfServeLayout>} />
+        <Route path="/profile" element={<SelfServeLayout><Profile /></SelfServeLayout>} />
+        <Route path="*" element={<SelfServeLayout><SelfServePlaceholder /></SelfServeLayout>} />
       </Routes>
     );
   }
