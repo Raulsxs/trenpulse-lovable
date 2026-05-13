@@ -38,6 +38,7 @@ import Discover from "./pages/Discover";
 import TemplateGenerator from "./pages/TemplateGenerator";
 import Library from "./pages/Library";
 import Templates from "./pages/Templates";
+import SelfServeOnboarding from "./pages/SelfServeOnboarding";
 
 const queryClient = new QueryClient();
 
@@ -64,6 +65,7 @@ const RoutedApp = () => {
         <Route path="/auth/instagram/callback" element={<InstagramCallback />} />
         <Route path="/auth/linkedin/callback" element={<LinkedInCallback />} />
         {/* Fase 1: rotas template-first ativas. Fase 2: Library adicionada. */}
+        <Route path="/onboarding" element={<SelfServeOnboarding />} />
         <Route path="/discover" element={<SelfServeLayout><Discover /></SelfServeLayout>} />
         <Route path="/templates/:slug" element={<SelfServeLayout><TemplateGenerator /></SelfServeLayout>} />
         <Route path="/library" element={<SelfServeLayout><Library /></SelfServeLayout>} />

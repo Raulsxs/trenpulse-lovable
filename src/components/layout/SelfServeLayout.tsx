@@ -1,6 +1,7 @@
 import { ReactNode, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { User } from "@supabase/supabase-js";
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -99,6 +100,7 @@ export default function SelfServeLayout({ children }: { children: ReactNode }) {
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -106,16 +108,37 @@ export default function SelfServeLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session?.user) navigate("/auth");
+      if (!session?.user) {
+        navigate("/auth");
+      } else {
+        setUser(session.user);
+      }
       setLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_, session) => {
       if (!session?.user) navigate("/auth");
+      else setUser(session.user);
     });
 
     return () => subscription.unsubscribe();
   }, [navigate]);
+
+  // Redirect new self_serve users to onboarding — same pattern as DashboardLayout lines 47-62
+  useEffect(() => {
+    if (!user || location.pathname === "/onboarding") return;
+
+    supabase
+      .from("ai_user_context")
+      .select("onboarding_done")
+      .eq("user_id", user.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!data || !data.onboarding_done) {
+          navigate("/onboarding");
+        }
+      });
+  }, [user, location.pathname, navigate]);
 
   if (loading) {
     return (
