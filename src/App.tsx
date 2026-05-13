@@ -37,6 +37,7 @@ import SelfServePlaceholder from "./pages/SelfServePlaceholder";
 import Discover from "./pages/Discover";
 import TemplateGenerator from "./pages/TemplateGenerator";
 import Library from "./pages/Library";
+import Templates from "./pages/Templates";
 
 const queryClient = new QueryClient();
 
@@ -83,7 +84,7 @@ const RoutedApp = () => {
       <Route path="/download/:id" element={<DownloadPage />} />
       <Route path="/contents" element={<Contents />} />
       <Route path="/profile" element={<Profile />} />
-      {/* /styles and /templates removed — gallery deprecated */}
+      <Route path="/templates" element={<Templates />} />
       <Route path="/studio" element={<Studio />} />
       <Route path="/studio/project/:id" element={<StudioProject />} />
       <Route path="/studio/post/:id" element={<StudioPostEditor />} />
