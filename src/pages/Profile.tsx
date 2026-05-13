@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -255,17 +254,14 @@ const Profile = () => {
 
   if (loading) {
     return (
-      <DashboardLayout>
-        <div className="flex items-center justify-center h-[60vh]">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
-        </div>
-      </DashboardLayout>
+      <div className="flex items-center justify-center h-[60vh]">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
     );
   }
 
   return (
-    <DashboardLayout>
-      <div className="p-6 lg:p-8 space-y-6 animate-fade-in max-w-4xl">
+    <div className="p-6 lg:p-8 space-y-6 animate-fade-in max-w-4xl">
         <div>
           <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
             <User className="w-7 h-7 text-primary" />
@@ -387,7 +383,6 @@ const Profile = () => {
           </div>
         </form>
       </div>
-    </DashboardLayout>
   );
 };
 

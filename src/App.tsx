@@ -7,6 +7,7 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BackgroundGenerationProvider } from "@/contexts/BackgroundGenerationContext";
 import { useAccountType } from "@/hooks/useAccountType";
 import SelfServeLayout from "@/components/layout/SelfServeLayout";
+import DashboardLayout from "@/components/layout/DashboardLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
@@ -85,7 +86,7 @@ const RoutedApp = () => {
       <Route path="/content/:id" element={<ContentPreview />} />
       <Route path="/download/:id" element={<DownloadPage />} />
       <Route path="/contents" element={<Contents />} />
-      <Route path="/profile" element={<Profile />} />
+      <Route path="/profile" element={<DashboardLayout><Profile /></DashboardLayout>} />
       <Route path="/templates" element={<Templates />} />
       <Route path="/studio" element={<Studio />} />
       <Route path="/studio/project/:id" element={<StudioProject />} />
