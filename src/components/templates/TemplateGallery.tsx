@@ -92,12 +92,13 @@ export function TemplateGallery({
               }
             }}
           >
-            <div className="aspect-[3/4] bg-muted relative overflow-hidden">
+            <div className="aspect-[3/4] bg-gradient-to-br from-slate-800 to-slate-900 relative overflow-hidden">
               <img
                 src={t.preview_url}
                 alt={t.name}
-                className="h-full w-full object-cover transition-opacity group-hover:opacity-90"
+                className="absolute inset-0 h-full w-full object-cover transition-opacity group-hover:opacity-90"
                 loading="lazy"
+                onError={(e) => { e.currentTarget.style.display = "none"; }}
               />
               <div className="absolute top-2 left-2">
                 <Badge variant={isFree ? "secondary" : "default"} className="text-xs">
