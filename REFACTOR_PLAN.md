@@ -1,7 +1,7 @@
 # TrendPulse — Plano de Refactor Template-First
 
 > Documento vivo. Atualizar status conforme as fases avançam.
-> Última atualização: 2026-05-07
+> Última atualização: 2026-05-13
 
 ## Visão
 
@@ -287,13 +287,22 @@ Como Lovable só detecta `main`, **cada fase merge pra main gated pelo `account_
 | Fase | Status | Notas |
 |---|---|---|
 | 0. Foundation | ✅ Em produção | Migrations aplicadas, RoutedApp ativo, Maikon white_glove |
-| 1. Gallery + Generator | 🟡 Em progresso | 1.3 (TemplateForm), 1.5 (TemplateGenerator), 1.6 (render-template) prontos. Falta 1.1 (seed completo), 1.2 (Gallery), 1.4 (Discover), 1.7 (rotas) |
-| 2. Last Mile | Não iniciada | — |
+| 1. Gallery + Generator | ✅ Em produção | Commits 1.1–1.7 todos mergeados; seed massivo de 22 templates Blotato (942c101) |
+| 2. Last Mile | ✅ Em produção | 2.1 publish/schedule (c36f972), 2.3 Calendar badge (ebb99f8), 2.4 Library (8d1b525); flip default → self_serve (ca251bc) |
 | 3. Billing créditos | Não iniciada | — |
 | 4. Templates pessoais | Não iniciada | — |
 | 5. Trends entry | v2 | Adiado |
-| 6. Go-to-market | Não iniciada | Paralelo a 4–5 |
+| 6. Go-to-market | 🟡 Em progresso | Onboarding self_serve mergeado (5d32f9f); faltam landing page, try-it sem login e GUIA |
 | **7. Public API for Agents** | **Pós-v1** | **Adicionada 2026-05-08 — gera + publica via API + MCP** |
+
+## Histórico de mudanças no plano
+
+| Data | Mudança |
+|---|---|
+| 2026-05-08 | Fase 7 (Public API + MCP) adicionada |
+| 2026-05-11 | Canva integration avaliada e adiada (registro no Vault: Projetos/TrendPulse-Canva-Integration.md) |
+| 2026-05-12 | Status update — Fases 0, 1 e 2 confirmadas done |
+| 2026-05-13 | Fase 6 atualizada para Em progresso (onboarding self_serve mergeado em 5d32f9f) |
 
 ## Open questions / decisões para revisitar
 
