@@ -17,6 +17,7 @@ import {
   MessageSquare,
   BarChart3,
   UserPlus,
+  LayoutGrid,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpCenterTrigger } from "@/components/onboarding/HelpCenterModal";
@@ -34,6 +35,7 @@ interface SavedAccount {
 // Primary: what 90% of users need daily
 const primaryItems = [
   { icon: MessageSquare, label: "Assistente IA", href: "/chat" },
+  { icon: LayoutGrid, label: "Templates", href: "/templates" },
   { icon: FileText, label: "Meus Conteúdos", href: "/contents" },
   { icon: CalendarDays, label: "Calendário", href: "/calendar" },
 ];
