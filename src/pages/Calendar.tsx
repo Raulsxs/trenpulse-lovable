@@ -65,6 +65,8 @@ interface CalendarContent {
   updated_at: string;
   brand_id: string | null;
   template_set_id: string | null;
+  template_id: string | null;
+  templates: { name: string; category: string } | null;
   slides: any[];
   caption: string | null;
   brand_snapshot: any;
@@ -250,7 +252,7 @@ const Calendar = () => {
 
       let scheduledQuery = supabase
         .from("generated_contents")
-        .select("id, title, content_type, status, scheduled_at, created_at, updated_at, brand_id, template_set_id, slides, caption, brand_snapshot, image_urls, platform")
+        .select("id, title, content_type, status, scheduled_at, created_at, updated_at, brand_id, template_set_id, template_id, templates(name, category), slides, caption, brand_snapshot, image_urls, platform")
         .eq("user_id", user.id)
         .in("status", ["scheduled", "approved", "published"])
         .gte("scheduled_at", rangeStart.toISOString())
@@ -268,7 +270,7 @@ const Calendar = () => {
 
       let backlogQuery = supabase
         .from("generated_contents")
-        .select("id, title, content_type, status, scheduled_at, created_at, updated_at, brand_id, template_set_id, slides, caption, brand_snapshot, image_urls, platform")
+        .select("id, title, content_type, status, scheduled_at, created_at, updated_at, brand_id, template_set_id, template_id, templates(name, category), slides, caption, brand_snapshot, image_urls, platform")
         .eq("user_id", user.id)
         .eq("status", "approved")
         .is("scheduled_at", null)
@@ -568,8 +570,11 @@ const Calendar = () => {
           ) : <MiniSlidePreview item={item} />}
           <div className="flex-1 min-w-0">
             <p className="text-[11px] font-medium text-foreground truncate leading-tight">{item.title}</p>
-            <div className="flex items-center gap-1 mt-0.5">
+            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
               <Badge variant="outline" className="text-[9px] px-1 py-0 leading-tight">{formatBadge(item.content_type)}</Badge>
+              {item.templates && (
+                <Badge variant="secondary" className="text-[9px] px-1 py-0 leading-tight truncate max-w-[100px]">{item.templates.name}</Badge>
+              )}
               {item.scheduled_at && (
                 <span className="text-[9px] text-muted-foreground">
                   {format(new Date(item.scheduled_at), "HH:mm")}
@@ -1005,6 +1010,12 @@ const Calendar = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-sm text-muted-foreground">Marca</span>
                       <span className="text-sm font-medium">{selectedContent.brand_snapshot.name}</span>
+                    </div>
+                  )}
+                  {selectedContent.templates && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm text-muted-foreground">Template</span>
+                      <Badge variant="secondary" className="text-xs">{selectedContent.templates.name}</Badge>
                     </div>
                   )}
                   {selectedContent.scheduled_at && (
