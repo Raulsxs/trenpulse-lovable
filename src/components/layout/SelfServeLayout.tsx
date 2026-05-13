@@ -1,4 +1,4 @@
-import { ReactNode, useEffect, useState } from "react";
+import { ReactNode, useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { User } from "@supabase/supabase-js";
@@ -101,6 +101,7 @@ export default function SelfServeLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [user, setUser] = useState<User | null>(null);
+  const onboardingChecked = useRef(false);
 
   useEffect(() => {
     setSidebarOpen(false);
@@ -124,16 +125,18 @@ export default function SelfServeLayout({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  // Redirect new self_serve users to onboarding — same pattern as DashboardLayout lines 47-62
+  // Check onboarding once per session — redirect if not done
   useEffect(() => {
-    if (!user || location.pathname === "/onboarding") return;
+    if (!user || onboardingChecked.current || location.pathname === "/onboarding") return;
 
     supabase
       .from("ai_user_context")
       .select("onboarding_done")
       .eq("user_id", user.id)
       .maybeSingle()
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) return; // DB error → don't redirect, let user through
+        onboardingChecked.current = true;
         if (!data || !data.onboarding_done) {
           navigate("/onboarding");
         }
