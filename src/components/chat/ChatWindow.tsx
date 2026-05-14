@@ -1077,6 +1077,13 @@ export default function ChatWindow() {
         defaultTemplates={DEFAULT_TEMPLATES}
         customTemplates={customTemplates}
         onTemplateSelect={handleQuickAction}
+        enableDocumentDrop={accountType === "white_glove"}
+        onDocumentText={(text, fileName) => {
+          setPrefillText(
+            `Use o conteúdo do documento "${fileName}" como briefing para gerar o post:\n\n"""\n${text}\n"""\n\nGere um post baseado nesse conteúdo.`
+          );
+          setPrefillKey((k) => k + 1);
+        }}
         placeholder={
           onboardingStep != null
             ? "Digite sua resposta..."
