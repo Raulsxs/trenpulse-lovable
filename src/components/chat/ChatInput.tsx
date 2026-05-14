@@ -34,8 +34,11 @@ interface ChatInputProps {
   onDocumentText?: (text: string, fileName: string) => void;
 }
 
-export default function ChatInput({ onSend, onFilesSelected, disabled, placeholder = "Cole um link ou descreva o conteúdo...", showImageUpload, userId, onNewChat, hasMessages, brands, selectedBrandId, onBrandSelect, prefillText, prefillKey, defaultTemplates, customTemplates, onTemplateSelect }: ChatInputProps) {
+export default function ChatInput({ onSend, onFilesSelected, disabled, placeholder = "Cole um link ou descreva o conteúdo...", showImageUpload, userId, onNewChat, hasMessages, brands, selectedBrandId, onBrandSelect, prefillText, prefillKey, defaultTemplates, customTemplates, onTemplateSelect, enableDocumentDrop, onDocumentText }: ChatInputProps) {
   const [value, setValue] = useState("");
+  const [isDraggingDoc, setIsDraggingDoc] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const dragDepthRef = useRef(0);
   const [showBrandDropdown, setShowBrandDropdown] = useState(false);
   const [editorQueue, setEditorQueue] = useState<File[]>([]);
   const [editorCurrentFile, setEditorCurrentFile] = useState<File | null>(null);
