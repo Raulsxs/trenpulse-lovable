@@ -94,7 +94,7 @@ export function TemplateGallery({
             onClick={() => onTemplateClick(t.slug)}
             data-testid={`template-card-${t.slug}`}
             className={cn(
-              "group relative flex flex-col items-start p-4 rounded-2xl border border-border text-left",
+              "group relative flex flex-col items-start p-3 sm:p-4 rounded-2xl border border-border text-left",
               "bg-card hover:bg-muted/50 hover:border-primary/40 transition-all duration-200",
               "hover:shadow-md hover:scale-[1.02] active:scale-[0.99]"
             )}

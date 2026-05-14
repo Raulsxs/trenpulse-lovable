@@ -34,13 +34,13 @@ export default function Discover() {
     let mounted = true;
     (async () => {
       const { data, error } = await supabase
-        .from("templates")
+        .from("templates" as any)
         .select("id, slug, name, description, category, format, preview_url, preview_video_url, cost_credits, viral_views")
         .eq("is_active", true)
         .eq("is_personal", false)
         .order("viral_views", { ascending: false, nullsFirst: false });
       if (!mounted) return;
-      if (!error && data) setTemplates(data as GalleryTemplate[]);
+      if (!error && data) setTemplates(data as unknown as GalleryTemplate[]);
       setLoading(false);
     })();
     return () => {

@@ -6,7 +6,7 @@
  * as imagens retornadas. Fase 2 plugara publicacao via ActionCard; aqui o
  * botao "Publicar" e placeholder.
  */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowLeft, ImageIcon, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -32,12 +32,21 @@ type RenderResult = {
 
 type ViewState = "loading" | "form" | "submitting" | "result" | "not_found";
 
+function resultAspectClass(format: string): string {
+  switch (format) {
+    case "story": return "aspect-[9/16]";
+    case "video": return "aspect-video";
+    default: return "aspect-[4/5]";
+  }
+}
+
 export default function TemplateGenerator() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const [view, setView] = useState<ViewState>("loading");
   const [template, setTemplate] = useState<DbTemplate | null>(null);
   const [result, setResult] = useState<RenderResult | null>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -47,7 +56,7 @@ export default function TemplateGenerator() {
         return;
       }
       const { data, error } = await supabase
-        .from("templates")
+        .from("templates" as any)
         .select("id, slug, name, description, format, category, preview_url, input_schema")
         .eq("slug", slug)
         .eq("is_active", true)
@@ -57,7 +66,7 @@ export default function TemplateGenerator() {
         setView("not_found");
         return;
       }
-      setTemplate(data as DbTemplate);
+      setTemplate(data as unknown as DbTemplate);
       setView("form");
     })();
     return () => {
@@ -80,6 +89,12 @@ export default function TemplateGenerator() {
     setResult(data as RenderResult);
     setView("result");
   };
+
+  useEffect(() => {
+    if (view === "result" && resultRef.current) {
+      resultRef.current.scrollIntoView?.({ behavior: "smooth", block: "start" });
+    }
+  }, [view]);
 
   const goBackToForm = () => {
     setResult(null);
@@ -114,7 +129,7 @@ export default function TemplateGenerator() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b sticky top-0 z-10 bg-background/80 backdrop-blur" data-testid="generator-header">
+      <header className="border-b bg-background/80" data-testid="generator-header">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-3">
           <Button variant="ghost" size="sm" onClick={() => navigate("/discover")} data-testid="generator-back">
             <ArrowLeft className="h-4 w-4 mr-1" />
@@ -147,7 +162,7 @@ export default function TemplateGenerator() {
             </CardContent>
           </Card>
 
-          <div className="space-y-4" data-testid="generator-preview-area">
+          <div className="space-y-4" ref={resultRef} data-testid="generator-preview-area">
             {view === "result" && result ? (
               <Card data-testid="generator-result">
                 <CardHeader>
@@ -163,7 +178,7 @@ export default function TemplateGenerator() {
                     {result.mediaUrls.map((url, idx) => (
                       <div
                         key={url}
-                        className="aspect-square overflow-hidden rounded-md bg-muted"
+                        className={`${resultAspectClass(template.format)} overflow-hidden rounded-md bg-muted`}
                         data-testid={`generator-media-${idx}`}
                       >
                         <img
