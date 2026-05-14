@@ -123,6 +123,7 @@ export default function ChatWindow() {
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
   const [prefillText, setPrefillText] = useState("");
   const [prefillKey, setPrefillKey] = useState(0);
+  const { accountType } = useAccountType();
   const [customTemplates, setCustomTemplates] = useState<Array<{ id: string; emoji: string; label: string; template: string }>>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasLoadedHistory = useRef(false);
