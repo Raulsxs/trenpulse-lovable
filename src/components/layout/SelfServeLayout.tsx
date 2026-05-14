@@ -161,7 +161,7 @@ export default function SelfServeLayout({ children }: { children: ReactNode }) {
           <span className="text-lg font-heading font-bold text-foreground">TrendPulse</span>
         </div>
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
-          <SheetContent side="left" className="p-0 w-72">
+          <SheetContent side="left" className="p-0 w-64">
             <SelfServeSidebar />
           </SheetContent>
         </Sheet>

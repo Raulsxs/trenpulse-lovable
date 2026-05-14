@@ -138,7 +138,7 @@ export default function TemplateGenerator() {
           <div className="flex-1">
             <h1 className="font-semibold leading-tight">{template.name}</h1>
             {template.description && (
-              <p className="text-xs text-muted-foreground">{template.description}</p>
+              <p className="hidden sm:block text-xs text-muted-foreground">{template.description}</p>
             )}
           </div>
         </div>
