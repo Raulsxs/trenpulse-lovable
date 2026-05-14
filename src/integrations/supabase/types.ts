@@ -485,6 +485,51 @@ export type Database = {
           },
         ]
       }
+      credit_transactions: {
+        Row: {
+          created_at: string
+          delta: number
+          generated_content_id: string | null
+          id: string
+          reason: string
+          template_id: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          delta: number
+          generated_content_id?: string | null
+          id?: string
+          reason: string
+          template_id?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          delta?: number
+          generated_content_id?: string | null
+          id?: string
+          reason?: string
+          template_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "credit_transactions_generated_content_id_fkey"
+            columns: ["generated_content_id"]
+            isOneToOne: false
+            referencedRelation: "generated_contents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "credit_transactions_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       favorite_template_sets: {
         Row: {
           created_at: string
@@ -534,6 +579,7 @@ export type Database = {
           slides: Json | null
           source_summary: string | null
           status: string | null
+          template_id: string | null
           template_set_id: string | null
           title: string
           trend_id: string | null
@@ -565,6 +611,7 @@ export type Database = {
           slides?: Json | null
           source_summary?: string | null
           status?: string | null
+          template_id?: string | null
           template_set_id?: string | null
           title: string
           trend_id?: string | null
@@ -596,6 +643,7 @@ export type Database = {
           slides?: Json | null
           source_summary?: string | null
           status?: string | null
+          template_id?: string | null
           template_set_id?: string | null
           title?: string
           trend_id?: string | null
@@ -863,9 +911,11 @@ export type Database = {
       }
       profiles: {
         Row: {
+          account_type: string
           avatar_url: string | null
           company_name: string | null
           created_at: string
+          credits_balance: number
           full_name: string | null
           id: string
           instagram_handle: string | null
@@ -880,9 +930,11 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          account_type?: string
           avatar_url?: string | null
           company_name?: string | null
           created_at?: string
+          credits_balance?: number
           full_name?: string | null
           id?: string
           instagram_handle?: string | null
@@ -897,9 +949,11 @@ export type Database = {
           user_id: string
         }
         Update: {
+          account_type?: string
           avatar_url?: string | null
           company_name?: string | null
           created_at?: string
+          credits_balance?: number
           full_name?: string | null
           id?: string
           instagram_handle?: string | null
@@ -1325,6 +1379,93 @@ export type Database = {
         }
         Relationships: []
       }
+      templates: {
+        Row: {
+          aspect_ratio: string
+          aspect_ratios: string[]
+          badge: string | null
+          blotato_template_id: string
+          blotato_template_key: string
+          brand_slots: string[] | null
+          category: string
+          cost_credits: number
+          created_at: string | null
+          description: string | null
+          engine: string
+          format: string
+          id: string
+          input_schema: Json
+          is_active: boolean
+          is_free: boolean
+          is_personal: boolean
+          name: string
+          owner_user_id: string | null
+          preview_url: string
+          preview_video_url: string | null
+          prompt_template: string | null
+          slug: string
+          sort_order: number
+          updated_at: string
+          viral_views: number | null
+        }
+        Insert: {
+          aspect_ratio?: string
+          aspect_ratios: string[]
+          badge?: string | null
+          blotato_template_id: string
+          blotato_template_key: string
+          brand_slots?: string[] | null
+          category?: string
+          cost_credits: number
+          created_at?: string | null
+          description?: string | null
+          engine: string
+          format: string
+          id?: string
+          input_schema: Json
+          is_active?: boolean
+          is_free?: boolean
+          is_personal: boolean
+          name: string
+          owner_user_id?: string | null
+          preview_url: string
+          preview_video_url?: string | null
+          prompt_template?: string | null
+          slug: string
+          sort_order?: number
+          updated_at: string
+          viral_views?: number | null
+        }
+        Update: {
+          aspect_ratio?: string
+          aspect_ratios?: string[]
+          badge?: string | null
+          blotato_template_id?: string
+          blotato_template_key?: string
+          brand_slots?: string[] | null
+          category?: string
+          cost_credits?: number
+          created_at?: string | null
+          description?: string | null
+          engine?: string
+          format?: string
+          id?: string
+          input_schema?: Json
+          is_active?: boolean
+          is_free?: boolean
+          is_personal?: boolean
+          name?: string
+          owner_user_id?: string | null
+          preview_url?: string
+          preview_video_url?: string | null
+          prompt_template?: string | null
+          slug?: string
+          sort_order?: number
+          updated_at?: string
+          viral_views?: number | null
+        }
+        Relationships: []
+      }
       trends: {
         Row: {
           created_at: string
@@ -1544,6 +1685,15 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      debit_credits: {
+        Args: {
+          p_amount: number
+          p_content_id?: string
+          p_template_id?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       get_cron_users_due: {
         Args: never
         Returns: {
@@ -1559,6 +1709,10 @@ export type Database = {
       is_brand_visible_to_user: {
         Args: { _brand_id: string; _user_id: string }
         Returns: boolean
+      }
+      reset_monthly_credits: {
+        Args: { p_reset_amount?: number }
+        Returns: number
       }
     }
     Enums: {
