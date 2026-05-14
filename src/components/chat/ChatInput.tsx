@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect, KeyboardEvent, useMemo } from "react";
-import { Send, Loader2, ImagePlus, MessageSquarePlus, Tag, X, LayoutTemplate, ChevronDown } from "lucide-react";
+import { useState, useRef, useEffect, KeyboardEvent, useMemo, DragEvent } from "react";
+import { Send, Loader2, ImagePlus, MessageSquarePlus, Tag, X, LayoutTemplate, ChevronDown, FileText } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ImageEditorModal from "@/components/ui/ImageEditorModal";
+import { isSupportedDocument, extractDocumentText, truncateForPrompt } from "@/lib/documentExtract";
 
 interface PromptTemplate {
   id: string;
