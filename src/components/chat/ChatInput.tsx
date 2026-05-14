@@ -30,6 +30,8 @@ interface ChatInputProps {
   defaultTemplates?: PromptTemplate[];
   customTemplates?: PromptTemplate[];
   onTemplateSelect?: (template: string) => void;
+  enableDocumentDrop?: boolean;
+  onDocumentText?: (text: string, fileName: string) => void;
 }
 
 export default function ChatInput({ onSend, onFilesSelected, disabled, placeholder = "Cole um link ou descreva o conteúdo...", showImageUpload, userId, onNewChat, hasMessages, brands, selectedBrandId, onBrandSelect, prefillText, prefillKey, defaultTemplates, customTemplates, onTemplateSelect }: ChatInputProps) {
