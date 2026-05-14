@@ -131,6 +131,55 @@ export default function ChatInput({ onSend, onFilesSelected, disabled, placehold
     handleEditorAdvance(editorQueue, pendingEditedFilesRef.current);
   };
 
+  const handleDocFile = async (file: File) => {
+    if (!onDocumentText) return;
+    setIsExtracting(true);
+    try {
+      const text = await extractDocumentText(file);
+      if (!text) {
+        toast.error("Não consegui extrair texto desse documento.");
+        return;
+      }
+      onDocumentText(truncateForPrompt(text), file.name);
+      toast.success(`"${file.name}" carregado como briefing`);
+    } catch (err: any) {
+      console.error("[doc-extract]", err);
+      toast.error(err?.message || "Erro ao ler o documento");
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    if (!enableDocumentDrop) return;
+    if (!Array.from(e.dataTransfer?.types || []).includes("Files")) return;
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDraggingDoc(true);
+  };
+  const handleDragLeave = (_e: DragEvent<HTMLDivElement>) => {
+    if (!enableDocumentDrop) return;
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDraggingDoc(false);
+  };
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    if (!enableDocumentDrop) return;
+    e.preventDefault();
+  };
+  const handleDrop = async (e: DragEvent<HTMLDivElement>) => {
+    if (!enableDocumentDrop) return;
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDraggingDoc(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    const doc = files.find(isSupportedDocument);
+    if (!doc) {
+      toast.error("Formato não suportado. Use PDF, DOCX, TXT ou MD.");
+      return;
+    }
+    await handleDocFile(doc);
+  };
+
   return (
     <>
     <ImageEditorModal
@@ -140,7 +189,24 @@ export default function ChatInput({ onSend, onFilesSelected, disabled, placehold
       onCancel={handleEditorCancel}
       title="Ajustar imagem"
     />
-    <div className="border-t border-border/30 bg-gradient-to-t from-background via-background to-background/80 p-3 pb-4">
+    <div
+      className="border-t border-border/30 bg-gradient-to-t from-background via-background to-background/80 p-3 pb-4 relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {enableDocumentDrop && (isDraggingDoc || isExtracting) && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-t-xl border-2 border-dashed border-primary/60 bg-primary/10 backdrop-blur-sm pointer-events-none">
+          <div className="flex items-center gap-2 text-sm font-medium text-primary">
+            {isExtracting ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Lendo documento...</>
+            ) : (
+              <><FileText className="w-4 h-4" /> Solte o PDF, DOCX ou TXT aqui</>
+            )}
+          </div>
+        </div>
+      )}
       <div className="max-w-3xl mx-auto space-y-2">
         {/* Selected brand chip */}
         {selectedBrand && (
