@@ -1,15 +1,18 @@
 /**
- * check-usage — Validates if user can generate content based on their plan limits.
- * Called before each generation in generate-content and ai-chat.
+ * check-usage — Sistema de créditos para self_serve (Fase 3).
+ * White_glove bypassa toda checagem (legacy / Maikon).
  *
- * Returns: { allowed, used, limit, plan, plan_display_name }
+ * Input:  { template_id? }  — user_id vem do JWT, nunca do body
+ * Output: { allowed, mode, balance?, cost?, reason? }
+ *
+ * Se template_id for fornecido e mode=self_serve: debita atomicamente via RPC.
+ * Fail-open: erros de DB não bloqueiam a geração.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
 Deno.serve(async (req) => {
@@ -18,64 +21,111 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { user_id, increment } = await req.json();
-    if (!user_id) throw new Error("user_id is required");
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey     = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-    const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-    );
+    // Valida o JWT via anon client (CLAUDE.md: usar getUser, nunca getClaims)
+    const userClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: req.headers.get("Authorization") ?? "" } },
+    });
+    const { data: { user }, error: authError } = await userClient.auth.getUser();
 
-    const now = new Date();
-    const periodStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-
-    // Get user's plan
-    const { data: sub } = await supabase
-      .from("user_subscriptions")
-      .select("status, plan:plan_id(name, display_name, generation_limit)")
-      .eq("user_id", user_id)
-      .eq("status", "active")
-      .single();
-
-    const plan = sub?.plan as any || { name: "free", display_name: "Gratuito", generation_limit: 5 };
-
-    // Get current usage
-    const { data: usage } = await supabase
-      .from("usage_tracking")
-      .select("generations_count")
-      .eq("user_id", user_id)
-      .eq("period_start", periodStart)
-      .single();
-
-    const currentCount = usage?.generations_count || 0;
-    const allowed = currentCount < plan.generation_limit;
-
-    // If increment flag is set and allowed, increment the counter
-    if (increment && allowed) {
-      await supabase.from("usage_tracking").upsert({
-        user_id,
-        period_start: periodStart,
-        generations_count: currentCount + 1,
-        updated_at: now.toISOString(),
-      }, { onConflict: "user_id, period_start" });
+    if (authError || !user) {
+      return json({ allowed: false, reason: "unauthenticated" }, 401);
     }
 
-    return new Response(
-      JSON.stringify({
-        allowed,
-        used: increment && allowed ? currentCount + 1 : currentCount,
-        limit: plan.generation_limit,
-        plan: plan.name,
-        plan_display_name: plan.display_name,
-      }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
-  } catch (error: any) {
-    console.error("[check-usage] Error:", error.message);
-    // On error, allow generation (fail open — don't block paying users due to DB issues)
-    return new Response(
-      JSON.stringify({ allowed: true, used: 0, limit: 999, plan: "unknown", error: error.message }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    const body = await req.json().catch(() => ({}));
+    const { template_id } = body as { template_id?: string };
+
+    const supabase = createClient(supabaseUrl, serviceKey);
+
+    // Busca account_type e saldo do perfil
+    const { data: profile, error: profileError } = await supabase
+      .from("profiles")
+      .select("account_type, credits_balance")
+      .eq("user_id", user.id)
+      .single();
+
+    if (profileError || !profile) {
+      console.error("[check-usage] profile error:", profileError?.message);
+      // Fail-open: não bloqueia em erro de DB
+      return json({ allowed: true, mode: "unknown" });
+    }
+
+    // White_glove bypassa completamente
+    if ((profile as any).account_type === "white_glove") {
+      return json({ allowed: true, mode: "white_glove" });
+    }
+
+    const balance: number = (profile as any).credits_balance ?? 0;
+
+    // Sem template_id — retorna apenas o saldo atual (usado pelo CreditsBadge)
+    if (!template_id) {
+      return json({ allowed: balance > 0, mode: "self_serve", balance, cost: 0 });
+    }
+
+    // Busca custo do template
+    const { data: template, error: templateError } = await supabase
+      .from("templates")
+      .select("cost_credits, name")
+      .eq("id", template_id)
+      .single();
+
+    if (templateError || !template) {
+      console.warn("[check-usage] template not found:", template_id);
+      // Fail-open para template desconhecido
+      return json({ allowed: true, mode: "self_serve", balance, cost: 0 });
+    }
+
+    const cost: number = (template as any).cost_credits ?? 1;
+
+    // Verificação rápida antes do lock para resposta mais rápida quando claramente insuficiente
+    if (balance < cost) {
+      return json({ allowed: false, mode: "self_serve", balance, cost, reason: "insufficient_credits" });
+    }
+
+    // Débito atômico via RPC (FOR UPDATE no profiles, evita race condition)
+    const { data: result, error: debitError } = await supabase.rpc("debit_credits", {
+      p_user_id: user.id,
+      p_amount: cost,
+      p_template_id: template_id,
+    });
+
+    if (debitError) {
+      console.error("[check-usage] debit error:", debitError.message);
+      // Fail-open em erro de DB
+      return json({ allowed: true, mode: "self_serve", balance, cost });
+    }
+
+    const r = result as { ok: boolean; reason?: string; balance?: number; cost?: number };
+
+    if (!r.ok) {
+      return json({
+        allowed: false,
+        mode: "self_serve",
+        balance: r.balance ?? balance,
+        cost,
+        reason: r.reason ?? "insufficient_credits",
+      });
+    }
+
+    return json({
+      allowed: true,
+      mode: "self_serve",
+      balance: r.balance ?? balance - cost,
+      cost,
+    });
+
+  } catch (err: any) {
+    console.error("[check-usage] unhandled error:", err.message);
+    return json({ allowed: true, mode: "unknown", error: err.message });
   }
 });
+
+function json(data: Record<string, unknown>, status = 200) {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}

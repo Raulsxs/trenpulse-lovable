@@ -7,6 +7,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Menu, Compass, BookOpen, User, LogOut, TrendingUp } from "lucide-react";
+import { CreditsBadge } from "@/components/billing/CreditsBadge";
 import { toast } from "sonner";
 
 const navItems = [
@@ -63,6 +64,10 @@ function SelfServeSidebar() {
           );
         })}
       </nav>
+
+      <div className="shrink-0 px-4 pb-2 pt-3">
+        <CreditsBadge className="w-full justify-center" />
+      </div>
 
       <div className="shrink-0 border-t border-sidebar-border p-4">
         {showLogoutConfirm ? (
@@ -158,7 +163,8 @@ export default function SelfServeLayout({ children }: { children: ReactNode }) {
           <Button variant="ghost" size="icon" className="shrink-0" onClick={() => setSidebarOpen(true)}>
             <Menu className="w-5 h-5" />
           </Button>
-          <span className="text-lg font-heading font-bold text-foreground">TrendPulse</span>
+          <span className="flex-1 text-lg font-heading font-bold text-foreground">TrendPulse</span>
+          <CreditsBadge />
         </div>
         <Sheet open={sidebarOpen} onOpenChange={setSidebarOpen}>
           <SheetContent side="left" className="p-0 w-64">

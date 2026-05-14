@@ -130,13 +130,18 @@ describe("TemplateGenerator", () => {
 
   it("4) submit chama render-template e mostra preview no sucesso", async () => {
     fromMaybeSingleMock.mockResolvedValue({ data: tweetCardDb, error: null });
-    functionsInvokeMock.mockResolvedValue({
-      data: {
-        contentId: "content-123",
-        mediaUrls: ["https://cdn.example/a.png", "https://cdn.example/b.png"],
-        status: "done",
-      },
-      error: null,
+    functionsInvokeMock.mockImplementation((fnName: string) => {
+      if (fnName === "check-usage") {
+        return Promise.resolve({ data: { allowed: true }, error: null });
+      }
+      return Promise.resolve({
+        data: {
+          contentId: "content-123",
+          mediaUrls: ["https://cdn.example/a.png", "https://cdn.example/b.png"],
+          status: "done",
+        },
+        error: null,
+      });
     });
 
     renderWithRoute("tweet-card");
@@ -189,9 +194,14 @@ describe("TemplateGenerator", () => {
 
   it("6) 'Voltar e ajustar' retorna do preview pro form", async () => {
     fromMaybeSingleMock.mockResolvedValue({ data: tweetCardDb, error: null });
-    functionsInvokeMock.mockResolvedValue({
-      data: { contentId: "c-1", mediaUrls: ["https://x/a.png"], status: "done" },
-      error: null,
+    functionsInvokeMock.mockImplementation((fnName: string) => {
+      if (fnName === "check-usage") {
+        return Promise.resolve({ data: { allowed: true }, error: null });
+      }
+      return Promise.resolve({
+        data: { contentId: "c-1", mediaUrls: ["https://x/a.png"], status: "done" },
+        error: null,
+      });
     });
 
     renderWithRoute("tweet-card");

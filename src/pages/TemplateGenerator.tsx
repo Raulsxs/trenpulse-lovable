@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { TemplateForm, type Template as FormTemplate } from "@/components/templates/TemplateForm";
 import TemplatePublishActions from "@/components/templates/TemplatePublishActions";
+import { CreditsPaywall } from "@/components/billing/CreditsPaywall";
 import { supabase } from "@/integrations/supabase/client";
 
 type DbTemplate = FormTemplate & {
@@ -46,6 +47,7 @@ export default function TemplateGenerator() {
   const [view, setView] = useState<ViewState>("loading");
   const [template, setTemplate] = useState<DbTemplate | null>(null);
   const [result, setResult] = useState<RenderResult | null>(null);
+  const [paywall, setPaywall] = useState<{ balance: number; cost: number } | null>(null);
   const resultRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -77,6 +79,21 @@ export default function TemplateGenerator() {
   const handleSubmit = async (inputs: Record<string, unknown>) => {
     if (!template) return;
     setView("submitting");
+
+    // Verifica créditos antes de gerar (self_serve); white_glove passa direto
+    const { data: usage, error: usageError } = await supabase.functions.invoke("check-usage", {
+      body: { template_id: template.id },
+    });
+
+    if (usageError) {
+      // Fail-open: erro na checagem não bloqueia
+      console.warn("[TemplateGenerator] check-usage error:", usageError.message);
+    } else if (usage && !usage.allowed) {
+      setPaywall({ balance: usage.balance ?? 0, cost: usage.cost ?? 1 });
+      setView("form");
+      return;
+    }
+
     const { data, error } = await supabase.functions.invoke("render-template", {
       body: { templateId: template.id, inputs },
     });
@@ -217,6 +234,14 @@ export default function TemplateGenerator() {
           </div>
         </div>
       </main>
+
+      <CreditsPaywall
+        open={!!paywall}
+        onClose={() => setPaywall(null)}
+        balance={paywall?.balance ?? 0}
+        cost={paywall?.cost ?? 1}
+        templateName={template.name}
+      />
     </div>
   );
 }
