@@ -1,8 +1,10 @@
-import { useState, useRef, useEffect, KeyboardEvent, useMemo } from "react";
-import { Send, Loader2, ImagePlus, MessageSquarePlus, Tag, X, LayoutTemplate, ChevronDown } from "lucide-react";
+import { useState, useRef, useEffect, KeyboardEvent, useMemo, DragEvent } from "react";
+import { Send, Loader2, ImagePlus, MessageSquarePlus, Tag, X, LayoutTemplate, ChevronDown, FileText } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ImageEditorModal from "@/components/ui/ImageEditorModal";
+import { isSupportedDocument, extractDocumentText, truncateForPrompt } from "@/lib/documentExtract";
 
 interface PromptTemplate {
   id: string;
@@ -28,10 +30,15 @@ interface ChatInputProps {
   defaultTemplates?: PromptTemplate[];
   customTemplates?: PromptTemplate[];
   onTemplateSelect?: (template: string) => void;
+  enableDocumentDrop?: boolean;
+  onDocumentText?: (text: string, fileName: string) => void;
 }
 
-export default function ChatInput({ onSend, onFilesSelected, disabled, placeholder = "Cole um link ou descreva o conteúdo...", showImageUpload, userId, onNewChat, hasMessages, brands, selectedBrandId, onBrandSelect, prefillText, prefillKey, defaultTemplates, customTemplates, onTemplateSelect }: ChatInputProps) {
+export default function ChatInput({ onSend, onFilesSelected, disabled, placeholder = "Cole um link ou descreva o conteúdo...", showImageUpload, userId, onNewChat, hasMessages, brands, selectedBrandId, onBrandSelect, prefillText, prefillKey, defaultTemplates, customTemplates, onTemplateSelect, enableDocumentDrop, onDocumentText }: ChatInputProps) {
   const [value, setValue] = useState("");
+  const [isDraggingDoc, setIsDraggingDoc] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
+  const dragDepthRef = useRef(0);
   const [showBrandDropdown, setShowBrandDropdown] = useState(false);
   const [editorQueue, setEditorQueue] = useState<File[]>([]);
   const [editorCurrentFile, setEditorCurrentFile] = useState<File | null>(null);
@@ -124,6 +131,55 @@ export default function ChatInput({ onSend, onFilesSelected, disabled, placehold
     handleEditorAdvance(editorQueue, pendingEditedFilesRef.current);
   };
 
+  const handleDocFile = async (file: File) => {
+    if (!onDocumentText) return;
+    setIsExtracting(true);
+    try {
+      const text = await extractDocumentText(file);
+      if (!text) {
+        toast.error("Não consegui extrair texto desse documento.");
+        return;
+      }
+      onDocumentText(truncateForPrompt(text), file.name);
+      toast.success(`"${file.name}" carregado como briefing`);
+    } catch (err: any) {
+      console.error("[doc-extract]", err);
+      toast.error(err?.message || "Erro ao ler o documento");
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    if (!enableDocumentDrop) return;
+    if (!Array.from(e.dataTransfer?.types || []).includes("Files")) return;
+    e.preventDefault();
+    dragDepthRef.current += 1;
+    setIsDraggingDoc(true);
+  };
+  const handleDragLeave = (_e: DragEvent<HTMLDivElement>) => {
+    if (!enableDocumentDrop) return;
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) setIsDraggingDoc(false);
+  };
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    if (!enableDocumentDrop) return;
+    e.preventDefault();
+  };
+  const handleDrop = async (e: DragEvent<HTMLDivElement>) => {
+    if (!enableDocumentDrop) return;
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDraggingDoc(false);
+    const files = Array.from(e.dataTransfer.files || []);
+    const doc = files.find(isSupportedDocument);
+    if (!doc) {
+      toast.error("Formato não suportado. Use PDF, DOCX, TXT ou MD.");
+      return;
+    }
+    await handleDocFile(doc);
+  };
+
   return (
     <>
     <ImageEditorModal
@@ -133,7 +189,24 @@ export default function ChatInput({ onSend, onFilesSelected, disabled, placehold
       onCancel={handleEditorCancel}
       title="Ajustar imagem"
     />
-    <div className="border-t border-border/30 bg-gradient-to-t from-background via-background to-background/80 p-3 pb-4">
+    <div
+      className="border-t border-border/30 bg-gradient-to-t from-background via-background to-background/80 p-3 pb-4 relative"
+      onDragEnter={handleDragEnter}
+      onDragLeave={handleDragLeave}
+      onDragOver={handleDragOver}
+      onDrop={handleDrop}
+    >
+      {enableDocumentDrop && (isDraggingDoc || isExtracting) && (
+        <div className="absolute inset-0 z-20 flex items-center justify-center rounded-t-xl border-2 border-dashed border-primary/60 bg-primary/10 backdrop-blur-sm pointer-events-none">
+          <div className="flex items-center gap-2 text-sm font-medium text-primary">
+            {isExtracting ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Lendo documento...</>
+            ) : (
+              <><FileText className="w-4 h-4" /> Solte o PDF, DOCX ou TXT aqui</>
+            )}
+          </div>
+        </div>
+      )}
       <div className="max-w-3xl mx-auto space-y-2">
         {/* Selected brand chip */}
         {selectedBrand && (

@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import SmartNudge from "./SmartNudge";
 import BrandCreationModal from "./BrandCreationModal";
 import { useNotification } from "@/hooks/useNotification";
+import { useAccountType } from "@/hooks/useAccountType";
 
 interface ActionResult {
   content_id?: string;
@@ -122,6 +123,7 @@ export default function ChatWindow() {
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
   const [prefillText, setPrefillText] = useState("");
   const [prefillKey, setPrefillKey] = useState(0);
+  const { accountType } = useAccountType();
   const [customTemplates, setCustomTemplates] = useState<Array<{ id: string; emoji: string; label: string; template: string }>>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
   const hasLoadedHistory = useRef(false);
@@ -1076,6 +1078,13 @@ export default function ChatWindow() {
         defaultTemplates={DEFAULT_TEMPLATES}
         customTemplates={customTemplates}
         onTemplateSelect={handleQuickAction}
+        enableDocumentDrop={accountType === "white_glove"}
+        onDocumentText={(text, fileName) => {
+          setPrefillText(
+            `Use o conteúdo do documento "${fileName}" como briefing para gerar o post:\n\n"""\n${text}\n"""\n\nGere um post baseado nesse conteúdo.`
+          );
+          setPrefillKey((k) => k + 1);
+        }}
         placeholder={
           onboardingStep != null
             ? "Digite sua resposta..."
