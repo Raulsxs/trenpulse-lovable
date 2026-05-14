@@ -11,6 +11,7 @@ import { toast } from "sonner";
 import SmartNudge from "./SmartNudge";
 import BrandCreationModal from "./BrandCreationModal";
 import { useNotification } from "@/hooks/useNotification";
+import { useAccountType } from "@/hooks/useAccountType";
 
 interface ActionResult {
   content_id?: string;
