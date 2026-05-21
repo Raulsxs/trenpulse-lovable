@@ -271,7 +271,11 @@ export async function fetchAI(request: FetchAIRequest): Promise<FetchAIResponse>
 }
 
 async function fetchOpenAICompatible(config: AIConfig, request: FetchAIRequest): Promise<FetchAIResponse> {
-  const model = config.provider === "google" ? resolveModelForGoogle(request.model) : request.model;
+  const model = config.provider === "google"
+    ? resolveModelForGoogle(request.model)
+    : config.provider === "lovable"
+      ? resolveModelForLovable(request.model)
+      : request.model;
 
   const res = await fetch(config.url, {
     method: "POST",
@@ -476,6 +480,17 @@ function resolveModelForGoogle(model: string): string {
     "google/gemini-2.5-flash": "gemini-2.5-flash",
     "google/gemini-2.5-flash-lite": "gemini-2.5-flash",
     "google/gemini-3-pro-image-preview": "gemini-2.0-flash",
+    // Inference.sh text model — when falling back to Google, route to a real Gemini text model.
+    // Without this, Google rejects "openrouter/minimax-m-25" with 404 and captions stay empty.
+    "openrouter/minimax-m-25": "gemini-2.5-flash",
+  };
+  return map[model] || model;
+}
+
+function resolveModelForLovable(model: string): string {
+  const map: Record<string, string> = {
+    // Lovable Gateway accepts google/* models. minimax via inference is unknown to Lovable.
+    "openrouter/minimax-m-25": "google/gemini-2.5-flash",
   };
   return map[model] || model;
 }

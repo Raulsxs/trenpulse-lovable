@@ -1165,7 +1165,7 @@ ${SAFE_AREA_RULES}`;
             console.error("[ai-chat] GENERATE: generate-slide-images failed:", genResp.status, errText.substring(0, 200));
           }
         } catch (genErr: any) {
-          console.error("[ai-chat] GENERATE: generate-slide-images error:", genErr?.name === "AbortError" ? "timeout (60s)" : genErr?.message);
+          console.error("[ai-chat] GENERATE: generate-slide-images error:", genErr?.name === "AbortError" ? "timeout (80s)" : genErr?.message);
         }
 
         // 7. Generate caption + title with minimax
