@@ -1141,6 +1141,7 @@ ${SAFE_AREA_RULES}`;
             method: "POST",
             headers: internalHeaders,
             body: JSON.stringify({
+              userId,
               slide: { role: "cover", headline: slideHeadline, body: "" },
               slideIndex: 0,
               totalSlides: 1,
@@ -1549,6 +1550,7 @@ Responda APENAS com a imagem gerada.`;
                 method: "POST",
                 headers: internalHeaders,
                 body: JSON.stringify({
+                  userId,
                   slide,
                   slideIndex: i,
                   totalSlides: slides.length,
@@ -1792,6 +1794,7 @@ ${SAFE_AREA_RULES}`;
             method: "POST",
             headers: internalHeaders,
             body: JSON.stringify({
+              userId,
               slide: { role: "cover", headline: existing.slides?.[0]?.headline || "", body: "" },
               slideIndex: 0,
               totalSlides: 1,
