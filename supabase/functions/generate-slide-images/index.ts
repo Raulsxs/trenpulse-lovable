@@ -75,10 +75,10 @@ serve(async (req) => {
     if (!resolvedUserId && brandId) {
       const { data: brandRow } = await supabaseAdmin
         .from("brands")
-        .select("user_id")
+        .select("owner_user_id")
         .eq("id", brandId)
         .single();
-      resolvedUserId = brandRow?.user_id || null;
+      resolvedUserId = (brandRow as any)?.owner_user_id || null;
     }
     let userGeminiKey: string | null = null;
     if (resolvedUserId) {
