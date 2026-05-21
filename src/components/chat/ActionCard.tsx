@@ -98,9 +98,12 @@ function ActionCardPreview({
 
     const isVideoContent = slideData?.media_type === "video" || /\.(mp4|webm|mov)(\?|$)/i.test(displayUrl || "");
     const aspectRatio = `${dims.width} / ${dims.height}`;
+    // Cap preview width per format so 9:16 stories don't render taller than the card itself.
+    // Story (9:16) at full width = ~570px tall on a 320px card — too dominant. Square stays full.
+    const previewMaxWidth = contentType === "story" ? 240 : "100%";
 
     return (
-      <div style={{ width: "100%", aspectRatio, overflow: "hidden" }}>
+      <div style={{ width: "100%", maxWidth: previewMaxWidth, aspectRatio, overflow: "hidden", marginInline: "auto" }}>
         {isVideoContent && displayUrl ? (
           <video src={displayUrl} controls muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         ) : showAsFinishedImage ? (

@@ -1079,11 +1079,13 @@ NÃO copie textos das referências (categorias, hashtags, datas, rodapés, nomes
           const textToOverlay = contentStyle === "quote" ? slideHeadline : userTopic;
           imagePrompt = `FORMATO OBRIGATÓRIO: ${dimLabelGenerate}. A imagem DEVE ser gerada neste formato exato.
 
+IDIOMA OBRIGATÓRIO DO TEXTO: português brasileiro (pt-BR). Se o texto abaixo estiver em outro idioma, TRADUZA para pt-BR antes de renderizar.
+
 INSTRUÇÃO PRINCIPAL: A imagem de referência anexada é uma FOTO PESSOAL REAL do criador. Você DEVE preservar esta foto exatamente como ela é — é a foto real da pessoa. NÃO gere uma pessoa diferente. NÃO altere o rosto ou corpo da pessoa na foto.
 
 Use a foto anexada como FUNDO e sobreponha o texto abaixo de forma profissional:
 
-TEXTO PARA SOBREPOR: "${textToOverlay}"
+TEXTO PARA SOBREPOR (em pt-BR): "${textToOverlay}"
 
 REGRAS OBRIGATÓRIAS:
 - A foto da pessoa deve permanecer INTACTA e INALTERADA — é a foto real do criador
@@ -1115,6 +1117,8 @@ REGRAS ABSOLUTAS — OBRIGATÓRIAS:
         } else {
           imagePrompt = `FORMATO OBRIGATÓRIO: ${dimLabelGenerate}. A imagem DEVE ser gerada neste formato exato.
 
+IDIOMA OBRIGATÓRIO DO TEXTO RENDERIZADO NA IMAGEM: português brasileiro (pt-BR). Se o tema/artigo abaixo estiver em outro idioma, TRADUZA todos os termos para pt-BR antes de renderizar. Nenhuma palavra em inglês, espanhol ou outros idiomas pode aparecer na imagem final.
+
 Crie uma imagem profissional pronta para publicar como ${formatLabel} de ${platformLabel}.
 
 TEMA: ${userTopic}
@@ -1122,9 +1126,9 @@ TEMA: ${userTopic}
 ${referencesInstruction}${brandContext ? `IDENTIDADE VISUAL:\n${brandContext}\n` : ""}${userCtx?.business_niche ? `Nicho do criador: ${userCtx.business_niche}. ` : ""}${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}. ` : ""}
 
 REGRAS:
-- A imagem deve ter texto integrado visível e legível sobre o tema acima.
+- A imagem deve ter texto integrado visível e legível sobre o tema acima, SEMPRE em pt-BR.
 - Use tipografia profissional, hierarquia visual clara, cores harmônicas.
-${hasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas.\n" : ""}- NÃO inclua URLs, QR codes ou logotipos de terceiros.
+${hasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas (mas TRADUZA qualquer texto delas para pt-BR).\n" : ""}- NÃO inclua URLs, QR codes ou logotipos de terceiros.
 - Gere APENAS a imagem final, sem bordas ou mockups.
 
 ${SAFE_AREA_RULES}`;
@@ -1523,6 +1527,8 @@ As imagens em anexo são exemplos REAIS do estilo desta marca. COPIE EXATAMENTE 
 
             const slidePrompt = `Crie a imagem do ${isStoryCarousel ? `story ${i + 1} de ${slides.length} (sequência narrativa de stories vertical 9:16)` : `slide ${i + 1} de ${slides.length} de um carrossel`} para ${platform === "linkedin" ? "LinkedIn" : "Instagram"} (${dims.w}x${dims.h}px).
 
+IDIOMA OBRIGATÓRIO DO TEXTO: português brasileiro (pt-BR). Se algum termo abaixo estiver em outro idioma, TRADUZA para pt-BR. Nenhuma palavra estrangeira na imagem.
+
 CONTEXTO DO CARROSSEL: ${carouselTitle}
 SLIDE ${i + 1}/${slides.length} (${slide.role}):
 Headline: ${slide.headline}
@@ -1531,10 +1537,10 @@ ${slide.bullets?.length ? `Bullets:\n${slide.bullets.map((b: string) => `- ${b}`
 ${carouselRefsBlock}
 ${brandContext ? `IDENTIDADE DA MARCA:\n${brandContext}\n` : ""}
 REGRAS:
-- Imagem COMPLETA com texto integrado, pronta para publicar
+- Imagem COMPLETA com texto integrado, pronta para publicar, TEXTO EM PT-BR
 - Manter identidade visual consistente entre slides
 - Texto legível, fonte profissional
-${carouselHasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas.\n" : ""}- Safe area: margem mínima de 80px em todas as bordas
+${carouselHasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas (mas TRADUZA qualquer texto delas para pt-BR).\n" : ""}- Safe area: margem mínima de 80px em todas as bordas
 - NUNCA inclua URLs, QR codes, @handles inventados
 - Formato: ${dims.w}x${dims.h}px
 ${i === 0 ? "- Este é o COVER: título grande, impactante" : ""}
