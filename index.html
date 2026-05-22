@@ -1,9 +1,11 @@
 <!doctype html>
-<html lang="en">
+<html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- TODO: Set the document title to the name of your application -->
+    <!-- Bloqueia auto-tradução do Chrome — ela manipula o DOM externamente e quebra o React
+         com erro "insertBefore: O nó anterior ... não é filho deste nó". -->
+    <meta name="google" content="notranslate" />
     <title>TrendPulse</title>
     <meta name="description" content="Plataforma de geração de conteúdos">
     <meta name="author" content="TrendPulse" />
@@ -32,7 +34,7 @@
   <meta name="twitter:description" content="Plataforma de geração de conteúdos">
 </head>
 
-  <body>
+  <body translate="no" class="notranslate">
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

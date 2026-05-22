@@ -903,7 +903,14 @@ export default function ActionCard({
                     {!publishLocked && <ChevronDown className="w-3 h-3 ml-auto" />}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-64 p-3" align="start">
+                <PopoverContent
+                  className="w-64 p-3 max-h-[70vh] overflow-y-auto"
+                  align="start"
+                  side="top"
+                  sideOffset={6}
+                  collisionPadding={16}
+                  avoidCollisions
+                >
                   <p className="text-xs font-medium mb-2 text-foreground">Publicar em:</p>
                   <div className="space-y-1.5 mb-3">
                     {connectedAccounts.map((account) => {
