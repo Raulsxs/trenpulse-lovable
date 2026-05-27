@@ -137,6 +137,9 @@ const SAFE_AREA_RULES = `SAFE AREA — REGRA CRÍTICA (não pode ser violada):
 - A imagem é quadrada/vertical fechada — não há "fora do quadro". Tudo que importa precisa estar visível inteiro.
 - Verifique mentalmente: a primeira e a última letra de cada linha de texto estão longe das bordas? Se não, recompor.`;
 
+// Prevents Gemini from generating UI screenshots instead of the actual design content
+const NO_UI_MOCKUP_RULE = `PROIBIDO ABSOLUTO — NUNCA gere screenshots, prints, mockups ou simulações de interface de rede social. Não mostre o app do Instagram, TikTok, Twitter, LinkedIn ou qualquer plataforma. Não inclua elementos de UI da plataforma: feed, header de perfil (foto + nome + seguidores), botão "Turbinar post", curtidas, comentários, barra de stories, notificações, frame de celular. A imagem gerada É o conteúdo — a arte gráfica que vai ser publicada — não uma prévia de como ela ficaria dentro do app.`;
+
 const INTENTS = [
   "GENERATE_TEMPLATE",
   "GENERATE",
@@ -1113,9 +1116,18 @@ REGRAS ABSOLUTAS — OBRIGATÓRIAS:
 - Tipografia elegante e legível. Frase centralizada e em destaque.
 - NÃO inclua URLs, QR codes ou logotipos.`;
         } else {
+          const storySpecificRules = isStoryFmt ? `
+REGRAS CRÍTICAS PARA STORY VERTICAL (9:16 — 1080×1920px):
+- TEXTO MÁXIMO: 1 título curto de 3-6 palavras em BOLD + no máximo 1 subtítulo de 8-12 palavras. NENHUM outro texto.
+- TAMANHO DE FONTE: nunca use fonte maior que 14% da altura da imagem. Em 1920px de altura isso equivale a ~270px. Prefira fontes menores para textos longos.
+- MARGENS MÍNIMAS OBRIGATÓRIAS: 130px em TODAS as bordas (esquerda, direita, topo, base). NENHUMA letra, nem a primeira nem a última, pode ultrapassar essas margens.
+- VERIFIQUE: cada linha de texto começa e termina dentro das margens? Se não, REDUZA a fonte ou encurte o texto.
+- NÃO tente colocar o artigo inteiro na imagem — escolha 1 ideia principal, escreva curto e impactante.
+` : "";
+
           imagePrompt = `FORMATO OBRIGATÓRIO: ${dimLabelGenerate}. A imagem DEVE ser gerada neste formato exato.
 
-Crie uma imagem profissional pronta para publicar como ${formatLabel} de ${platformLabel}.
+Crie o DESIGN VISUAL (arte gráfica) para usar como ${formatLabel} de ${platformLabel}.
 
 TEMA: ${userTopic}
 
@@ -1125,7 +1137,9 @@ REGRAS:
 - A imagem deve ter texto integrado visível e legível sobre o tema acima.
 - Use tipografia profissional, hierarquia visual clara, cores harmônicas.
 ${hasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas.\n" : ""}- NÃO inclua URLs, QR codes ou logotipos de terceiros.
-- Gere APENAS a imagem final, sem bordas ou mockups.
+- Gere APENAS o design final — sem bordas externas, sem frames.
+${storySpecificRules}
+${NO_UI_MOCKUP_RULE}
 
 ${SAFE_AREA_RULES}`;
         }
@@ -1539,6 +1553,8 @@ ${carouselHasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composiçã
 ${i === 0 ? "- Este é o COVER: título grande, impactante" : ""}
 ${slide.role === "cta" ? "- Este é o ÚLTIMO slide: chamada para ação clara" : ""}
 
+${NO_UI_MOCKUP_RULE}
+
 ${SAFE_AREA_RULES}
 
 Responda APENAS com a imagem gerada.`;
@@ -1767,6 +1783,8 @@ REGRAS:
 - Mantenha qualidade profissional, tipografia legível e identidade do conteúdo.
 - NÃO inclua URLs, QR codes ou logotipos externos.
 
+${NO_UI_MOCKUP_RULE}
+
 ${SAFE_AREA_RULES}`
           : `FORMATO OBRIGATÓRIO: ${dimLabel}. Gere a imagem EXATAMENTE neste formato.
 
@@ -1782,6 +1800,8 @@ REGRAS:
 - Se pede mudança visual/estilo: altere o visual mantendo os textos.
 - Mantenha qualidade profissional, tipografia legível e identidade do conteúdo.
 - NÃO inclua URLs, QR codes ou logotipos externos.
+
+${NO_UI_MOCKUP_RULE}
 
 ${SAFE_AREA_RULES}`;
 
