@@ -401,6 +401,17 @@ export default function ActionCard({
             return true;
           }
 
+          // ai_full_design images are generated synchronously inside ai-chat before
+          // the ActionCard ever renders. If slides are already in DB but no image,
+          // the generation already failed — no background job will fix it.
+          if (slide.render_mode === "ai_full_design") {
+            console.log(`[ActionCard] ai_full_design ${contentId}: slides in DB but no image — generation failed`);
+            setIsPolling(false);
+            setGenerationFailed(true);
+            bgLoadedRef.current = true;
+            return true;
+          }
+
           if (contentCreatedAt) {
             const ageMs = Date.now() - contentCreatedAt.getTime();
             // 5 min timeout — inference.sh fallback to Lovable can take time

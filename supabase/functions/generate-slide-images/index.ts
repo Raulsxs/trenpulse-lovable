@@ -23,6 +23,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const NO_UI_MOCKUP_RULE = `PROIBIDO ABSOLUTO — NUNCA gere screenshots, prints, mockups ou simulações de interface de rede social. Não mostre o app do Instagram, TikTok, Twitter, LinkedIn ou qualquer plataforma. Não inclua elementos de UI da plataforma: feed, header de perfil (foto + nome + seguidores), botão "Turbinar post", curtidas, comentários, barra de stories, notificações, frame de celular. A imagem gerada É o conteúdo visual final — a arte gráfica que vai ser publicada — não uma prévia de como ela ficaria dentro do app.`;
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -629,24 +631,28 @@ async function tryGoogleAIDirect(
   }
 }
 
-// ══════ GENERATE IMAGE (fallback — skips inference.sh, goes straight to Lovable/Google) ══════
+// ══════ GENERATE IMAGE (fallback — skips inference.sh, goes to Google AI or Lovable) ══════
 
 async function generateImage(contentParts: any[]): Promise<string | null> {
-  // Extract prompt text and image URLs from contentParts
   const promptText = contentParts.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n");
   const refImages = contentParts.filter((p: any) => p.type === "image_url").map((p: any) => p.image_url?.url).filter(Boolean);
 
-  // Try Lovable Gateway directly (skips inference.sh which already failed)
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+  // Tier 1: Google AI Studio shared key — uses native image generation API (reliable)
   const googleKey = Deno.env.get("GOOGLE_AI_API_KEY");
-  const fallbackKey = lovableKey || googleKey;
-  const fallbackUrl = lovableKey
-    ? "https://ai.gateway.lovable.dev/v1/chat/completions"
-    : "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions";
-  const fallbackModel = lovableKey ? "google/gemini-pro-vision" : "gemini-2.0-flash";
+  if (googleKey) {
+    console.log("[generate-slide-images] generateImage: trying Google AI Studio direct (shared key)");
+    const result = await tryGoogleAIDirect(googleKey, promptText, refImages, "1:1");
+    if (result) {
+      console.log("[generate-slide-images] generateImage: Google AI Studio succeeded");
+      return result;
+    }
+    console.warn("[generate-slide-images] generateImage: Google AI returned no image, trying Lovable Gateway");
+  }
 
-  if (!fallbackKey) {
-    console.warn("[generate-slide-images] No fallback key available");
+  // Tier 2: Lovable Gateway (last resort)
+  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!lovableKey) {
+    console.warn("[generate-slide-images] generateImage: no fallback key available");
     return null;
   }
 
@@ -659,15 +665,15 @@ async function generateImage(contentParts: any[]): Promise<string | null> {
         messageContent.push({ type: "image_url", image_url: { url: imgUrl } });
       }
 
-      console.log(`[generate-slide-images] Lovable/Google fallback attempt ${retry + 1}, model=${fallbackModel}`);
-      const res = await fetch(fallbackUrl, {
+      console.log(`[generate-slide-images] Lovable Gateway fallback attempt ${retry + 1}`);
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${fallbackKey}`,
+          Authorization: `Bearer ${lovableKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: fallbackModel,
+          model: "google/gemini-2.0-flash-exp",
           messages: [{ role: "user", content: messageContent }],
           modalities: ["image", "text"],
         }),
@@ -675,8 +681,8 @@ async function generateImage(contentParts: any[]): Promise<string | null> {
 
       if (!res.ok) {
         const errText = await res.text();
-        console.warn(`[generate-slide-images] Fallback error [${res.status}]: ${errText.substring(0, 200)}`);
-        if (res.status === 402 || res.status === 401) return null; // quota exhausted or auth fail
+        console.warn(`[generate-slide-images] Lovable fallback error [${res.status}]: ${errText.substring(0, 200)}`);
+        if (res.status === 402 || res.status === 401) return null;
         continue;
       }
 
@@ -684,7 +690,6 @@ async function generateImage(contentParts: any[]): Promise<string | null> {
       const msg = data.choices?.[0]?.message;
       if (!msg) continue;
 
-      // Handle multiple response formats: images array, content as URL, content as base64
       const fromImages = msg.images?.[0]?.image_url?.url;
       const fromContent = typeof msg.content === "string"
         ? (msg.content.startsWith("data:") || msg.content.startsWith("http") ? msg.content : null)
@@ -692,13 +697,13 @@ async function generateImage(contentParts: any[]): Promise<string | null> {
       const imageResult = fromImages || fromContent || null;
 
       if (imageResult) {
-        console.log(`[generate-slide-images] Fallback returned image (${imageResult.startsWith("data:") ? "base64" : "url"})`);
+        console.log(`[generate-slide-images] Lovable fallback returned image`);
         return imageResult;
       }
 
-      console.warn("[generate-slide-images] Fallback returned no image in response");
+      console.warn("[generate-slide-images] Lovable fallback returned no image");
     } catch (err: any) {
-      console.warn(`[generate-slide-images] Fallback attempt ${retry + 1} error: ${err.message}`);
+      console.warn(`[generate-slide-images] Lovable fallback attempt ${retry + 1} error: ${err.message}`);
     }
   }
 
@@ -1091,6 +1096,8 @@ PROIBIÇÕES:
 - NUNCA altere a ortografia do texto fornecido.
 - NUNCA inclua texto em outro idioma que não ${lang}.
 - NUNCA copie textos das imagens de referência (categorias, nomes, datas, rodapés, etc.).
+
+${NO_UI_MOCKUP_RULE}
 
 Responda APENAS com a imagem gerada.`;
 }
