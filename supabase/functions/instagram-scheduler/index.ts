@@ -24,9 +24,12 @@ Deno.serve(async (req) => {
 
     // Find scheduled contents that are due
     const now = new Date().toISOString();
+    // CRITICAL: include publish_attempts in the SELECT, otherwise the increment below
+    // reads `undefined` and stays at 1 forever — that's how Felipe's LinkedIn got 12+
+    // duplicate posts on 2026-04-27. The < 3 filter must actually exclude old failures.
     const { data: dueContents, error } = await supabase
       .from("generated_contents")
-      .select("id, user_id, platform")
+      .select("id, user_id, platform, publish_attempts")
       .eq("status", "scheduled")
       .lte("scheduled_at", now)
       .lt("publish_attempts", 3)
@@ -50,11 +53,28 @@ Deno.serve(async (req) => {
     const results = [];
 
     for (const content of dueContents) {
+      const prevAttempts = (content as any).publish_attempts || 0;
+      const nextAttempts = prevAttempts + 1;
       try {
-        // Increment publish_attempts
-        await supabase.from("generated_contents")
-          .update({ publish_attempts: (content as any).publish_attempts ? (content as any).publish_attempts + 1 : 1 })
-          .eq("id", content.id);
+        // CRITICAL FIX: lock the row by flipping status to "publishing" BEFORE calling the
+        // publisher. Even if PFM is slow / pending, the next 5min cron tick will not pick
+        // this row again because the .eq("status", "scheduled") filter excludes it. Without
+        // this lock, a slow / pending publish gets retried every tick and the PFM creates a
+        // brand new post each time — that's exactly what duplicated 12+ posts on Felipe's
+        // LinkedIn on 2026-04-27.
+        const { error: lockErr } = await supabase.from("generated_contents")
+          .update({
+            status: "publishing",
+            publish_attempts: nextAttempts,
+          })
+          .eq("id", content.id)
+          .eq("status", "scheduled"); // optimistic lock — only update if still scheduled
+
+        if (lockErr) {
+          console.error(`[scheduler] Could not lock ${content.id}:`, lockErr.message);
+          results.push({ id: content.id, status: "lock_failed", error: lockErr.message });
+          continue;
+        }
 
         // Call publish-postforme with service role key (internal call)
         const publishResp = await fetch(`${supabaseUrl}/functions/v1/publish-postforme`, {
@@ -73,19 +93,34 @@ Deno.serve(async (req) => {
         const publishData = await publishResp.json();
 
         if (publishResp.ok && publishData.results?.some((r: any) => r.success)) {
+          // publish-postforme already set status=published when confirmed, but re-affirm here
+          // so any race condition is closed.
           console.log(`[scheduler] Published ${content.id} to ${content.platform}`);
           results.push({ id: content.id, status: "published" });
+        } else if (publishResp.ok && publishData.results?.some((r: any) => r.pending === true)) {
+          // Pending — PFM accepted but didn't confirm in time. publish-postforme already
+          // set status=processing so we DON'T retry. Just log and move on.
+          console.log(`[scheduler] Pending ${content.id} — left as 'processing', will not retry`);
+          results.push({ id: content.id, status: "pending" });
         } else {
+          // Real failure (PFM rejected, network error, etc). Mark status=failed if we hit
+          // the max attempts; otherwise keep it as scheduled to allow retry on next tick.
           const errMsg = publishData.error || publishData.results?.[0]?.error || "Unknown error";
-          console.error(`[scheduler] Failed ${content.id}: ${errMsg}`);
+          console.error(`[scheduler] Failed ${content.id} (attempt ${nextAttempts}/3): ${errMsg}`);
+          const finalStatus = nextAttempts >= 3 ? "failed" : "scheduled";
           await supabase.from("generated_contents")
-            .update({ publish_error: errMsg })
+            .update({ status: finalStatus, publish_error: errMsg })
             .eq("id", content.id);
-          results.push({ id: content.id, status: "failed", error: errMsg });
+          results.push({ id: content.id, status: finalStatus, error: errMsg });
         }
       } catch (err: any) {
         console.error(`[scheduler] Error ${content.id}:`, err?.message);
-        results.push({ id: content.id, status: "error", error: err?.message });
+        // Roll back to scheduled so we can retry — but only if attempts haven't maxed out.
+        const finalStatus = nextAttempts >= 3 ? "failed" : "scheduled";
+        await supabase.from("generated_contents")
+          .update({ status: finalStatus, publish_error: err?.message || "fetch error" })
+          .eq("id", content.id);
+        results.push({ id: content.id, status: finalStatus, error: err?.message });
       }
     }
 

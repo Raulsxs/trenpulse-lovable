@@ -98,9 +98,12 @@ function ActionCardPreview({
 
     const isVideoContent = slideData?.media_type === "video" || /\.(mp4|webm|mov)(\?|$)/i.test(displayUrl || "");
     const aspectRatio = `${dims.width} / ${dims.height}`;
+    // Cap preview width per format so 9:16 stories don't render taller than the card itself.
+    // Story (9:16) at full width = ~570px tall on a 320px card — too dominant. Square stays full.
+    const previewMaxWidth = contentType === "story" ? 240 : "100%";
 
     return (
-      <div style={{ width: "100%", aspectRatio, overflow: "hidden" }}>
+      <div style={{ width: "100%", maxWidth: previewMaxWidth, aspectRatio, overflow: "hidden", marginInline: "auto" }}>
         {isVideoContent && displayUrl ? (
           <video src={displayUrl} controls muted playsInline style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         ) : showAsFinishedImage ? (
@@ -900,7 +903,14 @@ export default function ActionCard({
                     {!publishLocked && <ChevronDown className="w-3 h-3 ml-auto" />}
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-64 p-3" align="start">
+                <PopoverContent
+                  className="w-64 p-3 max-h-[70vh] overflow-y-auto"
+                  align="start"
+                  side="top"
+                  sideOffset={6}
+                  collisionPadding={16}
+                  avoidCollisions
+                >
                   <p className="text-xs font-medium mb-2 text-foreground">Publicar em:</p>
                   <div className="space-y-1.5 mb-3">
                     {connectedAccounts.map((account) => {

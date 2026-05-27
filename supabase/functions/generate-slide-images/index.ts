@@ -63,8 +63,35 @@ serve(async (req) => {
       referenceImageUrls: externalReferenceUrls, // brand reference image URLs from ai-chat
       platform: requestPlatform,
       allSlides: requestAllSlides, // all slides data for narrative context in carousels
+      userId: requestUserId, // when set, look up profiles.gemini_api_key for per-user Gemini override
     } = await req.json();
     const platform = requestPlatform || "instagram";
+
+    // ── Per-user Gemini key override ──
+    // If the user has their own Google AI Studio key saved in profiles.gemini_api_key,
+    // we call Gemini natively (nano banana) and bypass inference.sh entirely.
+    // Resolves userId from body, or from brand.user_id when ai-chat forgot to pass it.
+    let resolvedUserId: string | null = requestUserId || null;
+    if (!resolvedUserId && brandId) {
+      const { data: brandRow } = await supabaseAdmin
+        .from("brands")
+        .select("owner_user_id")
+        .eq("id", brandId)
+        .single();
+      resolvedUserId = (brandRow as any)?.owner_user_id || null;
+    }
+    let userGeminiKey: string | null = null;
+    if (resolvedUserId) {
+      const { data: profileRow } = await supabaseAdmin
+        .from("profiles")
+        .select("gemini_api_key")
+        .eq("user_id", resolvedUserId)
+        .maybeSingle();
+      userGeminiKey = (profileRow as any)?.gemini_api_key || null;
+      if (userGeminiKey) {
+        console.log(`[generate-slide-images] User ${resolvedUserId} has own Gemini key — will try Google AI direct first`);
+      }
+    }
 
     if (!slide) throw new Error("slide object is required");
 
@@ -327,39 +354,32 @@ Do NOT create a graphic design with large text. Create a PHOTOGRAPHIC SCENE abou
     let base64Image: string | null = null;
 
     if (!isBgOnly || illustrationMode) {
-      // Full design / illustration mode: use inference.sh for premium quality
-      const INFERENCE_SH_KEY = Deno.env.get("INFERENCE_SH_API_KEY");
-      if (INFERENCE_SH_KEY) {
-        const aspectMap: Record<string, string> = {
-          "1080x1080": "1:1",
-          "1200x1200": "1:1",
-          "1080x1350": "4:5",
-          "1080x1920": "9:16",
-        };
-        const isLinkedInPost = platform === "linkedin" && contentFormat === "post";
-        const isLinkedInDoc = platform === "linkedin" && contentFormat === "document";
-        const isStoryFormat = contentFormat === "story";
-        const dimKey = isLinkedInPost ? "1200x1200" : isLinkedInDoc ? "1080x1350" : isStoryFormat ? "1080x1920" : "1080x1080";
-        const aspectRatio = aspectMap[dimKey] || "1:1";
-        const mode = illustrationMode ? "ILLUSTRATION" : "FULL-DESIGN";
-        console.log(`[generate-slide-images] Using inference.sh for ${mode}: platform=${platform}, contentFormat=${contentFormat}, aspect=${aspectRatio}`);
+      // ── Compute aspect ratio + prompt text (shared by Google-direct and inference.sh) ──
+      const aspectMap: Record<string, string> = {
+        "1080x1080": "1:1",
+        "1200x1200": "1:1",
+        "1080x1350": "4:5",
+        "1080x1920": "9:16",
+      };
+      const isLinkedInPost = platform === "linkedin" && contentFormat === "post";
+      const isLinkedInDoc = platform === "linkedin" && contentFormat === "document";
+      const isStoryFormat = contentFormat === "story";
+      const dimKey = isLinkedInPost ? "1200x1200" : isLinkedInDoc ? "1080x1350" : isStoryFormat ? "1080x1920" : "1080x1080";
+      const aspectRatio = aspectMap[dimKey] || "1:1";
+      const dimLabel = isLinkedInPost ? "SQUARE 1:1 (1200x1200px)" : isLinkedInDoc ? "VERTICAL PORTRAIT 4:5 (1080x1350px)" : isStoryFormat ? "VERTICAL PORTRAIT 9:16 (1080x1920px)" : "SQUARE 1:1 (1080x1080px)";
+      const mode = illustrationMode ? "ILLUSTRATION" : "FULL-DESIGN";
 
-        // Build prompt text
-        const dimLabel = isLinkedInPost ? "SQUARE 1:1 (1200x1200px)" : isLinkedInDoc ? "VERTICAL PORTRAIT 4:5 (1080x1350px)" : isStoryFormat ? "VERTICAL PORTRAIT 9:16 (1080x1920px)" : "SQUARE 1:1 (1080x1080px)";
-
-        let promptText: string;
-        if (customPrompt) {
-          // Use pre-built prompt from ai-chat directly — no dimLabel wrapping
-          promptText = customPrompt;
-        } else if (illustrationMode) {
-          // Illustration mode: generate a visual scene about the topic, minimal text
-          const headline = slide.headline || "";
-          const body = slide.body || "";
-          const topic = headline || body || "professional content";
-          const brandColorHint = brandInfo?.palette?.length
-            ? `Use these brand colors as accent tones: ${brandInfo.palette.slice(0, 3).map((c: any) => typeof c === "string" ? c : c.hex).join(", ")}.`
-            : "";
-          promptText = `FORMATO OBRIGATÓRIO: ${dimLabel}.
+      let promptText: string;
+      if (customPrompt) {
+        promptText = customPrompt;
+      } else if (illustrationMode) {
+        const headline = slide.headline || "";
+        const body = slide.body || "";
+        const topic = headline || body || "professional content";
+        const brandColorHint = brandInfo?.palette?.length
+          ? `Use these brand colors as accent tones: ${brandInfo.palette.slice(0, 3).map((c: any) => typeof c === "string" ? c : c.hex).join(", ")}.`
+          : "";
+        promptText = `FORMATO OBRIGATÓRIO: ${dimLabel}.
 
 Crie uma ILUSTRAÇÃO FOTORREALISTA sobre o seguinte tema: "${topic}"
 
@@ -371,21 +391,36 @@ REGRAS:
 - NÃO faça um design gráfico com texto grande. Faça uma IMAGEM com cena real.
 ${brandColorHint}
 - A imagem deve parecer uma fotografia profissional ou ilustração de alta qualidade sobre "${topic}".`;
-        } else {
-          // Full design mode: complete image with text baked in
-          const basePromptText = contentParts
-            .filter((p: any) => p.type === "text")
-            .map((p: any) => p.text)
-            .join("\n");
-          promptText = `FORMATO OBRIGATÓRIO: ${dimLabel}. A imagem DEVE ser gerada neste formato exato.\n\n${basePromptText}`;
-        }
+      } else {
+        const basePromptText = contentParts
+          .filter((p: any) => p.type === "text")
+          .map((p: any) => p.text)
+          .join("\n");
+        promptText = `FORMATO OBRIGATÓRIO: ${dimLabel}. A imagem DEVE ser gerada neste formato exato.\n\n${basePromptText}`;
+      }
 
-        // Collect reference image URLs
-        const refImages = contentParts
-          .filter((p: any) => p.type === "image_url")
-          .map((p: any) => p.image_url?.url)
-          .filter(Boolean)
-          .slice(0, 6);
+      const refImages = contentParts
+        .filter((p: any) => p.type === "image_url")
+        .map((p: any) => p.image_url?.url)
+        .filter(Boolean)
+        .slice(0, 6);
+
+      // ── Tier 1: per-user Gemini key (Google AI direct / nano banana) ──
+      // Skips inference.sh entirely. Used by paying clients with their own Google Cloud quota.
+      if (userGeminiKey) {
+        console.log(`[generate-slide-images] Trying Google AI direct (${mode}, aspect=${aspectRatio}, refs=${refImages.length})`);
+        base64Image = await tryGoogleAIDirect(userGeminiKey, promptText, refImages, aspectRatio);
+        if (base64Image) {
+          console.log(`[generate-slide-images] Google AI direct succeeded for user ${resolvedUserId}`);
+        } else {
+          console.warn(`[generate-slide-images] Google AI direct returned no image — falling back to inference.sh`);
+        }
+      }
+
+      // ── Tier 2: inference.sh (shared credit pool) ──
+      const INFERENCE_SH_KEY = !base64Image && Deno.env.get("INFERENCE_SH_API_KEY");
+      if (INFERENCE_SH_KEY) {
+        console.log(`[generate-slide-images] Using inference.sh for ${mode}: platform=${platform}, contentFormat=${contentFormat}, aspect=${aspectRatio}`);
 
         // Try inference.sh with 1 retry (it often returns empty on first try)
         for (let infAttempt = 0; infAttempt < 2 && !base64Image; infAttempt++) {
@@ -530,6 +565,69 @@ ${brandColorHint}
     });
   }
 });
+
+// ══════ GOOGLE AI DIRECT (nano banana via user's own API key) ══════
+// Calls gemini-2.5-flash-image natively. Used when the user has saved a personal
+// Google AI Studio key in profiles.gemini_api_key — bypasses inference.sh entirely.
+
+async function tryGoogleAIDirect(
+  userKey: string,
+  promptText: string,
+  refImageUrls: string[],
+  aspectRatio: string,
+): Promise<string | null> {
+  try {
+    const parts: any[] = [];
+    // Reference images first — Gemini handles vision better when images precede the instruction
+    for (const url of refImageUrls.slice(0, 4)) {
+      try {
+        const r = await fetch(url);
+        if (!r.ok) continue;
+        const bytes = new Uint8Array(await r.arrayBuffer());
+        const mimeType = r.headers.get("content-type") || "image/jpeg";
+        let binary = "";
+        for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+        parts.push({ inlineData: { mimeType, data: btoa(binary) } });
+      } catch {
+        // skip broken refs
+      }
+    }
+    parts.push({ text: `${promptText}\n\nASPECT RATIO: ${aspectRatio}.` });
+
+    const body = {
+      contents: [{ parts }],
+      generationConfig: { responseModalities: ["IMAGE"] },
+    };
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${userKey}`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.warn(`[google-ai-direct] error ${res.status}: ${errText.substring(0, 200)}`);
+      return null;
+    }
+
+    const data = await res.json();
+    const imagePart = data?.candidates?.[0]?.content?.parts?.find(
+      (p: any) => p?.inlineData?.data,
+    );
+    if (!imagePart?.inlineData?.data) {
+      const preview = JSON.stringify(data).substring(0, 300);
+      console.warn(`[google-ai-direct] no image in response: ${preview}`);
+      return null;
+    }
+    const mimeType = imagePart.inlineData.mimeType || "image/png";
+    return `data:${mimeType};base64,${imagePart.inlineData.data}`;
+  } catch (err: any) {
+    console.warn(`[google-ai-direct] exception: ${err?.message || err}`);
+    return null;
+  }
+}
 
 // ══════ GENERATE IMAGE (fallback — skips inference.sh, goes straight to Lovable/Google) ══════
 
