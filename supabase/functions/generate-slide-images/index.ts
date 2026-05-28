@@ -407,19 +407,7 @@ ${brandColorHint}
         .filter(Boolean)
         .slice(0, 6);
 
-      // ── Tier 1: per-user Gemini key (Google AI direct / nano banana) ──
-      // Skips inference.sh entirely. Used by paying clients with their own Google Cloud quota.
-      if (userGeminiKey) {
-        console.log(`[generate-slide-images] Trying Google AI direct (${mode}, aspect=${aspectRatio}, refs=${refImages.length})`);
-        base64Image = await tryGoogleAIDirect(userGeminiKey, promptText, refImages, aspectRatio);
-        if (base64Image) {
-          console.log(`[generate-slide-images] Google AI direct succeeded for user ${resolvedUserId}`);
-        } else {
-          console.warn(`[generate-slide-images] Google AI direct returned no image — falling back to inference.sh`);
-        }
-      }
-
-      // ── Tier 2: inference.sh (shared credit pool) ──
+      // ── Tier 1: inference.sh (shared credit pool) ──
       const INFERENCE_SH_KEY = !base64Image && Deno.env.get("INFERENCE_SH_API_KEY");
       if (INFERENCE_SH_KEY) {
         console.log(`[generate-slide-images] Using inference.sh for ${mode}: platform=${platform}, contentFormat=${contentFormat}, aspect=${aspectRatio}`);
@@ -511,7 +499,18 @@ ${brandColorHint}
           }
         }
         if (!base64Image) {
-          console.warn("[generate-slide-images] inference.sh failed after retries, falling back to Lovable Gateway");
+          console.warn("[generate-slide-images] inference.sh failed after retries, trying per-user Gemini key or Lovable Gateway");
+        }
+      }
+
+      // ── Tier 2: per-user Gemini key (fallback when inference.sh fails) ──
+      if (!base64Image && userGeminiKey) {
+        console.log(`[generate-slide-images] Trying per-user Google AI direct as fallback (${mode}, aspect=${aspectRatio}, refs=${refImages.length})`);
+        base64Image = await tryGoogleAIDirect(userGeminiKey, promptText, refImages, aspectRatio);
+        if (base64Image) {
+          console.log(`[generate-slide-images] Per-user Google AI direct succeeded for user ${resolvedUserId}`);
+        } else {
+          console.warn(`[generate-slide-images] Per-user Google AI direct returned no image — falling back to Lovable Gateway`);
         }
       }
     }
