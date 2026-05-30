@@ -567,9 +567,12 @@ ${brandColorHint}
   }
 });
 
-// ══════ GOOGLE AI DIRECT (nano banana via user's own API key) ══════
-// Calls gemini-2.5-flash-image natively. Used when the user has saved a personal
+// ══════ GOOGLE AI DIRECT (Nano Banana Pro via user's own API key) ══════
+// Calls gemini-3-pro-image natively. Used when the user has saved a personal
 // Google AI Studio key in profiles.gemini_api_key — bypasses inference.sh entirely.
+// Model is Nano Banana Pro (NOT flash): it renders pt-BR text with correct spelling
+// and accents, which inference.sh's gemini-3-1-flash garbles ("HEMORR RIA CARDÍCA").
+// This is the quality path for white-glove clients (Maikon) who supply their own key.
 
 async function tryGoogleAIDirect(
   userKey: string,
@@ -597,10 +600,12 @@ async function tryGoogleAIDirect(
 
     const body = {
       contents: [{ parts }],
-      generationConfig: { responseModalities: ["IMAGE"] },
+      // imageConfig.aspectRatio is the structured way to fix output dimensions on
+      // Gemini 3 image models — more reliable than only stating it in the prompt text.
+      generationConfig: { responseModalities: ["IMAGE"], imageConfig: { aspectRatio } },
     };
 
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent?key=${userKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-image:generateContent?key=${userKey}`;
     const res = await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
