@@ -98,9 +98,9 @@ function ActionCardPreview({
 
     const isVideoContent = slideData?.media_type === "video" || /\.(mp4|webm|mov)(\?|$)/i.test(displayUrl || "");
     const aspectRatio = `${dims.width} / ${dims.height}`;
-    // Cap preview width per format so 9:16 stories don't render taller than the card itself.
-    // Story (9:16) at full width = ~570px tall on a 320px card — too dominant. Square stays full.
-    const previewMaxWidth = contentType === "story" ? 240 : "100%";
+    // Cap preview width per format so the card stays compact in the chat (it was filling the
+    // whole bubble at 100% → too dominant). The saved content lives in "Meus Conteúdos" anyway.
+    const previewMaxWidth = contentType === "story" ? 240 : 340;
 
     return (
       <div style={{ width: "100%", maxWidth: previewMaxWidth, aspectRatio, overflow: "hidden", marginInline: "auto" }}>
