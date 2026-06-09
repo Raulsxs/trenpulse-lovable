@@ -491,6 +491,157 @@ async function loadBrandFonts(brandSnapshot?: Record<string, any> | null): Promi
   return result;
 }
 
+// ══════════════════════════════════════════════════════════════════
+// TWEET-CARD RENDERER (X/Twitter style cards — replaces Blotato tweet-card)
+// Deterministic template render: text is always crisp (no image-model garble),
+// layout identical slide-to-slide. Profile supplies name/@handle/avatar.
+// ══════════════════════════════════════════════════════════════════
+
+// Official X verified badge — rendered as a data-URI <img> (Satori does NOT
+// render inline <svg> element trees reliably, but DOES render <img src=svg>).
+const VERIFIED_BADGE_SVG =
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="34" height="34">` +
+  `<path fill="#1d9bf0" d="M22.25 12c0-1.43-.88-2.67-2.19-3.34.46-1.39.2-2.9-.81-3.91s-2.52-1.27-3.91-.81c-.66-1.31-1.91-2.19-3.34-2.19s-2.67.88-3.33 2.19c-1.4-.46-2.91-.2-3.92.81s-1.26 2.52-.8 3.91c-1.31.67-2.2 1.91-2.2 3.34s.89 2.67 2.2 3.34c-.46 1.39-.21 2.9.8 3.91s2.52 1.26 3.91.81c.67 1.31 1.91 2.19 3.34 2.19s2.68-.88 3.34-2.19c1.39.45 2.9.2 3.91-.81s1.27-2.52.81-3.91c1.31-.67 2.19-1.91 2.19-3.34zm-11.71 4.2L6.8 12.46l1.41-1.42 2.26 2.26 4.8-5.23 1.47 1.36-6.2 6.77z"/></svg>`;
+const VERIFIED_BADGE_SRC = `data:image/svg+xml;base64,${btoa(VERIFIED_BADGE_SVG)}`;
+
+// Pre-fetch a remote image into a data URI. Satori's internal fetch of remote
+// <img> URLs fails silently in edge runtimes (CORS/redirects/slow host) → blank.
+async function toDataUri(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`image fetch failed: ${res.status}`);
+  const buf = new Uint8Array(await res.arrayBuffer());
+  const mime = res.headers.get("content-type") || "image/jpeg";
+  let bin = "";
+  for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
+  return `data:${mime};base64,${btoa(bin)}`;
+}
+
+// ── Twemoji support (Satori renders zero emoji without loadAdditionalAsset) ──
+const U200D = String.fromCharCode(0x200d); // zero-width joiner
+const UFE0Fg = new RegExp(String.fromCharCode(0xfe0f), "g"); // variation selector-16
+function toCodePoint(unicodeSurrogates: string, sep = "-"): string {
+  const r: string[] = [];
+  let c = 0, p = 0, i = 0;
+  while (i < unicodeSurrogates.length) {
+    c = unicodeSurrogates.charCodeAt(i++);
+    if (p) {
+      r.push((0x10000 + ((p - 0xd800) << 10) + (c - 0xdc00)).toString(16));
+      p = 0;
+    } else if (0xd800 <= c && c <= 0xdbff) {
+      p = c;
+    } else {
+      r.push(c.toString(16));
+    }
+  }
+  return r.join(sep);
+}
+function getIconCode(emoji: string): string {
+  return toCodePoint(emoji.indexOf(U200D) < 0 ? emoji.replace(UFE0Fg, "") : emoji);
+}
+const TWEMOJI_BASE = "https://cdn.jsdelivr.net/gh/jdecked/twemoji@latest/assets/svg/";
+const emojiCache = new Map<string, string>();
+async function loadEmojiSVG(emoji: string): Promise<string> {
+  const code = getIconCode(emoji);
+  if (emojiCache.has(code)) return emojiCache.get(code)!;
+  let dataUri = "";
+  try {
+    const svg = await fetch(`${TWEMOJI_BASE}${code}.svg`).then((r) => (r.ok ? r.text() : ""));
+    if (svg) dataUri = `data:image/svg+xml;base64,${btoa(svg)}`;
+  } catch { /* skip — Satori renders nothing for empty string */ }
+  emojiCache.set(code, dataUri);
+  return dataUri;
+}
+// Passed to ImageResponse so emoji graphemes resolve to Twemoji SVGs.
+const tweetEmojiLoader = async (code: string, segment: string): Promise<string> => {
+  if (code === "emoji") return await loadEmojiSVG(segment);
+  return segment;
+};
+
+async function loadTweetFonts(): Promise<
+  { name: string; data: ArrayBuffer; weight: number; style: "normal" }[]
+> {
+  // Inter is the de-facto legal substitute for X's proprietary Chirp font.
+  const [reg, bold] = await Promise.all([
+    loadFontData(FONT_CDN_MAP["Inter"].regular),
+    loadFontData(FONT_CDN_MAP["Inter"].bold),
+  ]);
+  return [
+    { name: "Inter", data: reg, weight: 400, style: "normal" },
+    { name: "Inter", data: bold, weight: 700, style: "normal" },
+  ];
+}
+
+// Char-count heuristic (Satori has no render-time text measurement) — short
+// tweets get the big "single tweet" type; long ones shrink to fit.
+function tweetFontSize(text: string): number {
+  const n = (text || "").length;
+  if (n <= 70) return 64;
+  if (n <= 140) return 54;
+  if (n <= 220) return 48;
+  if (n <= 280) return 42;
+  return 38;
+}
+
+type TweetProfile = { name?: string; handle?: string; avatar_url?: string; verified?: boolean };
+
+function buildTweetCardElement(
+  text: string,
+  profile: TweetProfile,
+  idx: number,
+  total: number,
+  avatarDataUri: string | null,
+  w: number,
+  h: number,
+) {
+  const name = (profile.name || "Seu Nome").trim();
+  const handle = (profile.handle || "voce").replace(/^@+/, "").trim();
+  const verified = profile.verified !== false; // default true (matches Blotato)
+  const fontSize = tweetFontSize(text);
+
+  const avatarEl = avatarDataUri
+    ? React.createElement("img", {
+        src: avatarDataUri, width: 112, height: 112,
+        style: { width: 112, height: 112, borderRadius: 56, objectFit: "cover" as any, flexShrink: 0 },
+      })
+    : React.createElement("div", {
+        style: {
+          width: 112, height: 112, borderRadius: 56, flexShrink: 0, backgroundColor: "#1d4e89",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          color: "#fff", fontSize: 44, fontWeight: 700,
+        },
+      }, (name[0] || "?").toUpperCase());
+
+  const nameRow = React.createElement(
+    "div",
+    { style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "nowrap" } },
+    React.createElement("div", { style: { fontSize: 42, fontWeight: 700, color: "#0f1419", display: "flex" } }, name),
+    verified ? React.createElement("img", { src: VERIFIED_BADGE_SRC, width: 34, height: 34, style: { flexShrink: 0 } }) : null,
+  );
+  const handleEl = React.createElement("div", { style: { fontSize: 34, fontWeight: 400, color: "#536471", display: "flex", marginTop: 2 } }, `@${handle}`);
+  const whoCol = React.createElement("div", { style: { display: "flex", flexDirection: "column" } }, nameRow, handleEl);
+  const header = React.createElement("div", { style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 24, flexWrap: "nowrap" } }, avatarEl, whoCol);
+
+  const body = React.createElement("div", {
+    style: {
+      display: "flex", marginTop: 40, fontSize, fontWeight: 400, color: "#0f1419",
+      lineHeight: 1.42, whiteSpace: "pre-wrap" as any, wordBreak: "break-word" as any, flexGrow: 1,
+    },
+  }, text);
+
+  const children: any[] = [header, body];
+  if (total > 1) {
+    children.push(
+      React.createElement("div", { style: { display: "flex", flexDirection: "row", marginTop: 24, fontSize: 30, color: "#536471" } }, `${idx + 1}/${total}`),
+    );
+  }
+
+  return React.createElement(
+    "div",
+    { style: { display: "flex", flexDirection: "column", width: w, height: h, backgroundColor: "#ffffff", padding: 72, fontFamily: "Inter" } },
+    ...children,
+  );
+}
+
 // ── Handler ─────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -498,11 +649,13 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { slides, brand_snapshot, content_id, dimensions, slide_offset, platform, content_type, visual_style } = await req.json();
+    const { slides, brand_snapshot, content_id, dimensions, slide_offset, platform, content_type, visual_style, tweet_profile } = await req.json();
+    const isTweetCard = visual_style === "tweet_card";
     const maxW = visual_style === "photo_overlay" ? 1440 : 1200;
     const maxH = visual_style === "photo_overlay" ? 2160 : 1920;
-    const w = Math.min(Math.max(Number(dimensions?.width) || 1080, 720), maxW);
-    const h = Math.min(Math.max(Number(dimensions?.height) || 1080, 627), maxH);
+    // Tweet cards are fixed 1080×1350 (4:5) — best IG carousel real estate.
+    const w = isTweetCard ? 1080 : Math.min(Math.max(Number(dimensions?.width) || 1080, 720), maxW);
+    const h = isTweetCard ? 1350 : Math.min(Math.max(Number(dimensions?.height) || 1080, 627), maxH);
     const isLinkedInDocument = platform === "linkedin" && content_type === "document";
     const isPhotoOverlay = visual_style === "photo_overlay";
     const offset = Number(slide_offset) || 0;
@@ -522,19 +675,40 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const fonts = await loadBrandFonts(brand_snapshot);
+    const fonts = isTweetCard ? await loadTweetFonts() : await loadBrandFonts(brand_snapshot);
+
+    // Tweet cards: pre-fetch the avatar ONCE (reused on every slide; remote <img>
+    // in Satori is flaky). Falls back to an initials circle if the fetch fails.
+    let avatarDataUri: string | null = null;
+    if (isTweetCard && tweet_profile?.avatar_url) {
+      try {
+        avatarDataUri = await toDataUri(tweet_profile.avatar_url);
+      } catch (e) {
+        console.warn(`[render-slide-image] avatar fetch failed, using initials: ${(e as Error).message}`);
+      }
+    }
+    const totalSlides = slides.length;
+
     const compositeUrls: string[] = [];
 
     for (let i = 0; i < slides.length; i++) {
       const slide = slides[i];
-      const bgSrc =
-        slide.background_image_url || slide.image_url || slide.previewImage;
 
-      const element = buildSlideElement(slide, w, h, bgSrc, brand_snapshot, isLinkedInDocument, isPhotoOverlay);
+      let element;
+      if (isTweetCard) {
+        const tweetText = slide.text || slide.body || slide.headline || "";
+        element = buildTweetCardElement(tweetText, tweet_profile || {}, offset + i, totalSlides, avatarDataUri, w, h);
+      } else {
+        const bgSrc = slide.background_image_url || slide.image_url || slide.previewImage;
+        element = buildSlideElement(slide, w, h, bgSrc, brand_snapshot, isLinkedInDocument, isPhotoOverlay);
+      }
+
       const imageResponse = new ImageResponse(element, {
         width: w,
         height: h,
         fonts: fonts as any,
+        // Twemoji resolver so emoji in tweets render (Satori shows none by default).
+        ...(isTweetCard ? { loadAdditionalAsset: tweetEmojiLoader } : {}),
       });
 
       const pngBuffer = new Uint8Array(await imageResponse.arrayBuffer());

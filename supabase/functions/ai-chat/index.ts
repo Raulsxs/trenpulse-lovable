@@ -151,6 +151,7 @@ const INTENTS = [
   "GENERATE_TEMPLATE",
   "GENERATE",
   "GENERATE_CAROUSEL",
+  "GENERATE_TWEET_CARD",
   "EDIT_CONTENT",
   "CRIAR_MARCA",
   "CRIAR_MARCA_ANALYZE",
@@ -495,6 +496,13 @@ Mensagem: "${message}"`;
     // LINK_PARA_POST is treated as GENERATE (with URL extraction)
     if (detectedIntent === "LINK_PARA_POST") {
       detectedIntent = "GENERATE";
+    }
+
+    // Tweet-card carousel — deterministic override. The AI classifier lumps "tweet card"
+    // into GENERATE_TEMPLATE, which routed to the now-cancelled Blotato. Route it to our
+    // own Satori renderer instead. Runs BEFORE the Blotato template detection below.
+    if (/tweet\s*-?\s*cards?|carross[eé]is?\s+de\s+tweets?|cards?\s+de\s+tweets?|estilo\s+(tweet|twitter|x)\b|thread\s+(de|em)\s+tweets?/i.test(message)) {
+      detectedIntent = "GENERATE_TWEET_CARD";
     }
 
     // Template detection AFTER all conversions — if message matches a Blotato template, upgrade
@@ -1733,6 +1741,144 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
         } : null;
 
         console.log("[ai-chat] GENERATE_CAROUSEL: done, contentId=", savedContentId, "images=", generatedCount);
+        break;
+      }
+
+      // ════════════════════════════════════════════════════════════════════════
+      // GENERATE_TWEET_CARD — X/Twitter "tweet card" carousel via Satori template.
+      // Source (typed text or link) → LLM writes a thread → render-slide-image draws
+      // each tweet as a card using the profile's name/@handle/avatar. Replaces Blotato.
+      // ════════════════════════════════════════════════════════════════════════
+      case "GENERATE_TWEET_CARD": {
+        console.log("[ai-chat] GENERATE_TWEET_CARD handler started");
+
+        // 1. Source content — typed text and/or a link (Phase 2: PDF/files)
+        const urlMatch = message.match(/https?:\/\/[^\s]+/);
+        let sourceContent = message;
+        if (urlMatch) {
+          const article = await extractArticleContent(urlMatch[0], "GENERATE_TWEET_CARD");
+          if (article) sourceContent = `Baseado neste conteúdo:\n${article.substring(0, 3000)}`;
+        }
+
+        // 2. Profile identity for the card (name / @handle / avatar)
+        const { data: prof } = await svc.from("profiles")
+          .select("full_name, instagram_handle, avatar_url")
+          .eq("user_id", userId).maybeSingle();
+        const tweetProfile = {
+          name: (prof?.full_name as string) || "Você",
+          handle: ((prof?.instagram_handle as string) || "voce").replace(/^@+/, ""),
+          avatar_url: (prof?.avatar_url as string) || null,
+          verified: true,
+        };
+
+        // 3. LLM writes the thread as a JSON array of tweet strings
+        const tweetPrompt = `Você é um ghostwriter de threads virais no X (Twitter), em português brasileiro.
+A partir do conteúdo abaixo, escreva uma THREAD de 4 a 7 tweets curtos — cada um vira um card independente de carrossel.
+
+CONTEÚDO: ${sourceContent}
+${userCtx?.brand_voice ? `TOM DE VOZ: ${userCtx.brand_voice}` : ""}
+${userCtx?.business_niche ? `NICHO DO AUTOR: ${userCtx.business_niche}` : ""}
+
+REGRAS:
+- Cada tweet: NO MÁXIMO 280 caracteres, linguagem natural de X (direto, com gancho).
+- O 1º tweet é o GANCHO que para o scroll.
+- Use listas com "1 -", "2 -" quando fizer sentido (estilo thread).
+- No máximo 1 emoji por tweet, com moderação. SEM hashtags.
+- Cada tweet se sustenta sozinho como um slide.
+- Português do Brasil, acentos corretos.
+
+Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
+
+        let tweets: string[] = [];
+        try {
+          const r = await aiGatewayFetch({
+            model: "openrouter/minimax-m-25",
+            messages: [{ role: "user", content: tweetPrompt }],
+          });
+          if (r.ok) {
+            const d = await r.json();
+            const raw = d.choices?.[0]?.message?.content || "";
+            const m = raw.match(/\[[\s\S]*\]/);
+            if (m) {
+              tweets = JSON.parse(m[0])
+                .filter((t: any) => typeof t === "string" && t.trim())
+                .map((t: string) => t.trim());
+            }
+          }
+        } catch (e: any) {
+          console.error("[ai-chat] GENERATE_TWEET_CARD: thread generation failed:", e?.message);
+        }
+        tweets = tweets.slice(0, 10); // Instagram carousel cap
+        if (tweets.length === 0) {
+          replyOverride = "Não consegui montar a thread do tweet card. Tenta de novo com um tema ou um link.";
+          break;
+        }
+
+        // 4. Render each tweet as a card (Satori, visual_style=tweet_card)
+        let cardUrls: string[] = [];
+        try {
+          const draftId = crypto.randomUUID();
+          const renderResp = await fetch(`${supabaseUrl}/functions/v1/render-slide-image`, {
+            method: "POST",
+            headers: internalHeaders,
+            body: JSON.stringify({
+              slides: tweets.map((t) => ({ text: t })),
+              content_id: draftId,
+              visual_style: "tweet_card",
+              tweet_profile: tweetProfile,
+            }),
+          });
+          if (renderResp.ok) {
+            const rd = await renderResp.json();
+            cardUrls = rd.composite_urls || [];
+          } else {
+            const errText = await renderResp.text().catch(() => "");
+            console.error("[ai-chat] GENERATE_TWEET_CARD: render failed:", renderResp.status, errText.substring(0, 200));
+          }
+        } catch (e: any) {
+          console.error("[ai-chat] GENERATE_TWEET_CARD: render error:", e?.message);
+        }
+        if (cardUrls.length === 0) {
+          replyOverride = "Montei a thread, mas os cards não renderizaram. Tenta de novo.";
+          break;
+        }
+
+        // 5. Persist as a carousel (caption = full thread)
+        const caption = tweets.join("\n\n");
+        const tweetTitle = tweets[0].length > 80 ? tweets[0].substring(0, 80) + "…" : tweets[0];
+        const updatedTweetSlides = tweets.map((t, i) => ({
+          role: i === 0 ? "cover" : "content",
+          text: t,
+          headline: t,
+          image_url: cardUrls[i] || null,
+          background_image_url: cardUrls[i] || null,
+          render_mode: "tweet_card",
+        }));
+
+        const savedContentId = await persistGeneratedContent({
+          generatedContent: { title: tweetTitle, caption, hashtags: [], slides: updatedTweetSlides },
+          fallbackTitle: tweetTitle,
+          contentType: "carousel",
+          brandId: requestBrandId || null,
+          brandSnapshot: null,
+          platform,
+          visualMode: "tweet_card",
+          generationMetadata: { tweet_card: true },
+        });
+
+        if (savedContentId && cardUrls.length > 0) {
+          await svc.from("generated_contents").update({ image_urls: cardUrls }).eq("id", savedContentId);
+        }
+
+        replyOverride = `Carrossel de tweet card com ${cardUrls.length} cards gerado! Confira abaixo.`;
+        actionResult = savedContentId ? {
+          content_id: savedContentId,
+          content_type: "carousel",
+          platform,
+          preview_image_url: cardUrls[0] || null,
+        } : null;
+
+        console.log("[ai-chat] GENERATE_TWEET_CARD: done, contentId=", savedContentId, "cards=", cardUrls.length);
         break;
       }
 
