@@ -704,7 +704,9 @@ async function generateImage(contentParts: any[]): Promise<string | null> {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-2.0-flash-exp",
+          // gemini-2.0-flash-exp foi removido do gateway (400 invalid model em 2026-06-09);
+          // gemini-2.5-flash-image é o modelo de imagem da lista permitida atual.
+          model: "google/gemini-2.5-flash-image",
           messages: [{ role: "user", content: messageContent }],
           modalities: ["image", "text"],
         }),
