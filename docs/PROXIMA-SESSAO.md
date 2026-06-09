@@ -16,7 +16,7 @@
 ---
 
 ## SPRINT 0 — Poda risco-zero ✅ FEITO (2026-06-09, commits a348880 + d8ba969)
-- [x] Remover `import-auth-users` (edge fn, zero refs no repo). ⚠️ Falta o delete REMOTO (classifier bloqueia agente): `npx supabase functions delete import-auth-users --project-ref qdmhqxpazffmaxleyzxs`
+- [x] Remover `import-auth-users` (edge fn, zero refs no repo) — repo E remoto (deletada do Supabase em 2026-06-09).
 - [x] Remover imports/rotas self_serve mortos em `App.tsx`. Código preservado em `backup/self-serve`.
 - [x] Remover `DemoScenes` da landing (579 linhas).
 
