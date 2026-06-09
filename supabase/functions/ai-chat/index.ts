@@ -144,6 +144,9 @@ PROIBIDO ABSOLUTO — NUNCA renderize a arte como um OBJETO FÍSICO 3D ou foto d
 
 A imagem gerada É o conteúdo final — uma ARTE GRÁFICA CHAPADA (flat design), 2D, vista totalmente de frente. Ela DEVE preencher 100% do quadro (full-bleed): o fundo/arte sangra até TODAS as bordas, sem nenhuma margem de cor sólida, sem moldura e sem espaço vazio em volta. Não é uma prévia de como ficaria dentro de um app nem a foto de um objeto.`;
 
+// Maikon (e outros) querem mais que texto puro — alguns elementos ilustrativos, com moderação.
+const VISUAL_RICHNESS_RULE = `RECURSO VISUAL (além do texto): inclua ALGUNS elementos ilustrativos relevantes ao tema — ícones, uma ilustração central simples (ex.: órgão, objeto ou símbolo do assunto) ou formas que comuniquem a ideia visualmente. Com MODERAÇÃO: o objetivo é NÃO ser só texto, mas sem poluir nem virar uma cena complexa demais. O texto continua legível e protagonista; a ilustração apoia a mensagem.`;
+
 const INTENTS = [
   "GENERATE_TEMPLATE",
   "GENERATE",
@@ -1152,6 +1155,7 @@ REGRAS:
 ${hasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas (mas TRADUZA qualquer texto delas para pt-BR).\n" : ""}- NÃO inclua URLs, QR codes ou logotipos de terceiros.
 - Gere APENAS o design final — sem bordas externas, sem frames.
 ${storySpecificRules}
+${VISUAL_RICHNESS_RULE}
 ${NO_UI_MOCKUP_RULE}
 
 ${SAFE_AREA_RULES}`;
@@ -1574,6 +1578,7 @@ ${carouselHasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composiçã
 ${i === 0 ? "- Este é o COVER: título grande, impactante" : ""}
 ${slide.role === "cta" ? "- Este é o ÚLTIMO slide: chamada para ação clara" : ""}
 
+${VISUAL_RICHNESS_RULE}
 ${NO_UI_MOCKUP_RULE}
 
 ${SAFE_AREA_RULES}

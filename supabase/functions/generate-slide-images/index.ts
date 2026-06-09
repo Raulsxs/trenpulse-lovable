@@ -360,8 +360,8 @@ Do NOT create a graphic design with large text. Create a PHOTOGRAPHIC SCENE abou
     contentParts.push({ type: "text", text: prompt });
 
     // ══════ GENERATE IMAGE ══════
-    // ai_full_design uses inference.sh (Gemini 3.1 Flash) for premium quality
-    // ai_background uses Lovable Gateway (cheaper) for background-only
+    // ai_full_design uses inference.sh — hybrid: gpt-image-2 (medium) for 1:1/4:5,
+    // Nano Banana Pro (gemini-3-pro-image) for 9:16 stories. Background uses Lovable Gateway.
     let base64Image: string | null = null;
 
     if (!isBgOnly || illustrationMode) {
@@ -428,16 +428,34 @@ ${brandColorHint}
               console.log(`[generate-slide-images] inference.sh retry ${infAttempt}...`);
               await new Promise(r => setTimeout(r, 2000));
             }
-            const infBody = {
-              app: "google/gemini-3-1-flash-image-preview@7f5j281b",
-              wait: true,
-              input: {
-                prompt: promptText,
-                aspect_ratio: aspectRatio,
-                num_images: 1,
-                ...(refImages.length > 0 ? { images: refImages } : {}),
-              },
-            };
+            // Hybrid model routing (custo × aspect ratio):
+            // - 9:16 (story) precisa de vertical nativo → Nano Banana Pro (gemini-3-pro-image).
+            // - 1:1 / 4:5 → gpt-image-2 @ medium: mesma fidelidade de texto pt-BR por ~6x menos
+            //   ($0.024 vs $0.15), mas só gera 1024² / 1024×1536 (sem 9:16 verdadeiro).
+            const useNanoBananaPro = aspectRatio === "9:16";
+            const infBody = useNanoBananaPro
+              ? {
+                  app: "google/gemini-3-pro-image-preview",
+                  wait: true,
+                  input: {
+                    prompt: promptText,
+                    aspect_ratio: aspectRatio,
+                    num_images: 1,
+                    ...(refImages.length > 0 ? { images: refImages } : {}),
+                  },
+                }
+              : {
+                  app: "openai/gpt-image-2",
+                  wait: true,
+                  input: {
+                    prompt: promptText,
+                    quality: "medium",
+                    n: 1,
+                    width: 1024,
+                    height: aspectRatio === "4:5" ? 1536 : 1024,
+                    ...(refImages.length > 0 ? { images: refImages } : {}),
+                  },
+                };
             console.log(`[generate-slide-images] inference.sh request: app=${infBody.app}, aspect=${aspectRatio}, refs=${refImages.length}, promptLen=${promptText.length}, bodySize=${JSON.stringify(infBody).length}`);
             const infRes = await fetch("https://api.inference.sh/run", {
               method: "POST",
@@ -557,7 +575,7 @@ ${brandColorHint}
         templateSetId, templateSetName, categoryId: resolvedCategoryId,
         referencesUsedCount: referenceImageUrls.length, referenceExampleIds,
         fallbackLevel: fallbackLabels[fallbackLevel],
-        image_model: isBgOnly ? "lovable-gateway/gemini-3-pro" : "inference-sh/gemini-3.1-flash",
+        image_model: isBgOnly ? "lovable-gateway/gemini-3-pro" : "inference-sh/hybrid(gpt-image-2|nanobanana-pro)",
         image_generation_ms: Date.now() - t0,
         generated_at: new Date().toISOString(),
         backgroundOnly: isBgOnly,
