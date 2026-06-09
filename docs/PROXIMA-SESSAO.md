@@ -15,10 +15,12 @@
 
 ---
 
-## SPRINT 0 — Poda risco-zero (rápido, sem decisão)
-- [ ] Remover `import-auth-users` (edge fn, zero refs no repo).
-- [ ] Remover imports/rotas self_serve mortos em `App.tsx` (linhas ~37-42 imports + ~60-78 bloco; `SelfServeLayout` linha 9). Código preservado em `backup/self-serve`.
-- [ ] Remover `DemoScenes` da landing (`src/components/landing/DemoScenes.tsx`, 579 linhas, redundante + pesado).
+## SPRINT 0 — Poda risco-zero ✅ FEITO (2026-06-09, commits a348880 + d8ba969)
+- [x] Remover `import-auth-users` (edge fn, zero refs no repo). ⚠️ Falta o delete REMOTO (classifier bloqueia agente): `npx supabase functions delete import-auth-users --project-ref qdmhqxpazffmaxleyzxs`
+- [x] Remover imports/rotas self_serve mortos em `App.tsx`. Código preservado em `backup/self-serve`.
+- [x] Remover `DemoScenes` da landing (579 linhas).
+
+**Novo insumo:** `docs/analise-telas-2026-06.md` — veredito tela a tela (spec × expectativa × realidade) das 22 rotas. Achados além da auditoria: Calendar está PRONTO (não só backend — drag-drop/reagendar/publicar funcionam); ContentPreview duplica o editor do ActionCard (convergir pós-Sprint 3); 3 fluxos de criação de marca (consolidar); BrandExamples/BrandPhotoBackgrounds moram em components/studio/ mas servem o BrandEdit do Maikon — MOVER antes de apagar Studio; /pricing aponta pra Asaas SANDBOX (cliente real cai em fluxo fantasma).
 
 ## SPRINT 1 — Consertar o onboarding (maior impacto na ativação)
 *Bug: `Onboarding.tsx` Step 2 chama `generate-content` síncrono, sem timeout/streaming, e um mockup CSS já mostrou o post antes → 2min de espera inútil.*
