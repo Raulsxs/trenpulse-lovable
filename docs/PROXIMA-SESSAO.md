@@ -29,23 +29,30 @@
 - [ ] QA manual pendente: criar conta nova → ver chips → cair no chat com prompt preenchido.
 
 ## SPRINT 2 — Ligar o billing (a torneira de receita)
-- [ ] Plugar `chargeCredits` nos paths que não cobram: `GENERATE_TEMPLATE` + `EDIT_CONTENT` no `ai-chat`.
+- [ ] Plugar `chargeCredits` nos paths que não cobram: `GENERATE_TEMPLATE` + `EDIT_CONTENT` no `ai-chat`. (EDIT_CONTENT é o mais grave: "Refazer/Ajustar" regenera imagem — custo real $0.024-0.15 — de graça e em loop.)
 - [ ] Adicionar **pre-check de saldo** nos cases de geração (gated por `CREDITS_ENFORCED`, default off).
-- [ ] **Backfill** de créditos pros usuários existentes (9 perfis, só 1 com créditos hoje).
-- [ ] Reescrever **landing/pricing pra créditos**: `PricingSection.tsx` (landing) + `Pricing.tsx`/`PricingCards.tsx` (app) ainda vendem assinatura mensal — billing é crédito. **Pré-requisito de qualquer copy.**
+- [ ] **Backfill** de créditos pros usuários existentes (9 perfis, só 1 com créditos hoje). ⚠️ Não duplicar o grant de quem já ganhou os 50cr do trigger de boas-vindas — checar `credit_ledger` antes.
+- [ ] Reescrever **landing/pricing pra créditos**: `PricingSection.tsx` (landing) + `Pricing.tsx`/`PricingCards.tsx` (app). 🔴 URGÊNCIA (achado da análise de telas): `/pricing` chama `manage-subscription` apontando pro Asaas **SANDBOX** — cliente real que tentar pagar hoje cai num fluxo fantasma. Mitigação rápida: `/pricing` redirecionar pro modal "Comprar créditos" que já existe na sidebar.
 - [ ] Padronizar "**9 redes**" na landing (hoje diz "Instagram & LinkedIn" em 4 lugares).
+- [ ] Consertar empty state de `/contents`: CTA aponta pro `/dashboard` (Tendências) — deve apontar pro `/chat`.
+- [ ] Remover import morto de `useSubscription` em `Profile.tsx:10`.
 - [ ] Trocar `ASAAS_PROD_KEY` pela key permanente do Raul.
 - [ ] Ligar `CREDITS_ENFORCED=true` **só no lançamento** (decisão do Raul).
 
 ## SPRINT 3 — Poda pesada (confirm-then-cut, depende das 3 decisões)
+*Ordem importa — pré-requisitos primeiro (achados da análise de telas, `analise-telas-2026-06.md`):*
+- [ ] **PRÉ 1:** mover `BrandExamples` + `BrandPhotoBackgrounds` de `components/studio/` → `components/brand/` (servem o **BrandEdit do Maikon** — sem isso a poda do Studio quebra a tela mais crítica).
+- [ ] **PRÉ 2:** desacoplar `BrandWizard` do pipeline Studio: step 4 chama `generate-template-sets` — simplificar (terminar no `analyze-brand-examples`). É o único fio segurando o pipeline vivo.
+- [ ] **PRÉ 3 (smoke test Maikon):** após cada corte, gerar 1 post com a marca `photo_backgrounds` antes de pushar.
+- [ ] Pipeline Studio órfão (6 edge fns: create-visual-brief, build-image-prompts, generate-image-variations, rank-and-select, generate-slide-backgrounds, analyze-image-layout) + páginas `Studio*`/`ManualStudioEditor` + rotas `/studio/*` (fora da sidebar, zero links de entrada).
 - [ ] Billing assinatura legado: `manage-subscription` (sandbox), `check-usage`, `useSubscription`, `Pricing.tsx`, `Paywall`.
-- [ ] Pipeline Studio órfão + páginas `Studio*`/`ManualStudioEditor` (⚠️ confirmar acoplamento com `BrandWizard`/`generate-template-sets` antes).
-- [ ] OAuth IG/LinkedIn direto (6 edge fns + `Instagram/LinkedInConnectionCard`) — PFM substituiu.
-- [ ] Páginas self_serve restantes (`Discover`, `TemplateGenerator`, `Library`, `SelfServePlaceholder`).
-- [ ] Blotato (se decisão = sair): re-rotear `GENERATE_TEMPLATE`, remover `blotato-proxy`/`render-template`.
+- [ ] OAuth IG/LinkedIn direto (6 edge fns + `Instagram/LinkedInConnectionCard` + rotas `/auth/*/callback` + `/instagram/history` — órfã, zero links de entrada).
+- [ ] Páginas self_serve restantes (`Discover`, `TemplateGenerator`, `Library`, `SelfServePlaceholder`) **+ os testes delas**: ⚠️ 39 dos 67 testes da suíte cobrem essas páginas mortas (discover/library/template-*.test) — vão junto, e a suíte real encolhe pra ~28.
+- [ ] Consolidar criação de marca: 3 fluxos hoje (BrandWizard `/brands/new` = default, BrandNew `/brands/new/simple`, chat CRIAR_MARCA) → manter wizard simplificado + chat; aposentar `/simple`.
+- [ ] Blotato (se decisão = sair): re-rotear `GENERATE_TEMPLATE`, remover `blotato-proxy`/`render-template` engine=blotato, **cancelar assinatura $29/mês**.
 
 ## SPRINT 4 — Melhorar (já existe, subutilizado)
-- [ ] **Calendário vira herói:** UX + copy "agende o mês e esqueça". Botão "Agendar" no `ActionCard`. Nudge "você tem 3 posts prontos — agenda a semana?".
+- [ ] **Calendário vira herói:** a análise de telas confirmou que a TELA está pronta (drag-drop semana/mês, backlog, reagendar, publicar via PFM) — falta só exposição: subir na sidebar, botão "Agendar" no `ActionCard`, copy "agende o mês e esqueça", nudge "você tem 3 posts prontos — agenda a semana?".
 - [ ] **Ensinabilidade:** reativar `FeatureGuide` (código pronto, nunca importado); baixar threshold do `SmartNudge` connect-social pra `>=1`; promover carrossel/tweet card pras quick actions visíveis; quick actions com exemplo concreto do nicho.
 - [ ] **Renderização progressiva do carrossel** (mostra slide a slide — pendente do roadmap; melhora o 122s percebido).
 
@@ -60,6 +67,8 @@
 - [ ] Editorial: temas/paleta da marca no overlay (hoje highlight fixo `#19E5C5`); avatar do perfil na moldura.
 - [ ] Esconder Analytics até ter dado real (Apify).
 - [ ] Trocar og:image do Lovable no `index.html`; desligar Lovable + remover TXT `_lovable` no GoDaddy.
+- [ ] Convergir os 2 editores (ActionCard do chat × ContentPreview `/content/:id`) — pós-Sprint 3, refactor maior.
+- [ ] QA manual do onboarding novo (conta nova → chips → chat com prompt preenchido).
 
 ## Estado atual (o que JÁ está pronto e no ar — não refazer)
 Billing por créditos completo (schema + Asaas PIX + dedução + UI), geração livre (`FREE_IMAGE`), crédito de boas-vindas, **carrossel editorial cinematográfico** (`GENERATE_EDITORIAL_CAROUSEL`, Satori), tweet card, fixes de chat (/impeccable), migração pra Vercel, white-glove consolidado.
