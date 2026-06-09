@@ -1439,6 +1439,7 @@ Responda APENAS em JSON:
       // ════════════════════════════════════════════════════════════════════════
       case "GENERATE_CAROUSEL": {
         console.log("[ai-chat] GENERATE_CAROUSEL handler started");
+        const tCarouselStart = Date.now();
 
         // 1. Detect platform and format
         const platform = requestPlatform || detectPlatform(message);
@@ -1585,13 +1586,16 @@ Responda em JSON:
           ];
         }
 
+        const tStructureDone = Date.now();
+        console.log(`[ai-chat] GENERATE_CAROUSEL timing: structure=${tStructureDone - tCarouselStart}ms`);
+
         // 5. Get content dimensions (9:16 for story carousels, otherwise platform default)
         const dims = getContentDimensions(platform, effectiveSlideFormat);
 
         // 6. Generate images for ALL slides IN PARALLEL (avoids 150s idle timeout)
         console.log(`[ai-chat] GENERATE_CAROUSEL: generating ${slides.length} slides in parallel`);
 
-        const slideResults = await Promise.all(
+        const slideResultsPromise = Promise.all(
           slides.map(async (slide: any, i: number) => {
             const carouselHasStyleRefs = referenceImageUrls.length > 0;
             const carouselRefsBlock = carouselHasStyleRefs
@@ -1628,6 +1632,7 @@ ${SAFE_AREA_RULES}
 Responda APENAS com a imagem gerada.`;
 
             let slideImageUrl: string | null = null;
+            const tSlide = Date.now();
             try {
               const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-slide-images`, {
                 method: "POST",
@@ -1649,11 +1654,12 @@ Responda APENAS com a imagem gerada.`;
               if (genResp.ok) {
                 const genData = await genResp.json();
                 slideImageUrl = genData.imageUrl || genData.bgImageUrl || null;
+                console.log(`[ai-chat] GENERATE_CAROUSEL timing: slide ${i + 1}/${slides.length} done in ${Date.now() - tSlide}ms (gen_ms=${genData.debug?.image_generation_ms ?? "?"})`);
               } else {
-                console.error(`[ai-chat] GENERATE_CAROUSEL: slide ${i + 1} generation failed:`, genResp.status);
+                console.error(`[ai-chat] GENERATE_CAROUSEL: slide ${i + 1} generation failed after ${Date.now() - tSlide}ms:`, genResp.status);
               }
             } catch (slideErr: any) {
-              console.error(`[ai-chat] GENERATE_CAROUSEL: slide ${i + 1} error:`, slideErr?.message);
+              console.error(`[ai-chat] GENERATE_CAROUSEL: slide ${i + 1} error after ${Date.now() - tSlide}ms:`, slideErr?.message);
             }
 
             return {
@@ -1669,65 +1675,76 @@ Responda APENAS com a imagem gerada.`;
           })
         );
 
+        // 7. Generate caption IN PARALLEL with the slide images — it only depends on
+        // message/userCtx/platform, not on the generated images, so it rides for free
+        // inside the (much longer) image-generation window.
+        const captionPromise = (async (): Promise<{ caption: string; hashtags: string[] }> => {
+          let caption = "";
+          let hashtags: string[] = [];
+          try {
+            const carouselBilingual = secondaryLang && bilingualPlatforms.includes(platform)
+              ? `\nIMPORTANTE: A legenda DEVE ser bilíngue — primeiro em português, depois "---" e a versão em ${secondaryLangName}.`
+              : "";
+            // Story carousels (each slide = a separate IG story) can't have clickable links,
+            // so we don't append a source footer. Feed carousels and LinkedIn documents do.
+            const carouselSourceRule = urlMatch?.[0] && !isStoryCarousel
+              ? `\nFONTE OBRIGATÓRIA: Termine a legenda com uma linha em branco e depois exatamente "🔗 Fonte: ${urlMatch[0]}".`
+              : "";
+            const carouselNoBioRule = `\nPROIBIDO: nunca escreva "link na bio", "link no perfil", "arrasta pra cima", "swipe up", "veja mais nos stories" ou variações.`;
+
+            const captionPrompt = `Gere uma legenda para um carrossel de ${platform === "linkedin" ? "LinkedIn" : "Instagram"} sobre: "${message}"
+${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
+${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}
+Legenda curta e engajante. Inclua 5-8 hashtags relevantes no final.${carouselBilingual}${carouselNoBioRule}${carouselSourceRule}
+Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
+
+            const captionResp = await aiGatewayFetch({
+              model: "openrouter/minimax-m-25",
+              messages: [{ role: "user", content: captionPrompt }],
+            });
+
+            if (captionResp.ok) {
+              const captionData = await captionResp.json();
+              const raw = captionData.choices?.[0]?.message?.content || "";
+              const jsonMatch = raw.match(/\{[\s\S]*\}/);
+              if (jsonMatch) {
+                try {
+                  const parsed = JSON.parse(jsonMatch[0]);
+                  caption = parsed.caption || "";
+                  hashtags = parsed.hashtags || [];
+                } catch {
+                  console.warn("[ai-chat] GENERATE_CAROUSEL: caption JSON parse failed, extracting with regex");
+                  const captionRx = raw.match(/"caption"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
+                  const hashRx = raw.match(/"hashtags"\s*:\s*(\[[^\]]*\])/s);
+                  if (captionRx) {
+                    caption = captionRx[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
+                    if (hashRx) { try { hashtags = JSON.parse(hashRx[1]); } catch { /* ignore */ } }
+                  } else {
+                    caption = raw.replace(/```json\n?|\n?```/g, "").trim();
+                  }
+                }
+              } else {
+                caption = raw.trim();
+              }
+            }
+          } catch (captionErr: any) {
+            console.warn("[ai-chat] GENERATE_CAROUSEL: caption generation failed:", captionErr?.message);
+          }
+          return { caption, hashtags };
+        })();
+
+        const [slideResults, { caption, hashtags }] = await Promise.all([
+          slideResultsPromise,
+          captionPromise,
+        ]);
+        console.log(`[ai-chat] GENERATE_CAROUSEL timing: images+caption=${Date.now() - tStructureDone}ms`);
+
         // Preserve order
         slideResults.sort((a, b) => a.index - b.index);
         const imageUrls_arr: string[] = slideResults
           .map((r) => r.slideImageUrl)
           .filter((u): u is string => !!u);
         const updatedSlides: any[] = slideResults.map((r) => r.updatedSlide);
-
-        // 7. Generate caption
-        let caption = "";
-        let hashtags: string[] = [];
-        try {
-          const carouselBilingual = secondaryLang && bilingualPlatforms.includes(platform)
-            ? `\nIMPORTANTE: A legenda DEVE ser bilíngue — primeiro em português, depois "---" e a versão em ${secondaryLangName}.`
-            : "";
-          // Story carousels (each slide = a separate IG story) can't have clickable links,
-          // so we don't append a source footer. Feed carousels and LinkedIn documents do.
-          const carouselSourceRule = urlMatch?.[0] && !isStoryCarousel
-            ? `\nFONTE OBRIGATÓRIA: Termine a legenda com uma linha em branco e depois exatamente "🔗 Fonte: ${urlMatch[0]}".`
-            : "";
-          const carouselNoBioRule = `\nPROIBIDO: nunca escreva "link na bio", "link no perfil", "arrasta pra cima", "swipe up", "veja mais nos stories" ou variações.`;
-
-          const captionPrompt = `Gere uma legenda para um carrossel de ${platform === "linkedin" ? "LinkedIn" : "Instagram"} sobre: "${message}"
-${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
-${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}
-Legenda curta e engajante. Inclua 5-8 hashtags relevantes no final.${carouselBilingual}${carouselNoBioRule}${carouselSourceRule}
-Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
-
-          const captionResp = await aiGatewayFetch({
-            model: "openrouter/minimax-m-25",
-            messages: [{ role: "user", content: captionPrompt }],
-          });
-
-          if (captionResp.ok) {
-            const captionData = await captionResp.json();
-            const raw = captionData.choices?.[0]?.message?.content || "";
-            const jsonMatch = raw.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              try {
-                const parsed = JSON.parse(jsonMatch[0]);
-                caption = parsed.caption || "";
-                hashtags = parsed.hashtags || [];
-              } catch {
-                console.warn("[ai-chat] GENERATE_CAROUSEL: caption JSON parse failed, extracting with regex");
-                const captionRx = raw.match(/"caption"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
-                const hashRx = raw.match(/"hashtags"\s*:\s*(\[[^\]]*\])/s);
-                if (captionRx) {
-                  caption = captionRx[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-                  if (hashRx) { try { hashtags = JSON.parse(hashRx[1]); } catch { /* ignore */ } }
-                } else {
-                  caption = raw.replace(/```json\n?|\n?```/g, "").trim();
-                }
-              }
-            } else {
-              caption = raw.trim();
-            }
-          }
-        } catch (captionErr: any) {
-          console.warn("[ai-chat] GENERATE_CAROUSEL: caption generation failed:", captionErr?.message);
-        }
 
         // 8. Save to generated_contents
         // NOTE: For story carousels we keep content_type="carousel" so the ActionCard's slide
@@ -1776,7 +1793,7 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
           is_story_carousel: isStoryCarousel || undefined,
         } : null;
 
-        console.log("[ai-chat] GENERATE_CAROUSEL: done, contentId=", savedContentId, "images=", generatedCount);
+        console.log(`[ai-chat] GENERATE_CAROUSEL: done in ${Date.now() - tCarouselStart}ms, contentId=`, savedContentId, "images=", generatedCount);
         break;
       }
 
