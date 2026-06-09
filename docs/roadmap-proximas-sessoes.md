@@ -66,7 +66,15 @@
 
 ## 🛠️ Transversal — Qualidade / aquisição
 
-- **Otimizar o carrossel de 122s** (pendência antiga): paralelizar as ~5 gerações de imagem (hoje em série). Impacto direto na percepção de qualidade. **Esforço M, alto valor.**
+- **Renderização progressiva do carrossel** (decidido 09/06): o carrossel **já é paralelo** (não era serial) — os 122s são latência por chamada. O ganho real é **mostrar cada slide assim que fica pronto** (percebido 122s → ~30s). Plano:
+  - *Backend* (`ai-chat` GENERATE_CAROUSEL): criar a linha `generated_contents` **cedo** (status `generating`, slides com headlines + imagens null); cada slide atualiza `slides[i].image_url` ao terminar (UPDATE serializado por row-lock); ao fim, `status=ready` + `image_urls`. (Refatorar o `persistGeneratedContent` do fim pra um create-early + update.)
+  - *Frontend* (`ChatWindow`/`ActionCard`): ao enviar carrossel, card "gerando" que faz **polling** do último `generating` do user → renderiza slides prontos + skeleton "slide X de N". Quando ai-chat retorna (ready), troca pelo card final.
+  - **Esforço M.**
+- **Carrossel cinematográfico editorial** (nova feature, decidida 09/06 — ver `docs/formato-carrossel-editorial.md`):
+  - Intent novo `GENERATE_EDITORIAL_CAROUSEL`; minimax estrutura headline **tokenizada** (palavra normal vs destaque) + photo_prompt "sem texto" + kicker + badge + paleta + @handle.
+  - `generate-slide-images` gera **só a foto** (ou usa foto pessoal do brand/Maikon); `render-slide-image` compõe foto + scrim + moldura editorial + headline com palavras coloridas + pill + "1/N".
+  - **Decisão aberta do Raul:** o renderer do overlay — **Satori** (reconsiderado só p/ esse uso), `@napi-rs/canvas`, ou html-to-image headless.
+  - **Esforço G.** Forte pro nicho saúde (Maikon).
 - **Aba de conversas** (adiada): hoje "novo chat" é destrutivo (`localStorage tp_conversation_since`); a versão leve = conversas reabríveis + título automático (precisa migration `conversation_id`). Decisão: fazer só quando o resto estabilizar.
 - **Referral / indicação** (crescimento).
 - **Robustez:** estados de erro, observability (Sentry), retries.
