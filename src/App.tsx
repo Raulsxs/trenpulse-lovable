@@ -6,7 +6,6 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BackgroundGenerationProvider } from "@/contexts/BackgroundGenerationContext";
 import { useAccountType } from "@/hooks/useAccountType";
-import SelfServeLayout from "@/components/layout/SelfServeLayout";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -34,20 +33,14 @@ import Pricing from "./pages/Pricing";
 import Analytics from "./pages/Analytics";
 import Onboarding from "./pages/Onboarding";
 import AdminAnalytics from "./pages/AdminAnalytics";
-import SelfServePlaceholder from "./pages/SelfServePlaceholder";
-import Discover from "./pages/Discover";
-import TemplateGenerator from "./pages/TemplateGenerator";
-import Library from "./pages/Library";
 import Templates from "./pages/Templates";
-import SelfServeOnboarding from "./pages/SelfServeOnboarding";
 
 const queryClient = new QueryClient();
 
-// white_glove é o PADRÃO ÚNICO em produção (decisão 2026-06-09). O self_serve/template-first foi
-// cortado de prod via SELF_SERVE_ENABLED=false; o código fica como backup (branch backup/self-serve).
-const SELF_SERVE_ENABLED = false;
+// white_glove é o PADRÃO ÚNICO em produção (decisão 2026-06-09). A árvore self_serve/
+// template-first foi removida do bundle; o código vive na branch backup/self-serve.
 const RoutedApp = () => {
-  const { accountType, loading, isAuthenticated } = useAccountType();
+  const { loading } = useAccountType();
 
   if (loading) {
     return (
@@ -57,27 +50,6 @@ const RoutedApp = () => {
     );
   }
 
-  if (SELF_SERVE_ENABLED && isAuthenticated && accountType === "self_serve") {
-    return (
-      <Routes>
-        <Route path="/" element={<Index />} />
-        <Route path="/auth" element={<Auth />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route path="/privacy" element={<PrivacyPolicy />} />
-        <Route path="/auth/instagram/callback" element={<InstagramCallback />} />
-        <Route path="/auth/linkedin/callback" element={<LinkedInCallback />} />
-        {/* Fase 1: rotas template-first ativas. Fase 2: Library adicionada. */}
-        <Route path="/onboarding" element={<SelfServeOnboarding />} />
-        <Route path="/discover" element={<SelfServeLayout><Discover /></SelfServeLayout>} />
-        <Route path="/templates/:slug" element={<SelfServeLayout><TemplateGenerator /></SelfServeLayout>} />
-        <Route path="/library" element={<SelfServeLayout><Library /></SelfServeLayout>} />
-        <Route path="/profile" element={<SelfServeLayout><Profile /></SelfServeLayout>} />
-        <Route path="*" element={<SelfServeLayout><SelfServePlaceholder /></SelfServeLayout>} />
-      </Routes>
-    );
-  }
-
-  // Default: white_glove + visitantes deslogados — rotas atuais inalteradas.
   return (
     <Routes>
       <Route path="/" element={<Index />} />

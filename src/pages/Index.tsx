@@ -9,7 +9,6 @@ import { HowItWorks } from "@/components/landing/HowItWorks";
 import { FeatureShowcase } from "@/components/landing/FeatureShowcase";
 import { ResultGallery } from "@/components/landing/ResultGallery";
 import { PricingSection } from "@/components/landing/PricingSection";
-import { DemoScenes } from "@/components/landing/DemoScenes";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -218,17 +217,6 @@ const Index = () => {
             subtitle="Conteúdos gerados pelo TrendPulse — prontos para publicar"
           />
           <ResultGallery />
-        </div>
-      </section>
-
-      {/* ── Demo section ── */}
-      <section className="py-20 px-6">
-        <div className="container mx-auto max-w-4xl">
-          <SectionHeader
-            title="Veja em ação"
-            subtitle="4 formas de criar conteúdo profissional em segundos"
-          />
-          <DemoScenes />
         </div>
       </section>
 
