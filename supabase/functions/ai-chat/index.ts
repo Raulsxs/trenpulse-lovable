@@ -254,6 +254,26 @@ function getContentDimensions(platform: string, format: string): { w: number; h:
 // Main handler
 // ══════════════════════════════════════════════════════════════════════════════
 
+// ── Créditos: dedução por geração ──────────────────────────────────────────────
+// Debita os créditos da ação após gerar com sucesso (best-effort: quem não tem saldo não é
+// bloqueado por ora). O bloqueio (enforcement) liga com CREDITS_ENFORCED=true no lançamento.
+const CREDITS_ENFORCED = Deno.env.get("CREDITS_ENFORCED") === "true";
+async function creditCost(svc: any, action: string, count = 1): Promise<number> {
+  const { data } = await svc.from("credit_pricing").select("credits").eq("action", action).maybeSingle();
+  return Math.max(0, ((data?.credits as number) ?? 0) * count);
+}
+async function getCreditBalance(svc: any, userId: string): Promise<number> {
+  const { data } = await svc.from("user_credits").select("balance").eq("user_id", userId).maybeSingle();
+  return (data?.balance as number) ?? 0;
+}
+async function chargeCredits(svc: any, userId: string, action: string, count: number, generationId: string | null): Promise<void> {
+  const cost = await creditCost(svc, action, count);
+  if (cost <= 0 || !userId) return;
+  const { error } = await svc.rpc("spend_credits", { p_user: userId, p_amount: cost, p_generation_id: generationId, p_metadata: { action, count } });
+  if (error) console.warn(`[ai-chat] chargeCredits ${action} x${count} (${cost}cr) skipped: ${error.message}`);
+  else console.log(`[ai-chat] charged ${cost}cr (${action} x${count}) from ${userId}`);
+}
+
 serve(async (req) => {
   // CORS preflight
   if (req.method === "OPTIONS") {
@@ -1382,6 +1402,8 @@ Responda APENAS em JSON:
           await svc.from("generated_contents")
             .update({ image_urls: [imageUrl] })
             .eq("id", savedContentId);
+          // Débito de créditos (só se gerou imagem)
+          await chargeCredits(svc, userId, format === "story" ? "story" : "post", 1, savedContentId);
         }
 
         // 11. Set reply
@@ -1720,6 +1742,8 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
           await svc.from("generated_contents")
             .update({ image_urls: imageUrls_arr })
             .eq("id", savedContentId);
+          // Débito: 1 ação por slide gerado
+          await chargeCredits(svc, userId, "carousel_slide", imageUrls_arr.length, savedContentId);
         }
 
         // 10. Set reply
@@ -1886,6 +1910,7 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
 
         if (savedContentId && cardUrls.length > 0) {
           await svc.from("generated_contents").update({ image_urls: cardUrls }).eq("id", savedContentId);
+          await chargeCredits(svc, userId, "tweet_card", 1, savedContentId);
         }
 
         replyOverride = `Carrossel de tweet card com ${cardUrls.length} cards gerado! Confira abaixo.`;
