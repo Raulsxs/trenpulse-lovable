@@ -152,6 +152,7 @@ const INTENTS = [
   "GENERATE",
   "GENERATE_CAROUSEL",
   "GENERATE_TWEET_CARD",
+  "GENERATE_EDITORIAL_CAROUSEL",
   "FREE_IMAGE",
   "EDIT_CONTENT",
   "CRIAR_MARCA",
@@ -470,6 +471,7 @@ Seja concisa mas completa nas respostas.`;
 - GENERATE: quer criar post, story, imagem, conteúdo visual com design artístico
 - GENERATE_CAROUSEL: quer criar carrossel, múltiplos slides, série de posts, documento
 - FREE_IMAGE: quer só uma imagem/foto avulsa e livre (ex: "gere uma imagem de um gato astronauta", "crie uma foto de um produto", "desenhe um logo", "faça uma ilustração de..."), SEM virar post nem legenda de rede social
+- GENERATE_EDITORIAL_CAROUSEL: quer um carrossel "editorial" / "estilo revista ou notícia" / "de gancho viral" / "cinematográfico" — foto dramática com headline de impacto e palavras destacadas
 - EDIT_CONTENT: quer editar, mudar, ajustar conteúdo já existente (ex: "muda a fonte", "texto menor", "nova imagem")
 - CRIAR_MARCA: quer criar marca, identidade visual, definir cores/logo/estilo
 - ATUALIZAR_PERFIL: quer mudar nicho, tom de voz, temas do perfil
@@ -525,6 +527,11 @@ Mensagem: "${message}"`;
     // own Satori renderer instead. Runs BEFORE the Blotato template detection below.
     if (/tweet[\s-]*cards?|carross\S*\s+(de|com|estilo)\s+tweets?|cards?\s+de\s+tweets?|estilo\s+(tweet|twitter|x)\b|thread\s+(de|em|no)\s+(tweets?|x|twitter)/i.test(message)) {
       detectedIntent = "GENERATE_TWEET_CARD";
+    }
+
+    // Carrossel editorial cinematográfico — override determinístico (foto + overlay de revista).
+    if (/carross\S*\s+(editorial|cinematogr\S*|de\s+gancho|estilo\s+(revista|not[íi]cia|jornal|breaking|editorial)|viral)|estilo\s+(editorial|revista|not[íi]cia)|editorial\s+(viral|cinematogr\S*)/i.test(message)) {
+      detectedIntent = "GENERATE_EDITORIAL_CAROUSEL";
     }
 
     // Geração livre — imagem crua (estilo "chamar o Gemini"). Só quando pede explicitamente
@@ -1951,6 +1958,137 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
         } : null;
 
         console.log("[ai-chat] GENERATE_TWEET_CARD: done, contentId=", savedContentId, "cards=", cardUrls.length);
+        break;
+      }
+
+      // ════════════════════════════════════════════════════════════════════════
+      // GENERATE_EDITORIAL_CAROUSEL — Carrossel editorial cinematográfico (formato viral):
+      // minimax estrutura o gancho (headline tokenizada + photo_prompt "sem texto") →
+      // gera as fotos em paralelo → render-slide-image compõe a moldura editorial (Satori).
+      // ════════════════════════════════════════════════════════════════════════
+      case "GENERATE_EDITORIAL_CAROUSEL": {
+        console.log("[ai-chat] GENERATE_EDITORIAL_CAROUSEL handler started");
+        const platform = requestPlatform || "instagram";
+
+        // 1. Fonte (texto digitado / link / documento)
+        const urlMatch = message.match(/https?:\/\/[^\s]+/);
+        const docMatch = message.match(/"""\s*([\s\S]*?)\s*"""/);
+        let sourceContent = "";
+        if (docMatch && docMatch[1].trim().length > 40) sourceContent = docMatch[1].trim();
+        else if (urlMatch) { const a = await extractArticleContent(urlMatch[0], "GENERATE_EDITORIAL_CAROUSEL"); sourceContent = a || message; }
+        else sourceContent = message;
+        if (sourceContent.length > 3000) sourceContent = sourceContent.substring(0, 3000);
+
+        // 2. Perfil (handle pra moldura)
+        const { data: edProf } = await svc.from("profiles").select("instagram_handle").eq("user_id", userId).maybeSingle();
+        const edHandle = ((edProf?.instagram_handle as string) || "voce").replace(/^@+/, "");
+        const edHighlight = "#19E5C5"; // TODO: puxar da paleta da marca quando houver
+
+        // 3. minimax estrutura o carrossel editorial (JSON)
+        const edPrompt = `Você é um diretor de conteúdo viral. A partir do conteúdo abaixo, monte um CARROSSEL EDITORIAL de 4 a 6 slides em português brasileiro, estilo "mini-revista de gancho".
+
+CONTEÚDO: ${sourceContent}
+${userCtx?.business_niche ? `NICHO: ${userCtx.business_niche}` : ""}
+${userCtx?.brand_voice ? `TOM: ${userCtx.brand_voice}` : ""}
+
+REGRAS:
+- 1º slide = CAPA: a headline é o GANCHO de curiosidade (reframe contrário, "o que ninguém te conta", custo escondido). Slides 2..N desenvolvem 1 ideia cada. Último = CTA (salvar/compartilhar).
+- Cada headline: CURTA (5-9 palavras), impactante.
+- "headline_tokens": divida a headline em PALAVRAS, cada uma {"t":"PALAVRA"}. Marque 1-2 palavras-chave por slide com "hl":true (as que merecem cor de destaque).
+- "kicker": 1 palavra de seção (ex: SAÚDE, NEGÓCIOS). "badge": hashtag de marca curta.
+- "photo_prompt": uma FOTO cinematográfica/dramática fotorrealista que ilustra o slide, SEM TEXTO.
+
+Responda APENAS em JSON:
+{"kicker":"SAÚDE","badge":"#SUAMARCA","slides":[{"headline_tokens":[{"t":"O"},{"t":"QUE"},{"t":"PARECEU"},{"t":"PREGUIÇA","hl":true},{"t":"ERA"},{"t":"INFLAMAÇÃO","hl":true}],"photo_prompt":"homem exausto na cama, luz azul dramática, cinematográfico"}]}`;
+
+        let edStruct: any = null;
+        try {
+          const r = await aiGatewayFetch({ model: "openrouter/minimax-m-25", messages: [{ role: "user", content: edPrompt }] });
+          if (r.ok) {
+            const d = await r.json();
+            const raw = d.choices?.[0]?.message?.content || "";
+            const m = raw.match(/\{[\s\S]*\}/);
+            if (m) edStruct = JSON.parse(m[0]);
+          }
+        } catch (e: any) { console.error("[ai-chat] EDITORIAL: struct failed:", e?.message); }
+
+        const edSlides: any[] = Array.isArray(edStruct?.slides) ? edStruct.slides.slice(0, 8) : [];
+        if (edSlides.length === 0) { replyOverride = "Não consegui montar o carrossel editorial. Tenta de novo com um tema ou link."; break; }
+        const edKicker = edStruct?.kicker || (userCtx?.business_niche ? String(userCtx.business_niche).toUpperCase().slice(0, 16) : "DESTAQUE");
+        const edBadge = edStruct?.badge || `#${edHandle}`;
+
+        // 4. Gera as FOTOS (sem texto) em PARALELO
+        const edPhotos: (string | null)[] = await Promise.all(edSlides.map(async (s: any, i: number) => {
+          const headlineText = (s.headline_tokens || []).map((t: any) => t.t).join(" ");
+          const pPrompt = `Foto cinematográfica fotorrealista vertical: ${s.photo_prompt || headlineText || "cena dramática"}. Composição nítida, atmosfera dramática, profundidade de campo rasa. SEM TEXTO, SEM LETRAS, SEM TIPOGRAFIA, SEM MARCA D'ÁGUA, SEM LEGENDA.`;
+          try {
+            const gr = await fetch(`${supabaseUrl}/functions/v1/generate-slide-images`, {
+              method: "POST", headers: internalHeaders,
+              body: JSON.stringify({ userId, slide: { role: "cover", headline: "" }, slideIndex: i, totalSlides: edSlides.length, contentFormat: "post", platform, backgroundOnly: false, customPrompt: pPrompt, brandId: null }),
+            });
+            if (gr.ok) { const gd = await gr.json(); return gd.imageUrl || gd.bgImageUrl || null; }
+            console.error(`[ai-chat] EDITORIAL: photo ${i + 1} failed: ${gr.status}`);
+          } catch (e: any) { console.error(`[ai-chat] EDITORIAL: photo ${i + 1} error:`, e?.message); }
+          return null;
+        }));
+
+        // 5. Overlay editorial — UMA chamada de render POR SLIDE (memória fresca + paralelo).
+        //    Render com N slides juntos estoura WORKER_RESOURCE_LIMIT (cada foto vira base64 grande).
+        const edRenderSlides = edSlides.map((s: any, i: number) => ({
+          background_image_url: edPhotos[i],
+          headline_tokens: s.headline_tokens || [],
+          kicker: edKicker, badge: edBadge, highlight: edHighlight,
+        }));
+        const edContentId = crypto.randomUUID();
+        const edCardResults: (string | null)[] = await Promise.all(edRenderSlides.map(async (rs: any, i: number) => {
+          for (let attempt = 0; attempt < 2; attempt++) {
+            if (attempt > 0) await new Promise((r) => setTimeout(r, 1200));
+            try {
+              const rr = await fetch(`${supabaseUrl}/functions/v1/render-slide-image`, {
+                method: "POST", headers: internalHeaders,
+                body: JSON.stringify({ slides: [rs], content_id: edContentId, slide_offset: i, visual_style: "editorial_card", dimensions: { width: 1080, height: 1350 }, tweet_profile: { handle: edHandle } }),
+              });
+              if (rr.ok) { const rd = await rr.json(); if (rd.composite_urls?.[0]) return rd.composite_urls[0] as string; }
+              else console.error(`[ai-chat] EDITORIAL: render slide ${i + 1} failed (attempt ${attempt + 1}): ${rr.status}`);
+            } catch (e: any) { console.error(`[ai-chat] EDITORIAL: render slide ${i + 1} error:`, e?.message); }
+          }
+          return null;
+        }));
+        const edCardUrls: string[] = edCardResults.filter((u): u is string => !!u);
+        if (edCardUrls.length === 0) { replyOverride = "Montei o roteiro, mas os slides editoriais não renderizaram. Tenta de novo."; break; }
+
+        // 6. Legenda
+        let edCaption = ""; let edHashtags: string[] = [];
+        try {
+          const headlinesText = edSlides.map((s: any) => (s.headline_tokens || []).map((t: any) => t.t).join(" ")).join(" | ");
+          const cr = await aiGatewayFetch({ model: "openrouter/minimax-m-25", messages: [{ role: "user", content: `Gere uma legenda curta e engajante (pt-BR) para um carrossel sobre: "${message}". Pontos: ${headlinesText}. 5-8 hashtags no fim. JSON: {"caption":"...","hashtags":["#..."]}` }] });
+          if (cr.ok) { const cd = await cr.json(); const raw = cd.choices?.[0]?.message?.content || ""; const jm = raw.match(/\{[\s\S]*\}/); if (jm) { const p = JSON.parse(jm[0]); edCaption = p.caption || ""; edHashtags = p.hashtags || []; } }
+        } catch { /* legenda opcional */ }
+
+        // 7. Persist
+        const edTitle = ((edSlides[0]?.headline_tokens || []).map((t: any) => t.t).join(" ").slice(0, 80)) || "Carrossel editorial";
+        const edUpdatedSlides = edSlides
+          .map((s: any, i: number) => ({ s, url: edCardResults[i] }))
+          .filter((x: any) => !!x.url)
+          .map((x: any, j: number, arr: any[]) => ({
+            role: j === 0 ? "cover" : (j === arr.length - 1 ? "cta" : "content"),
+            headline: (x.s.headline_tokens || []).map((t: any) => t.t).join(" "),
+            image_url: x.url,
+            background_image_url: x.url,
+            render_mode: "ai_full_design",
+          }));
+        const savedContentId = await persistGeneratedContent({
+          generatedContent: { title: edTitle, caption: edCaption, hashtags: edHashtags, slides: edUpdatedSlides },
+          fallbackTitle: edTitle, contentType: "carousel", brandId: requestBrandId || null, brandSnapshot: null,
+          platform, visualMode: "editorial_card", generationMetadata: { editorial_card: true },
+        });
+        if (savedContentId && edCardUrls.length > 0) {
+          await svc.from("generated_contents").update({ image_urls: edCardUrls }).eq("id", savedContentId);
+          await chargeCredits(svc, userId, "carousel_slide", edCardUrls.length, savedContentId);
+        }
+        replyOverride = `Carrossel editorial com ${edCardUrls.length} slides gerado! Confira abaixo. 🎬`;
+        actionResult = savedContentId ? { content_id: savedContentId, content_type: "carousel", platform, preview_image_url: edCardUrls[0] || null } : null;
+        console.log("[ai-chat] GENERATE_EDITORIAL_CAROUSEL: done, slides=", edCardUrls.length);
         break;
       }
 
