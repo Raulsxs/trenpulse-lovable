@@ -8,3 +8,12 @@ verify_jwt = false
 
 [functions.render-template]
 verify_jwt = false
+
+# Internal-only functions (called by ai-chat via service-role). The service-role env key is
+# the new sb_secret_* format (NOT a JWT), so gateway JWT verification rejects internal calls
+# with UNAUTHORIZED_INVALID_JWT_FORMAT. Must be verify_jwt=false like the other internal fns.
+[functions.render-slide-image]
+verify_jwt = false
+
+[functions.generate-slide-images]
+verify_jwt = false

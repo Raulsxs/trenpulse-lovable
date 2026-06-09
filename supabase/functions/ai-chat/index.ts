@@ -1860,13 +1860,17 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
         // 5. Persist as a carousel (caption = full thread)
         const caption = tweets.join("\n\n");
         const tweetTitle = tweets[0].length > 80 ? tweets[0].substring(0, 80) + "…" : tweets[0];
+        // render_mode "ai_full_design" (NOT "tweet_card"): the frontend already treats
+        // ai_full_design as "image has baked text — show directly, no overlay" everywhere
+        // (ActionCard, ContentPreview, SlideEditor). Reusing it kills the double-text overlay
+        // without touching N frontend components.
         const updatedTweetSlides = tweets.map((t, i) => ({
           role: i === 0 ? "cover" : "content",
           text: t,
           headline: t,
           image_url: cardUrls[i] || null,
           background_image_url: cardUrls[i] || null,
-          render_mode: "tweet_card",
+          render_mode: "ai_full_design",
         }));
 
         const savedContentId = await persistGeneratedContent({

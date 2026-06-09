@@ -585,6 +585,16 @@ function tweetFontSize(text: string): number {
   return 38;
 }
 
+// Fallback sanitizer for Satori font-shaping errors ("substFormat: 3 is not yet supported"):
+// strips emoji/symbols/arrows/ZWJ/variation-selectors and NFC-normalizes, keeping Latin+accents.
+function sanitizeForFont(text: string): string {
+  return (text || "")
+    .normalize("NFC")
+    .replace(/[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\u{200D}\u{20E3}\u{2190}-\u{21FF}\u{2B00}-\u{2BFF}\u{2300}-\u{23FF}]/gu, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 type TweetProfile = { name?: string; handle?: string; avatar_url?: string; verified?: boolean };
 
 function buildTweetCardElement(
@@ -656,9 +666,10 @@ Deno.serve(async (req) => {
     const isTweetCard = visual_style === "tweet_card";
     const maxW = visual_style === "photo_overlay" ? 1440 : 1200;
     const maxH = visual_style === "photo_overlay" ? 2160 : 1920;
-    // Tweet cards are fixed 1080×1350 (4:5) — best IG carousel real estate.
+    // Tweet cards are fixed 1080×1080 (square) — the app treats carousels as square, so a
+    // 4:5 card gets cropped (object-cover) in the ActionCard/preview/editor. Square fits cleanly.
     const w = isTweetCard ? 1080 : Math.min(Math.max(Number(dimensions?.width) || 1080, 720), maxW);
-    const h = isTweetCard ? 1350 : Math.min(Math.max(Number(dimensions?.height) || 1080, 627), maxH);
+    const h = isTweetCard ? 1080 : Math.min(Math.max(Number(dimensions?.height) || 1080, 627), maxH);
     const isLinkedInDocument = platform === "linkedin" && content_type === "document";
     const isPhotoOverlay = visual_style === "photo_overlay";
     const offset = Number(slide_offset) || 0;
@@ -706,15 +717,29 @@ Deno.serve(async (req) => {
         element = buildSlideElement(slide, w, h, bgSrc, brand_snapshot, isLinkedInDocument, isPhotoOverlay);
       }
 
-      const imageResponse = new ImageResponse(element, {
-        width: w,
-        height: h,
-        fonts: fonts as any,
-        // Twemoji resolver so emoji in tweets render (Satori shows none by default).
-        ...(isTweetCard ? { loadAdditionalAsset: tweetEmojiLoader } : {}),
-      });
-
-      const pngBuffer = new Uint8Array(await imageResponse.arrayBuffer());
+      let pngBuffer: Uint8Array;
+      try {
+        const imageResponse = new ImageResponse(element, {
+          width: w,
+          height: h,
+          fonts: fonts as any,
+          // Twemoji resolver so emoji in tweets render (Satori shows none by default).
+          ...(isTweetCard ? { loadAdditionalAsset: tweetEmojiLoader } : {}),
+        });
+        pngBuffer = new Uint8Array(await imageResponse.arrayBuffer());
+      } catch (renderErr) {
+        // Satori chokes on some glyph-substitution / emoji combos ("substFormat: 3 is not yet
+        // supported"). Retry the slide with sanitized text and no emoji loader so one bad
+        // character never fails the whole carousel.
+        console.warn(`[render-slide-image] slide ${offset + i} render failed (${(renderErr as Error).message}); retrying sanitized`);
+        let el2 = element;
+        if (isTweetCard) {
+          const cleanText = sanitizeForFont(slide.text || slide.body || slide.headline || "");
+          el2 = buildTweetCardElement(cleanText, tweet_profile || {}, offset + i, totalSlides, avatarDataUri, w, h);
+        }
+        const imageResponse2 = new ImageResponse(el2, { width: w, height: h, fonts: fonts as any });
+        pngBuffer = new Uint8Array(await imageResponse2.arrayBuffer());
+      }
 
       const globalIdx = offset + i;
       const path = `composite/${content_id}/slide_${globalIdx}_${Date.now()}.png`;
