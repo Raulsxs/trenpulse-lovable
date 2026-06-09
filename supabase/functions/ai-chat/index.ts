@@ -152,6 +152,7 @@ const INTENTS = [
   "GENERATE",
   "GENERATE_CAROUSEL",
   "GENERATE_TWEET_CARD",
+  "FREE_IMAGE",
   "EDIT_CONTENT",
   "CRIAR_MARCA",
   "CRIAR_MARCA_ANALYZE",
@@ -468,6 +469,7 @@ Seja concisa mas completa nas respostas.`;
 - GENERATE_TEMPLATE: quer criar tweet card, card estilo twitter, carrossel tutorial passo a passo, quote card visual, citação visual, infográfico
 - GENERATE: quer criar post, story, imagem, conteúdo visual com design artístico
 - GENERATE_CAROUSEL: quer criar carrossel, múltiplos slides, série de posts, documento
+- FREE_IMAGE: quer só uma imagem/foto avulsa e livre (ex: "gere uma imagem de um gato astronauta", "crie uma foto de um produto", "desenhe um logo", "faça uma ilustração de..."), SEM virar post nem legenda de rede social
 - EDIT_CONTENT: quer editar, mudar, ajustar conteúdo já existente (ex: "muda a fonte", "texto menor", "nova imagem")
 - CRIAR_MARCA: quer criar marca, identidade visual, definir cores/logo/estilo
 - ATUALIZAR_PERFIL: quer mudar nicho, tom de voz, temas do perfil
@@ -523,6 +525,16 @@ Mensagem: "${message}"`;
     // own Satori renderer instead. Runs BEFORE the Blotato template detection below.
     if (/tweet[\s-]*cards?|carross\S*\s+(de|com|estilo)\s+tweets?|cards?\s+de\s+tweets?|estilo\s+(tweet|twitter|x)\b|thread\s+(de|em|no)\s+(tweets?|x|twitter)/i.test(message)) {
       detectedIntent = "GENERATE_TWEET_CARD";
+    }
+
+    // Geração livre — imagem crua (estilo "chamar o Gemini"). Só quando pede explicitamente
+    // imagem/foto/desenho e NÃO menciona post/story/carrossel/conteúdo (esses são GENERATE).
+    if (
+      (detectedIntent === "GENERATE" || detectedIntent === "CHAT") &&
+      /\b(ger[ae]|gera|crie|cria|fa[çc]a|desenh[ae]|ilustre|quero|gostaria\s+de)\b[^.!?]*\b(imagem|foto(grafia)?|ilustra[çc][ãa]o|desenho|arte|logo(tipo)?|figura|render|wallpaper|papel\s+de\s+parede)\b/i.test(message) &&
+      !/\b(post|stor(y|ies)|carross\S*|conte[úu]do|publica[çc][ãa]o|legenda|caption|reels?|feed|marca)\b/i.test(message)
+    ) {
+      detectedIntent = "FREE_IMAGE";
     }
 
     // Template detection AFTER all conversions — if message matches a Blotato template, upgrade
@@ -1922,6 +1934,80 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
         } : null;
 
         console.log("[ai-chat] GENERATE_TWEET_CARD: done, contentId=", savedContentId, "cards=", cardUrls.length);
+        break;
+      }
+
+      // ════════════════════════════════════════════════════════════════════════
+      // FREE_IMAGE — Geração livre (imagem crua, "estilo Gemini"): sem marca, sem
+      // moldura de post/legenda. O usuário pede "gere uma imagem de X" e recebe a imagem.
+      // ════════════════════════════════════════════════════════════════════════
+      case "FREE_IMAGE": {
+        console.log("[ai-chat] FREE_IMAGE handler started");
+        const platform = requestPlatform || "instagram";
+        // Tira o comando ("gere uma imagem de...") e deixa só o assunto pro modelo.
+        const subject = (message || "")
+          .replace(/^\s*(ger[ae]|gera|crie|cria|fa[çc]a|desenh[ae]|ilustre|me\s+d[êe]|quero|gostaria\s+de)\s+(uma?\s+)?(imagem|foto(grafia)?|ilustra[çc][ãa]o|arte|desenho|logo(tipo)?|figura|render)\s*(de|do|da|com|sobre|pra|para|que|:)?\s*/i, "")
+          .trim() || message;
+        const imagePrompt = `Crie uma imagem de altíssima qualidade: ${subject}. Composição nítida e bem enquadrada, sem marca d'água, sem texto sobreposto a menos que o pedido peça texto.`;
+
+        let imageUrl: string | null = null;
+        try {
+          const genController = new AbortController();
+          const genTimer = setTimeout(() => genController.abort(), 80000);
+          const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-slide-images`, {
+            signal: genController.signal,
+            method: "POST",
+            headers: internalHeaders,
+            body: JSON.stringify({
+              userId,
+              slide: { role: "cover", headline: subject.slice(0, 80), body: "" },
+              slideIndex: 0,
+              totalSlides: 1,
+              contentFormat: "post",
+              platform,
+              backgroundOnly: false,
+              customPrompt: imagePrompt,
+              brandId: null,
+            }),
+          });
+          clearTimeout(genTimer);
+          if (genResp.ok) {
+            const genData = await genResp.json();
+            imageUrl = genData.imageUrl || genData.bgImageUrl || null;
+          } else {
+            console.error("[ai-chat] FREE_IMAGE: generate-slide-images failed:", genResp.status);
+          }
+        } catch (e: any) {
+          console.error("[ai-chat] FREE_IMAGE: error:", e?.name === "AbortError" ? "timeout(80s)" : e?.message);
+        }
+
+        if (imageUrl) {
+          const freeTitle = subject.slice(0, 60) || "Imagem";
+          const savedContentId = await persistGeneratedContent({
+            generatedContent: {
+              title: freeTitle,
+              caption: "",
+              hashtags: [],
+              slides: [{ headline: freeTitle, body: "", bullets: [], image_url: imageUrl, background_image_url: imageUrl, render_mode: "ai_full_design" }],
+            },
+            fallbackTitle: freeTitle,
+            contentType: "post",
+            brandId: null,
+            brandSnapshot: null,
+            platform,
+            visualMode: "ai_full_design",
+            generationMetadata: { free_image: true },
+          });
+          if (savedContentId) {
+            await svc.from("generated_contents").update({ image_urls: [imageUrl] }).eq("id", savedContentId);
+            await chargeCredits(svc, userId, "free_image", 1, savedContentId);
+          }
+          replyOverride = "Imagem gerada! Confira abaixo. 🎨";
+          actionResult = savedContentId ? { content_id: savedContentId, content_type: "post", platform, preview_image_url: imageUrl } : null;
+        } else {
+          replyOverride = "Não consegui gerar a imagem agora. Tenta de novo ou reformula o pedido.";
+        }
+        console.log("[ai-chat] FREE_IMAGE: done, img=", imageUrl ? "yes" : "no");
         break;
       }
 
