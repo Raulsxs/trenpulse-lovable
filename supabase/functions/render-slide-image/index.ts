@@ -565,9 +565,12 @@ async function loadTweetFonts(): Promise<
     loadFontData(FONT_CDN_MAP["Inter"].regular),
     loadFontData(FONT_CDN_MAP["Inter"].bold),
   ]);
+  // Separate family names per weight: Satori 0.0.40 does NOT reliably match
+  // fontWeight 400 vs 700 under one family name (renders everything bold).
+  // Selecting the weight via fontFamily sidesteps that — "Inter"=regular, "InterBold"=bold.
   return [
     { name: "Inter", data: reg, weight: 400, style: "normal" },
-    { name: "Inter", data: bold, weight: 700, style: "normal" },
+    { name: "InterBold", data: bold, weight: 700, style: "normal" },
   ];
 }
 
@@ -607,14 +610,14 @@ function buildTweetCardElement(
         style: {
           width: 112, height: 112, borderRadius: 56, flexShrink: 0, backgroundColor: "#1d4e89",
           display: "flex", alignItems: "center", justifyContent: "center",
-          color: "#fff", fontSize: 44, fontWeight: 700,
+          color: "#fff", fontSize: 44, fontWeight: 700, fontFamily: "InterBold",
         },
       }, (name[0] || "?").toUpperCase());
 
   const nameRow = React.createElement(
     "div",
     { style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "nowrap" } },
-    React.createElement("div", { style: { fontSize: 42, fontWeight: 700, color: "#0f1419", display: "flex" } }, name),
+    React.createElement("div", { style: { fontSize: 42, fontWeight: 700, fontFamily: "InterBold", color: "#0f1419", display: "flex" } }, name),
     verified ? React.createElement("img", { src: VERIFIED_BADGE_SRC, width: 34, height: 34, style: { flexShrink: 0 } }) : null,
   );
   const handleEl = React.createElement("div", { style: { fontSize: 34, fontWeight: 400, color: "#536471", display: "flex", marginTop: 2 } }, `@${handle}`);

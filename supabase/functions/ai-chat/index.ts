@@ -1752,13 +1752,21 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
       case "GENERATE_TWEET_CARD": {
         console.log("[ai-chat] GENERATE_TWEET_CARD handler started");
 
-        // 1. Source content — typed text and/or a link (Phase 2: PDF/files)
+        // 1. Source content — one of: a dropped document (PDF/DOCX/TXT — the frontend
+        //    extracts its text client-side and wraps it in """...""" in the message),
+        //    a link (news/article via extractArticleContent), or plain typed text.
         const urlMatch = message.match(/https?:\/\/[^\s]+/);
-        let sourceContent = message;
-        if (urlMatch) {
+        const docMatch = message.match(/"""\s*([\s\S]*?)\s*"""/);
+        let sourceContent = "";
+        if (docMatch && docMatch[1].trim().length > 40) {
+          sourceContent = docMatch[1].trim(); // PDF/DOCX/TXT briefing
+        } else if (urlMatch) {
           const article = await extractArticleContent(urlMatch[0], "GENERATE_TWEET_CARD");
-          if (article) sourceContent = `Baseado neste conteúdo:\n${article.substring(0, 3000)}`;
+          sourceContent = article || message;
+        } else {
+          sourceContent = message;
         }
+        if (sourceContent.length > 3000) sourceContent = sourceContent.substring(0, 3000);
 
         // 2. Profile identity for the card (name / @handle / avatar)
         const { data: prof } = await svc.from("profiles")
