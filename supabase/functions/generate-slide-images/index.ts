@@ -23,7 +23,11 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
-const NO_UI_MOCKUP_RULE = `PROIBIDO ABSOLUTO — NUNCA gere screenshots, prints, mockups ou simulações de interface de rede social. Não mostre o app do Instagram, TikTok, Twitter, LinkedIn ou qualquer plataforma. Não inclua elementos de UI da plataforma: feed, header de perfil (foto + nome + seguidores), botão "Turbinar post", curtidas, comentários, barra de stories, notificações, frame de celular. A imagem gerada É o conteúdo visual final — a arte gráfica que vai ser publicada — não uma prévia de como ela ficaria dentro do app.`;
+const NO_UI_MOCKUP_RULE = `PROIBIDO ABSOLUTO — NUNCA gere screenshots, prints, mockups ou simulações de interface de rede social. Não mostre o app do Instagram, TikTok, Twitter, LinkedIn ou qualquer plataforma. Não inclua elementos de UI da plataforma: feed, header de perfil (foto + nome + seguidores), botão "Turbinar post", curtidas, comentários, barra de stories, notificações, frame de celular.
+
+PROIBIDO ABSOLUTO — NUNCA renderize a arte como um OBJETO FÍSICO 3D ou foto de produto: nada de livro, caderno, diário, agenda, revista, folha de papel, cartão impresso, pôster numa parede, moldura, quadro, embalagem, tablet ou celular. SEM perspectiva 3D, SEM lombada, SEM sombra de objeto, SEM cena de mesa/superfície ao redor.
+
+A imagem gerada É o conteúdo final — uma ARTE GRÁFICA CHAPADA (flat design), 2D, vista totalmente de frente. Ela DEVE preencher 100% do quadro (full-bleed): o fundo/arte sangra até TODAS as bordas, sem nenhuma margem de cor sólida, sem moldura e sem espaço vazio em volta. Não é uma prévia de como ficaria dentro de um app nem a foto de um objeto.`;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -181,7 +185,7 @@ serve(async (req) => {
     if (brandId) {
       const { data } = await supabase
         .from("brands")
-        .select("name, palette, fonts, visual_tone, do_rules, dont_rules, logo_url, visual_preferences")
+        .select("name, palette, fonts, visual_tone, do_rules, dont_rules, logo_url, visual_preferences, creation_mode")
         .eq("id", brandId)
         .single();
       brandInfo = data;
@@ -222,7 +226,12 @@ serve(async (req) => {
     let referenceExampleIds: string[] = [];
     let fallbackLevel = externalReferenceUrls?.length ? 1 : 0;
 
-    if (brandId && resolvedCategoryId) {
+    // from_scratch = gerar livre. NUNCA auto-anexar exemplos da marca como referência:
+    // o modelo faz OCR e copia texto embutido neles (ex.: CRM de um cartão) nas gerações.
+    // Referências explícitas vindas do ai-chat (externalReferenceUrls) ainda são respeitadas.
+    const allowBrandRefs = brandInfo?.creation_mode !== "from_scratch";
+
+    if (allowBrandRefs && brandId && resolvedCategoryId) {
       const { data: catExactTypeExamples } = await supabase
         .from("brand_examples")
         .select("id, image_url")
@@ -254,7 +263,7 @@ serve(async (req) => {
     }
 
     // When a specific template set is selected, never mix with brand-wide references.
-    if (brandId && referenceImageUrls.length === 0 && !strictTemplateCategoryLock) {
+    if (allowBrandRefs && brandId && referenceImageUrls.length === 0 && !strictTemplateCategoryLock) {
       const { data: brandExactTypeExamples } = await supabase
         .from("brand_examples")
         .select("id, image_url")
@@ -270,7 +279,7 @@ serve(async (req) => {
       }
     }
 
-    if (brandId && referenceImageUrls.length === 0 && !strictTemplateCategoryLock) {
+    if (allowBrandRefs && brandId && referenceImageUrls.length === 0 && !strictTemplateCategoryLock) {
       const { data: brandAnyTypeExamples } = await supabase
         .from("brand_examples")
         .select("id, image_url")

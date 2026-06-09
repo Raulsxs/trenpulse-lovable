@@ -138,7 +138,11 @@ const SAFE_AREA_RULES = `SAFE AREA — REGRA CRÍTICA (não pode ser violada):
 - Verifique mentalmente: a primeira e a última letra de cada linha de texto estão longe das bordas? Se não, recompor.`;
 
 // Prevents Gemini from generating UI screenshots instead of the actual design content
-const NO_UI_MOCKUP_RULE = `PROIBIDO ABSOLUTO — NUNCA gere screenshots, prints, mockups ou simulações de interface de rede social. Não mostre o app do Instagram, TikTok, Twitter, LinkedIn ou qualquer plataforma. Não inclua elementos de UI da plataforma: feed, header de perfil (foto + nome + seguidores), botão "Turbinar post", curtidas, comentários, barra de stories, notificações, frame de celular. A imagem gerada É o conteúdo — a arte gráfica que vai ser publicada — não uma prévia de como ela ficaria dentro do app.`;
+const NO_UI_MOCKUP_RULE = `PROIBIDO ABSOLUTO — NUNCA gere screenshots, prints, mockups ou simulações de interface de rede social. Não mostre o app do Instagram, TikTok, Twitter, LinkedIn ou qualquer plataforma. Não inclua elementos de UI da plataforma: feed, header de perfil (foto + nome + seguidores), botão "Turbinar post", curtidas, comentários, barra de stories, notificações, frame de celular.
+
+PROIBIDO ABSOLUTO — NUNCA renderize a arte como um OBJETO FÍSICO 3D ou foto de produto: nada de livro, caderno, diário, agenda, revista, folha de papel, cartão impresso, pôster numa parede, moldura, quadro, embalagem, tablet ou celular. SEM perspectiva 3D, SEM lombada, SEM sombra de objeto, SEM cena de mesa/superfície ao redor.
+
+A imagem gerada É o conteúdo final — uma ARTE GRÁFICA CHAPADA (flat design), 2D, vista totalmente de frente. Ela DEVE preencher 100% do quadro (full-bleed): o fundo/arte sangra até TODAS as bordas, sem nenhuma margem de cor sólida, sem moldura e sem espaço vazio em volta. Não é uma prévia de como ficaria dentro de um app nem a foto de um objeto.`;
 
 const INTENTS = [
   "GENERATE_TEMPLATE",
@@ -1011,6 +1015,11 @@ Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legen
                 .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "background").limit(6);
               if (bgPhotos?.length) photoBackgroundUrls = bgPhotos.map((r: any) => r.image_url);
               console.log(`[ai-chat] photo_backgrounds mode: ${photoBackgroundUrls.length} photos`);
+            } else if ((brand as any).creation_mode === "from_scratch") {
+              // from_scratch = gerar livre só a partir da identidade textual da marca.
+              // NUNCA anexar exemplos enviados como referência visual: o modelo faz OCR e
+              // copia o texto embutido neles (ex.: o CRM de um cartão) nas gerações novas.
+              console.log(`[ai-chat] from_scratch — pulando imagens de referência`);
             } else {
               const { data: refs } = await svc.from("brand_examples")
                 .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "reference").limit(6);
@@ -1435,6 +1444,11 @@ Responda APENAS em JSON:
                 .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "background").limit(6);
               if (bgPhotos?.length) photoBackgroundUrls = bgPhotos.map((r: any) => r.image_url);
               console.log(`[ai-chat] photo_backgrounds mode: ${photoBackgroundUrls.length} photos`);
+            } else if ((brand as any).creation_mode === "from_scratch") {
+              // from_scratch = gerar livre só a partir da identidade textual da marca.
+              // NUNCA anexar exemplos enviados como referência visual: o modelo faz OCR e
+              // copia o texto embutido neles (ex.: o CRM de um cartão) nas gerações novas.
+              console.log(`[ai-chat] from_scratch — pulando imagens de referência`);
             } else {
               const { data: refs } = await svc.from("brand_examples")
                 .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "reference").limit(6);
