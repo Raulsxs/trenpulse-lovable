@@ -699,9 +699,13 @@ function buildEditorialCardElement(
     ? slide.headline_tokens
     : String(slide.headline || "").split(/\s+/).filter(Boolean).map((t: string) => ({ t }));
 
-  // dimensiona a headline pelo total de caracteres (Satori não mede texto em runtime)
+  // dimensiona a headline pra caber no terço inferior (Satori não mede texto em runtime):
+  // leva em conta nº de caracteres E de palavras — mais palavras = mais linhas = fonte menor.
   const totalChars = tokens.reduce((s, t) => s + (t.t || "").length, 0);
-  const headFs = totalChars <= 40 ? 104 : totalChars <= 70 ? 88 : totalChars <= 100 ? 74 : 64;
+  const nWords = tokens.length;
+  const byChars = totalChars <= 28 ? 104 : totalChars <= 46 ? 86 : totalChars <= 68 ? 72 : totalChars <= 92 ? 62 : 52;
+  const byWords = nWords <= 4 ? 104 : nWords <= 6 ? 84 : nWords <= 8 ? 68 : nWords <= 10 ? 58 : 50;
+  const headFs = Math.min(byChars, byWords);
 
   const bgEl = bgDataUri
     ? React.createElement("img", { src: bgDataUri, width: w, height: h, style: { position: "absolute", top: 0, left: 0, width: w, height: h, objectFit: "cover" as any } })

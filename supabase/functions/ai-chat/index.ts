@@ -1993,7 +1993,7 @@ ${userCtx?.brand_voice ? `TOM: ${userCtx.brand_voice}` : ""}
 
 REGRAS:
 - 1º slide = CAPA: a headline é o GANCHO de curiosidade (reframe contrário, "o que ninguém te conta", custo escondido). Slides 2..N desenvolvem 1 ideia cada. Último = CTA (salvar/compartilhar).
-- Cada headline: CURTA (5-9 palavras), impactante.
+- Cada headline: CURTA e impactante, NO MÁXIMO 8 palavras (idealmente 5-7). Headline longa quebra o layout — seja conciso.
 - "headline_tokens": divida a headline em PALAVRAS, cada uma {"t":"PALAVRA"}. Marque 1-2 palavras-chave por slide com "hl":true (as que merecem cor de destaque).
 - "kicker": 1 palavra de seção (ex: SAÚDE, NEGÓCIOS). "badge": hashtag de marca curta.
 - "photo_prompt": uma FOTO cinematográfica/dramática fotorrealista que ilustra o slide, SEM TEXTO.
