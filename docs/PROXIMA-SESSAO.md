@@ -22,12 +22,11 @@
 
 **Novo insumo:** `docs/analise-telas-2026-06.md` — veredito tela a tela (spec × expectativa × realidade) das 22 rotas. Achados além da auditoria: Calendar está PRONTO (não só backend — drag-drop/reagendar/publicar funcionam); ContentPreview duplica o editor do ActionCard (convergir pós-Sprint 3); 3 fluxos de criação de marca (consolidar); BrandExamples/BrandPhotoBackgrounds moram em components/studio/ mas servem o BrandEdit do Maikon — MOVER antes de apagar Studio; /pricing aponta pra Asaas SANDBOX (cliente real cai em fluxo fantasma).
 
-## SPRINT 1 — Consertar o onboarding (maior impacto na ativação)
-*Bug: `Onboarding.tsx` Step 2 chama `generate-content` síncrono, sem timeout/streaming, e um mockup CSS já mostrou o post antes → 2min de espera inútil.*
-- [ ] Matar a geração síncrona do Step 2 (`src/pages/Onboarding.tsx:296`).
-- [ ] Encurtar o wizard pra 1 tela leve: nicho via ~6 chips (não 34), sem `@` Instagram antecipado.
-- [ ] Jogar o user no `ChatWindow` com **prompt pré-armado do nicho** (reusar `handleQuickAction`/`prefillText` `ChatWindow.tsx:893` + `NICHE_CONTENT_IDEAS`). Aha acontece no chat (editável), com o loader de mensagem que já existe + `AbortController` (timeout ~45s → fallback mockup).
-- [ ] Matar os 2 onboardings mortos: `OnboardingProvider`/`OnboardingOverlay` (tour 13 passos, UI antiga) e `SelfServeOnboarding`.
+## SPRINT 1 — Consertar o onboarding ✅ FEITO (2026-06-09)
+- [x] Geração síncrona morta — `Onboarding.tsx` reescrito: 1 tela, 6 chips de nicho (ICP saúde/coach) + "Outro", mockup CSS instantâneo, **zero chamadas de geração**.
+- [x] Prompt pré-armado: `navigate("/chat", { state: { prefill } })` → `ChatPage` lê o router state → `ChatWindow` aceita `initialPrefill` e preenche o input (editável; usuário dispara o envio).
+- [x] Onboardings mortos removidos: `OnboardingProvider`/`Overlay`/`Trigger` (já eram órfãos — nunca montados) + `SelfServeOnboarding` + `SelfServeLayout`. ⚠️ `HelpCenterModal`/`HelpTutorials` (mesma pasta) estão VIVOS (Sidebar) — preservados.
+- [ ] QA manual pendente: criar conta nova → ver chips → cair no chat com prompt preenchido.
 
 ## SPRINT 2 — Ligar o billing (a torneira de receita)
 - [ ] Plugar `chargeCredits` nos paths que não cobram: `GENERATE_TEMPLATE` + `EDIT_CONTENT` no `ai-chat`.

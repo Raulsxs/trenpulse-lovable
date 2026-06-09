@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import ChatWindow from "@/components/chat/ChatWindow";
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,8 @@ interface RecentContent {
 }
 
 export default function ChatPage() {
+  // Prompt pré-armado do onboarding (navigate("/chat", { state: { prefill } }))
+  const prefill = (useLocation().state as { prefill?: string } | null)?.prefill;
   const [sheetOpen, setSheetOpen] = useState(false);
   const [recentContents, setRecentContents] = useState<RecentContent[]>([]);
   const [scheduledDates, setScheduledDates] = useState<Date[]>([]);
@@ -137,7 +140,7 @@ export default function ChatPage() {
         </div>
 
         <div className="flex-1 min-h-0 overflow-hidden">
-          <ChatWindow />
+          <ChatWindow initialPrefill={prefill} />
         </div>
       </div>
     </DashboardLayout>

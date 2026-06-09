@@ -105,7 +105,7 @@ function getGreeting(): string {
   return "Olá! 👋 Como posso ajudar hoje?";
 }
 
-export default function ChatWindow() {
+export default function ChatWindow({ initialPrefill }: { initialPrefill?: string } = {}) {
   const navigate = useNavigate();
   const { requestPermission, notify } = useNotification();
   const [messages, setMessages] = useState<Message[]>([]);
@@ -123,6 +123,16 @@ export default function ChatWindow() {
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
   const [prefillText, setPrefillText] = useState("");
   const [prefillKey, setPrefillKey] = useState(0);
+
+  // Prompt pré-armado vindo do onboarding (router state): preenche o input uma vez,
+  // editável — o usuário dispara o envio, nunca a gente.
+  useEffect(() => {
+    if (initialPrefill) {
+      setPrefillText(initialPrefill);
+      setPrefillKey((k) => k + 1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialPrefill]);
   const { accountType } = useAccountType();
   const [customTemplates, setCustomTemplates] = useState<Array<{ id: string; emoji: string; label: string; template: string }>>([]);
   const scrollRef = useRef<HTMLDivElement>(null);
