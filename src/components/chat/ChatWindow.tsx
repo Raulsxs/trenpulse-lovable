@@ -933,7 +933,7 @@ export default function ChatWindow() {
           </div>
         </div>
       )}
-      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto px-4 py-6">
+      <div ref={scrollRef} onScroll={handleScroll} className="flex-1 min-h-0 overflow-y-auto overflow-x-hidden px-4 py-6">
         {/* Smart nudges — contextual tips for key features */}
         <div className="max-w-3xl mx-auto">
           <SmartNudge
@@ -1056,7 +1056,7 @@ export default function ChatWindow() {
             </button>
           ))}
           <button onClick={() => setBrandModalOpen(true)}
-            className="text-[11px] px-3 py-1.5 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150 whitespace-nowrap shrink-0">
+            className="text-xs px-3 py-1.5 rounded-lg border border-border/60 bg-background text-foreground/75 hover:text-foreground hover:bg-primary/5 hover:border-primary/40 transition-all duration-150 whitespace-nowrap shrink-0">
             🎨 Criar marca
           </button>
         </div>

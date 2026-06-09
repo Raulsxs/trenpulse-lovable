@@ -68,7 +68,7 @@ export default function ChatPage() {
     <DashboardLayout>
       <div className="h-full min-h-0 relative flex flex-col overflow-hidden bg-background">
         {/* Calendar button */}
-        <div className="flex justify-end items-center gap-2 px-3 pt-8 pb-2 shrink-0">
+        <div className="flex justify-end items-center gap-2 px-3 pt-4 pb-2 shrink-0">
           
           <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
             <SheetTrigger asChild>

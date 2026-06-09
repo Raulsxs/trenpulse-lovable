@@ -75,7 +75,7 @@ export default function ChatMessage({
     return (
       <div className="flex flex-col items-end mb-5 animate-in fade-in slide-in-from-right-3 duration-300">
         <div className="max-w-[75%] bg-primary text-primary-foreground rounded-2xl rounded-br-sm px-4 py-3 shadow-sm">
-          <p className="text-sm whitespace-pre-wrap leading-relaxed">{content}</p>
+          <p className="text-sm whitespace-pre-wrap break-words leading-relaxed">{content}</p>
         </div>
         {timestamp && <span className="text-[10px] text-muted-foreground/60 mt-1.5 mr-1 tabular-nums">{timestamp}</span>}
       </div>
@@ -110,7 +110,7 @@ export default function ChatMessage({
 
         {/* Message bubble */}
         <div
-          className={`rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm transition-colors ${
+          className={`rounded-2xl rounded-bl-sm px-4 py-3 shadow-sm transition-colors max-w-[88%] min-w-0 break-words ${
             isCronRecommendation
               ? "bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800"
               : isRetryable
@@ -126,7 +126,7 @@ export default function ChatMessage({
               <span className="text-xs text-muted-foreground ml-1 animate-pulse">digitando...</span>
             </div>
           ) : (
-            <div className="text-sm text-foreground prose prose-sm prose-neutral dark:prose-invert max-w-none leading-relaxed [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_strong]:text-foreground [&_a]:text-primary">
+            <div className="text-sm text-foreground prose prose-sm prose-neutral dark:prose-invert max-w-none break-words [&_p]:break-words [&_a]:break-all leading-relaxed [&_p]:my-1.5 [&_ul]:my-1.5 [&_ol]:my-1.5 [&_li]:my-0.5 [&_strong]:text-foreground [&_a]:text-primary">
               <ReactMarkdown>{content}</ReactMarkdown>
             </div>
           )}
