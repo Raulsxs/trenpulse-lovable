@@ -73,7 +73,7 @@
 - **Carrossel cinematográfico editorial** (nova feature, decidida 09/06 — ver `docs/formato-carrossel-editorial.md`):
   - Intent novo `GENERATE_EDITORIAL_CAROUSEL`; minimax estrutura headline **tokenizada** (palavra normal vs destaque) + photo_prompt "sem texto" + kicker + badge + paleta + @handle.
   - `generate-slide-images` gera **só a foto** (ou usa foto pessoal do brand/Maikon); `render-slide-image` compõe foto + scrim + moldura editorial + headline com palavras coloridas + pill + "1/N".
-  - **Decisão aberta do Raul:** o renderer do overlay — **Satori** (reconsiderado só p/ esse uso), `@napi-rs/canvas`, ou html-to-image headless.
+  - **Renderer DECIDIDO (09/06): Satori** (reaproveita a infra `og_edge` que o `render-slide-image` JÁ usa pro tweet card — provado no codebase). A rejeição passada do Satori foi por uso diferente (texto posicionado pelo modelo / imagem inteira); aqui o layout é flexbox determinístico com texto **sempre no terço inferior** sobre o scrim → não cai sobre o rosto. Embutir fonte Anton/Bebas com acentos pt-BR.
   - **Esforço G.** Forte pro nicho saúde (Maikon).
 - **Aba de conversas** (adiada): hoje "novo chat" é destrutivo (`localStorage tp_conversation_since`); a versão leve = conversas reabríveis + título automático (precisa migration `conversation_id`). Decisão: fazer só quando o resto estabilizar.
 - **Referral / indicação** (crescimento).
