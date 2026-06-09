@@ -20,6 +20,8 @@ create table if not exists public.credit_ledger (
   created_at timestamptz not null default now()
 );
 create index if not exists credit_ledger_user_idx on public.credit_ledger (user_id, created_at desc);
+-- Idempotência de compras: 1 pagamento Asaas só credita uma vez
+create unique index if not exists credit_ledger_payment_uniq on public.credit_ledger (payment_ref) where reason = 'purchase' and payment_ref is not null;
 
 -- Idempotência de webhooks de pagamento
 create table if not exists public.billing_events (

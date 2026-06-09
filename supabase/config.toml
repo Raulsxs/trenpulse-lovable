@@ -17,3 +17,7 @@ verify_jwt = false
 
 [functions.generate-slide-images]
 verify_jwt = false
+
+# Webhook do Asaas — não manda JWT do Supabase; autenticidade via header asaas-access-token.
+[functions.asaas-webhook]
+verify_jwt = false
