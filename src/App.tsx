@@ -43,8 +43,9 @@ import SelfServeOnboarding from "./pages/SelfServeOnboarding";
 
 const queryClient = new QueryClient();
 
-// Routing fork: white_glove (existentes / Maikon) vê todas as rotas atuais; self_serve vê placeholder
-// até a Fase 1 do refactor ficar pronta. Visitantes deslogados sempre veem rotas públicas.
+// white_glove é o PADRÃO ÚNICO em produção (decisão 2026-06-09). O self_serve/template-first foi
+// cortado de prod via SELF_SERVE_ENABLED=false; o código fica como backup (branch backup/self-serve).
+const SELF_SERVE_ENABLED = false;
 const RoutedApp = () => {
   const { accountType, loading, isAuthenticated } = useAccountType();
 
@@ -56,7 +57,7 @@ const RoutedApp = () => {
     );
   }
 
-  if (isAuthenticated && accountType === "self_serve") {
+  if (SELF_SERVE_ENABLED && isAuthenticated && accountType === "self_serve") {
     return (
       <Routes>
         <Route path="/" element={<Index />} />
