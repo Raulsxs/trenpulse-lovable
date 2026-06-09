@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useSubscription } from "@/hooks/useSubscription";
+import { useCredits } from "@/hooks/useCredits";
 import {
   TrendingUp,
   LayoutDashboard,
@@ -18,9 +18,11 @@ import {
   BarChart3,
   UserPlus,
   LayoutGrid,
+  Coins,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpCenterTrigger } from "@/components/onboarding/HelpCenterModal";
+import BuyCreditsModal from "@/components/billing/BuyCreditsModal";
 
 const SAVED_ACCOUNTS_KEY = "tp_saved_accounts";
 
@@ -58,7 +60,8 @@ const Sidebar = () => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  const { usage } = useSubscription();
+  const { balance, refresh: refreshCredits } = useCredits();
+  const [buyOpen, setBuyOpen] = useState(false);
 
   useEffect(() => {
     const saveSession = (session: { user: { id: string; email?: string; user_metadata?: { name?: string } }; access_token: string; refresh_token: string } | null) => {
@@ -283,61 +286,27 @@ const Sidebar = () => {
           })}
         </nav>
 
-        {/* Usage & Plan Banner */}
+        {/* Credits Banner */}
         <div className="p-4 pt-0">
           <div className="bg-sidebar-accent rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
-              <Sparkles className="w-5 h-5 text-sidebar-primary" />
-              <span className="text-sm font-semibold text-sidebar-foreground">
-                {usage?.plan_display_name || "Gratuito"}
-              </span>
+              <Coins className="w-5 h-5 text-sidebar-primary" />
+              <span className="text-sm font-semibold text-sidebar-foreground">Seus créditos</span>
             </div>
-            {(() => {
-              const used = usage?.generations_used ?? 0;
-              const limit = usage?.generations_limit ?? 5;
-              const remaining = Math.max(0, limit - used);
-              const isLow = remaining <= 2 && remaining > 0;
-              const isOver = usage?.is_over_limit;
-
-              return (
-                <>
-                  <p className="text-xs text-sidebar-foreground/60 mb-3">
-                    {isOver
-                      ? "Limite atingido — desbloqueie com Pro"
-                      : isLow
-                        ? `Resta${remaining === 1 ? "" : "m"} apenas ${remaining} geraç${remaining === 1 ? "ão" : "ões"}`
-                        : "Gere conteúdos com nossa IA avançada"}
-                  </p>
-                  <div className="h-2 bg-sidebar-border rounded-full overflow-hidden">
-                    <div
-                      className={cn(
-                        "h-full rounded-full transition-all",
-                        isOver ? "bg-destructive" : isLow ? "bg-amber-500" : "bg-sidebar-primary"
-                      )}
-                      style={{ width: `${usage?.usage_percentage ?? 0}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between mt-1">
-                    <p className={cn(
-                      "text-xs",
-                      isOver ? "text-destructive font-medium" : isLow ? "text-amber-600 dark:text-amber-400 font-medium" : "text-sidebar-foreground/50"
-                    )}>
-                      {isOver
-                        ? `${used}/${limit} — limite atingido`
-                        : `${remaining} de ${limit} restantes`}
-                    </p>
-                    <button
-                      onClick={() => navigate("/pricing")}
-                      className="text-xs text-sidebar-primary hover:underline font-medium"
-                    >
-                      {usage?.plan_name === "free" ? "Upgrade" : "Gerenciar"}
-                    </button>
-                  </div>
-                </>
-              );
-            })()}
+            <div className="flex items-baseline gap-1.5 mb-3">
+              <span className="text-2xl font-bold text-sidebar-foreground tabular-nums">
+                {balance ?? "—"}
+              </span>
+              <span className="text-xs text-sidebar-foreground/50">disponíveis</span>
+            </div>
+            <Button size="sm" onClick={() => setBuyOpen(true)} className="w-full gap-1.5">
+              <Sparkles className="w-3.5 h-3.5" />
+              Comprar créditos
+            </Button>
           </div>
         </div>
+
+        <BuyCreditsModal open={buyOpen} onClose={() => setBuyOpen(false)} onCredited={refreshCredits} />
       </div>
 
       {/* Footer */}
