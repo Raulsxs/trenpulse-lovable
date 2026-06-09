@@ -501,7 +501,7 @@ Mensagem: "${message}"`;
     // Tweet-card carousel — deterministic override. The AI classifier lumps "tweet card"
     // into GENERATE_TEMPLATE, which routed to the now-cancelled Blotato. Route it to our
     // own Satori renderer instead. Runs BEFORE the Blotato template detection below.
-    if (/tweet\s*-?\s*cards?|carross[eé]is?\s+de\s+tweets?|cards?\s+de\s+tweets?|estilo\s+(tweet|twitter|x)\b|thread\s+(de|em)\s+tweets?/i.test(message)) {
+    if (/tweet[\s-]*cards?|carross\S*\s+(de|com|estilo)\s+tweets?|cards?\s+de\s+tweets?|estilo\s+(tweet|twitter|x)\b|thread\s+(de|em|no)\s+(tweets?|x|twitter)/i.test(message)) {
       detectedIntent = "GENERATE_TWEET_CARD";
     }
 
@@ -1751,6 +1751,7 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
       // ════════════════════════════════════════════════════════════════════════
       case "GENERATE_TWEET_CARD": {
         console.log("[ai-chat] GENERATE_TWEET_CARD handler started");
+        const platform = requestPlatform || "instagram"; // tweet-card carousels publish as IG carousel
 
         // 1. Source content — one of: a dropped document (PDF/DOCX/TXT — the frontend
         //    extracts its text client-side and wraps it in """...""" in the message),
