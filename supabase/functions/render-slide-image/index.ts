@@ -574,6 +574,31 @@ async function loadTweetFonts(): Promise<
   ];
 }
 
+// Fontes do carrossel editorial: Anton (headline condensada bold) + Inter (moldura).
+async function loadEditorialFonts(): Promise<
+  { name: string; data: ArrayBuffer; weight: number; style: "normal" }[]
+> {
+  const antonUrls = [
+    "https://cdn.jsdelivr.net/npm/@fontsource/anton@5.0.8/files/anton-latin-400-normal.woff",
+    "https://cdn.jsdelivr.net/gh/google/fonts/ofl/anton/Anton-Regular.ttf",
+  ];
+  let anton: ArrayBuffer | null = null;
+  for (const u of antonUrls) {
+    try { anton = await loadFontData(u); break; } catch { /* tenta o próximo */ }
+  }
+  const [interReg, interBold] = await Promise.all([
+    loadFontData(FONT_CDN_MAP["Inter"].regular),
+    loadFontData(FONT_CDN_MAP["Inter"].bold),
+  ]);
+  const fonts: { name: string; data: ArrayBuffer; weight: number; style: "normal" }[] = [
+    { name: "Inter", data: interReg, weight: 400, style: "normal" },
+    { name: "InterBold", data: interBold, weight: 700, style: "normal" },
+  ];
+  // Anton primeiro (família "Anton"); se falhar, headline cai pra InterBold (sem crash).
+  if (anton) fonts.unshift({ name: "Anton", data: anton, weight: 400, style: "normal" });
+  return fonts;
+}
+
 // Char-count heuristic (Satori has no render-time text measurement) — short
 // tweets get the big "single tweet" type; long ones shrink to fit.
 function tweetFontSize(text: string): number {
@@ -655,6 +680,79 @@ function buildTweetCardElement(
   );
 }
 
+// Carrossel editorial cinematográfico: foto full-bleed + scrim + moldura de revista +
+// headline condensada caixa-alta com palavras-chave coloridas. Texto SEMPRE no terço inferior.
+function buildEditorialCardElement(
+  slide: any,
+  profile: { handle?: string },
+  idx: number,
+  total: number,
+  bgDataUri: string | null,
+  w: number,
+  h: number,
+) {
+  const handle = ("@" + String(profile.handle || slide.handle || "voce").replace(/^@+/, "")).toUpperCase();
+  const kicker = String(slide.kicker || "DESTAQUE").toUpperCase();
+  const badge = slide.badge ? String(slide.badge).toUpperCase() : "";
+  const hl = slide.highlight || "#19E5C5";
+  const tokens: { t: string; hl?: boolean }[] = Array.isArray(slide.headline_tokens) && slide.headline_tokens.length
+    ? slide.headline_tokens
+    : String(slide.headline || "").split(/\s+/).filter(Boolean).map((t: string) => ({ t }));
+
+  // dimensiona a headline pelo total de caracteres (Satori não mede texto em runtime)
+  const totalChars = tokens.reduce((s, t) => s + (t.t || "").length, 0);
+  const headFs = totalChars <= 40 ? 104 : totalChars <= 70 ? 88 : totalChars <= 100 ? 74 : 64;
+
+  const bgEl = bgDataUri
+    ? React.createElement("img", { src: bgDataUri, width: w, height: h, style: { position: "absolute", top: 0, left: 0, width: w, height: h, objectFit: "cover" as any } })
+    : React.createElement("div", { style: { position: "absolute", top: 0, left: 0, width: w, height: h, display: "flex", backgroundColor: "#14181d" } });
+
+  const scrim = React.createElement("div", {
+    style: {
+      position: "absolute", top: 0, left: 0, width: w, height: h, display: "flex",
+      backgroundImage: "linear-gradient(to top, rgba(0,0,0,0.90) 0%, rgba(0,0,0,0.55) 26%, rgba(0,0,0,0.0) 52%)",
+    },
+  });
+
+  // topo: handle (esq) + kicker/“1/N” (dir)
+  const topRow = React.createElement("div", {
+    style: { display: "flex", flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", width: "100%" },
+  },
+    React.createElement("div", { style: { display: "flex", fontFamily: "InterBold", fontSize: 26, color: "#ffffff", letterSpacing: 2 } }, handle),
+    React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end" } },
+      React.createElement("div", { style: { display: "flex", fontFamily: "InterBold", fontSize: 24, color: hl, letterSpacing: 3 } }, kicker),
+      total > 1 ? React.createElement("div", { style: { display: "flex", fontFamily: "Inter", fontSize: 24, color: "rgba(255,255,255,0.85)", marginTop: 6 } }, `${idx + 1}/${total}`) : null,
+    ),
+  );
+
+  // headline: linha que quebra, cada palavra um bloco (permite cor por palavra)
+  const headlineWords = tokens.map((tok, k) =>
+    React.createElement("div", {
+      key: k,
+      style: { display: "flex", fontFamily: "Anton", fontSize: headFs, lineHeight: 1.0, color: tok.hl ? hl : "#ffffff", marginRight: 18 },
+    }, (tok.t || "").toUpperCase()),
+  );
+  const headline = React.createElement("div", {
+    style: { display: "flex", flexDirection: "row", flexWrap: "wrap" as any, width: "100%", alignItems: "flex-end" },
+  }, ...headlineWords);
+
+  const pill = badge
+    ? React.createElement("div", {
+        style: { display: "flex", marginTop: 26, paddingLeft: 22, paddingRight: 22, paddingTop: 10, paddingBottom: 10, borderRadius: 999, backgroundColor: hl, fontFamily: "InterBold", fontSize: 22, color: "#0a0a0a", letterSpacing: 1, alignSelf: "flex-start" },
+      }, badge)
+    : null;
+
+  const bottom = React.createElement("div", { style: { display: "flex", flexDirection: "column", width: "100%" } }, headline, pill);
+
+  const content = React.createElement("div", {
+    style: { position: "absolute", top: 0, left: 0, width: w, height: h, display: "flex", flexDirection: "column", justifyContent: "space-between", padding: 64 },
+  }, topRow, bottom);
+
+  return React.createElement("div", {
+    style: { display: "flex", position: "relative", width: w, height: h, backgroundColor: "#000000" },
+  }, bgEl, scrim, content);
+}
+
 // ── Handler ─────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -664,12 +762,13 @@ Deno.serve(async (req) => {
   try {
     const { slides, brand_snapshot, content_id, dimensions, slide_offset, platform, content_type, visual_style, tweet_profile } = await req.json();
     const isTweetCard = visual_style === "tweet_card";
+    const isEditorial = visual_style === "editorial_card";
     const maxW = visual_style === "photo_overlay" ? 1440 : 1200;
     const maxH = visual_style === "photo_overlay" ? 2160 : 1920;
     // Tweet cards are fixed 1080×1080 (square) — the app treats carousels as square, so a
     // 4:5 card gets cropped (object-cover) in the ActionCard/preview/editor. Square fits cleanly.
-    const w = isTweetCard ? 1080 : Math.min(Math.max(Number(dimensions?.width) || 1080, 720), maxW);
-    const h = isTweetCard ? 1080 : Math.min(Math.max(Number(dimensions?.height) || 1080, 627), maxH);
+    const w = isTweetCard || isEditorial ? 1080 : Math.min(Math.max(Number(dimensions?.width) || 1080, 720), maxW);
+    const h = isTweetCard ? 1080 : isEditorial ? 1350 : Math.min(Math.max(Number(dimensions?.height) || 1080, 627), maxH);
     const isLinkedInDocument = platform === "linkedin" && content_type === "document";
     const isPhotoOverlay = visual_style === "photo_overlay";
     const offset = Number(slide_offset) || 0;
@@ -689,7 +788,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const fonts = isTweetCard ? await loadTweetFonts() : await loadBrandFonts(brand_snapshot);
+    const fonts = isTweetCard ? await loadTweetFonts() : isEditorial ? await loadEditorialFonts() : await loadBrandFonts(brand_snapshot);
 
     // Tweet cards: pre-fetch the avatar ONCE (reused on every slide; remote <img>
     // in Satori is flaky). Falls back to an initials circle if the fetch fails.
@@ -712,6 +811,11 @@ Deno.serve(async (req) => {
       if (isTweetCard) {
         const tweetText = slide.text || slide.body || slide.headline || "";
         element = buildTweetCardElement(tweetText, tweet_profile || {}, offset + i, totalSlides, avatarDataUri, w, h);
+      } else if (isEditorial) {
+        const bgSrc = slide.background_image_url || slide.image_url || slide.previewImage;
+        let bgData: string | null = null;
+        try { if (bgSrc) bgData = await toDataUri(bgSrc); } catch (e) { console.warn(`[render-slide-image] editorial bg fetch failed: ${(e as Error).message}`); }
+        element = buildEditorialCardElement(slide, tweet_profile || {}, offset + i, totalSlides, bgData, w, h);
       } else {
         const bgSrc = slide.background_image_url || slide.image_url || slide.previewImage;
         element = buildSlideElement(slide, w, h, bgSrc, brand_snapshot, isLinkedInDocument, isPhotoOverlay);
