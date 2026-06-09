@@ -1822,29 +1822,34 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
           break;
         }
 
-        // 4. Render each tweet as a card (Satori, visual_style=tweet_card)
+        // 4. Render each tweet as a card (Satori, visual_style=tweet_card). Retry once:
+        //    render-slide-image can fail/time-out on a cold start (WASM init for satori/resvg)
+        //    on the first hit after a deploy — a second attempt finds it warm.
         let cardUrls: string[] = [];
-        try {
-          const draftId = crypto.randomUUID();
-          const renderResp = await fetch(`${supabaseUrl}/functions/v1/render-slide-image`, {
-            method: "POST",
-            headers: internalHeaders,
-            body: JSON.stringify({
-              slides: tweets.map((t) => ({ text: t })),
-              content_id: draftId,
-              visual_style: "tweet_card",
-              tweet_profile: tweetProfile,
-            }),
-          });
-          if (renderResp.ok) {
-            const rd = await renderResp.json();
-            cardUrls = rd.composite_urls || [];
-          } else {
-            const errText = await renderResp.text().catch(() => "");
-            console.error("[ai-chat] GENERATE_TWEET_CARD: render failed:", renderResp.status, errText.substring(0, 200));
+        for (let attempt = 0; attempt < 2 && cardUrls.length === 0; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
+          try {
+            const draftId = crypto.randomUUID();
+            const renderResp = await fetch(`${supabaseUrl}/functions/v1/render-slide-image`, {
+              method: "POST",
+              headers: internalHeaders,
+              body: JSON.stringify({
+                slides: tweets.map((t) => ({ text: t })),
+                content_id: draftId,
+                visual_style: "tweet_card",
+                tweet_profile: tweetProfile,
+              }),
+            });
+            if (renderResp.ok) {
+              const rd = await renderResp.json();
+              cardUrls = rd.composite_urls || [];
+            } else {
+              const errText = await renderResp.text().catch(() => "");
+              console.error(`[ai-chat] GENERATE_TWEET_CARD: render failed (attempt ${attempt + 1}):`, renderResp.status, errText.substring(0, 300));
+            }
+          } catch (e: any) {
+            console.error(`[ai-chat] GENERATE_TWEET_CARD: render error (attempt ${attempt + 1}):`, e?.message);
           }
-        } catch (e: any) {
-          console.error("[ai-chat] GENERATE_TWEET_CARD: render error:", e?.message);
         }
         if (cardUrls.length === 0) {
           replyOverride = "Montei a thread, mas os cards não renderizaram. Tenta de novo.";
