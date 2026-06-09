@@ -624,7 +624,7 @@ function buildTweetCardElement(
   const body = React.createElement("div", {
     style: {
       display: "flex", marginTop: 40, fontSize, fontWeight: 400, color: "#0f1419",
-      lineHeight: 1.42, whiteSpace: "pre-wrap" as any, wordBreak: "break-word" as any, flexGrow: 1,
+      lineHeight: 1.42, whiteSpace: "pre-wrap" as any, wordBreak: "normal" as any, flexGrow: 1,
     },
   }, text);
 
