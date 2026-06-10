@@ -28,14 +28,12 @@
 - [x] Onboardings mortos removidos: `OnboardingProvider`/`Overlay`/`Trigger` (já eram órfãos — nunca montados) + `SelfServeOnboarding` + `SelfServeLayout`. ⚠️ `HelpCenterModal`/`HelpTutorials` (mesma pasta) estão VIVOS (Sidebar) — preservados.
 - [ ] QA manual pendente: criar conta nova → ver chips → cair no chat com prompt preenchido.
 
-## SPRINT 2 — Ligar o billing (a torneira de receita)
-- [ ] Plugar `chargeCredits` nos paths que não cobram: `GENERATE_TEMPLATE` + `EDIT_CONTENT` no `ai-chat`. (EDIT_CONTENT é o mais grave: "Refazer/Ajustar" regenera imagem — custo real $0.024-0.15 — de graça e em loop.)
-- [ ] Adicionar **pre-check de saldo** nos cases de geração (gated por `CREDITS_ENFORCED`, default off).
-- [ ] **Backfill** de créditos pros usuários existentes (9 perfis, só 1 com créditos hoje). ⚠️ Não duplicar o grant de quem já ganhou os 50cr do trigger de boas-vindas — checar `credit_ledger` antes.
-- [ ] Reescrever **landing/pricing pra créditos**: `PricingSection.tsx` (landing) + `Pricing.tsx`/`PricingCards.tsx` (app). 🔴 URGÊNCIA (achado da análise de telas): `/pricing` chama `manage-subscription` apontando pro Asaas **SANDBOX** — cliente real que tentar pagar hoje cai num fluxo fantasma. Mitigação rápida: `/pricing` redirecionar pro modal "Comprar créditos" que já existe na sidebar.
-- [ ] Padronizar "**9 redes**" na landing (hoje diz "Instagram & LinkedIn" em 4 lugares).
-- [ ] Consertar empty state de `/contents`: CTA aponta pro `/dashboard` (Tendências) — deve apontar pro `/chat`.
-- [ ] Remover import morto de `useSubscription` em `Profile.tsx:10`.
+## SPRINT 2 — Ligar o billing ✅ CÓDIGO PRONTO (2026-06-09, commit 10e670d, ai-chat deployado)
+- [x] `chargeCredits` plugado: `GENERATE_TEMPLATE` (ação nova `template`, 4cr) + `EDIT_CONTENT` (post/story por formato).
+- [x] **Pre-check de saldo** (`insufficientCredits`) em TODOS os cases de geração — gated por `CREDITS_ENFORCED` (off = só loga).
+- [x] **Pricing → créditos**: `Pricing.tsx` reescrito (logado abre `BuyCreditsModal` PIX; o fluxo sandbox `manage-subscription` morreu) + `PricingSection` da landing com packs/tradução em resultado.
+- [x] "9 redes" padronizado (3 lugares) + empty state `/contents` → chat. (`useSubscription` no Profile já não existia.)
+- [ ] **SQL em prod (Raul roda — classifier bloqueia agente):** (a) linha `template` na credit_pricing; (b) backfill 50cr pros perfis sem ledger. SQL pronto no chat da sessão 2026-06-09.
 - [ ] Trocar `ASAAS_PROD_KEY` pela key permanente do Raul.
 - [ ] Ligar `CREDITS_ENFORCED=true` **só no lançamento** (decisão do Raul).
 
