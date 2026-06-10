@@ -275,6 +275,20 @@ async function chargeCredits(svc: any, userId: string, action: string, count: nu
   if (error) console.warn(`[ai-chat] chargeCredits ${action} x${count} (${cost}cr) skipped: ${error.message}`);
   else console.log(`[ai-chat] charged ${cost}cr (${action} x${count}) from ${userId}`);
 }
+// Pre-check de saldo ANTES de gastar com o provider. Com CREDITS_ENFORCED=false (default)
+// só loga e deixa passar (best-effort atual); ligar a flag no lançamento ativa o bloqueio.
+async function insufficientCredits(svc: any, userId: string, action: string, count = 1): Promise<string | null> {
+  const cost = await creditCost(svc, action, count);
+  if (cost <= 0 || !userId) return null;
+  const balance = await getCreditBalance(svc, userId);
+  if (balance >= cost) return null;
+  if (!CREDITS_ENFORCED) {
+    console.log(`[ai-chat] saldo insuficiente (${balance} < ${cost}cr, ${action} x${count}) — enforcement OFF, geração segue`);
+    return null;
+  }
+  console.log(`[ai-chat] BLOQUEADO por saldo: ${balance} < ${cost}cr (${action} x${count})`);
+  return `Seus créditos acabaram! 😕 Essa ação custa ${cost} créditos e você tem ${balance}. Clique em **Comprar créditos** na barra lateral pra recarregar e continuar criando.`;
+}
 
 serve(async (req) => {
   // CORS preflight
@@ -599,6 +613,11 @@ Mensagem: "${message}"`;
         }
 
         console.log(`[ai-chat] GENERATE_TEMPLATE: template=${templateMatch.templateKey}, type=${templateMatch.templateType}`);
+
+        {
+          const denyMsg = await insufficientCredits(svc, userId, "template");
+          if (denyMsg) { replyOverride = denyMsg; break; }
+        }
 
         // 1. Load user profile for author info
         const { data: userProfile } = await svc.from("profiles")
@@ -995,6 +1014,7 @@ Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legen
               .update(updatePayload)
               .eq("id", savedTemplateContentId);
           }
+          await chargeCredits(svc, userId, "template", 1, savedTemplateContentId);
         }
 
         replyOverride = isVideo
@@ -1026,6 +1046,11 @@ Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legen
         // For "frase" requests, extract just the phrase text as the headline
         const slideHeadline = contentStyle === "quote" ? extractPhrase(message) : message.substring(0, 100);
         console.log(`[ai-chat] GENERATE: platform=${platform}, format=${format}, contentStyle=${contentStyle || "news"}, headline="${slideHeadline}"`);
+
+        {
+          const denyMsg = await insufficientCredits(svc, userId, format === "story" ? "story" : "post");
+          if (denyMsg) { replyOverride = denyMsg; break; }
+        }
 
         // 2. Load brand if brandId provided
         let brandContext = "";
@@ -1460,6 +1485,11 @@ Responda APENAS em JSON:
         const slideCount = generationParams?.slideCount || 5;
         console.log(`[ai-chat] GENERATE_CAROUSEL: platform=${platform}, format=${format}, effectiveSlideFormat=${effectiveSlideFormat}, isStoryCarousel=${isStoryCarousel}, slides=${slideCount}`);
 
+        {
+          const denyMsg = await insufficientCredits(svc, userId, "carousel_slide", slideCount);
+          if (denyMsg) { replyOverride = denyMsg; break; }
+        }
+
         // 2. Load brand if brandId provided
         let brandContext = "";
         let brandSnapshot: Record<string, any> | null = null;
@@ -1813,6 +1843,11 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
         console.log("[ai-chat] GENERATE_TWEET_CARD handler started");
         const platform = requestPlatform || "instagram"; // tweet-card carousels publish as IG carousel
 
+        {
+          const denyMsg = await insufficientCredits(svc, userId, "tweet_card");
+          if (denyMsg) { replyOverride = denyMsg; break; }
+        }
+
         // 1. Source content — one of: a dropped document (PDF/DOCX/TXT — the frontend
         //    extracts its text client-side and wraps it in """...""" in the message),
         //    a link (news/article via extractArticleContent), or plain typed text.
@@ -1970,6 +2005,12 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
         console.log("[ai-chat] GENERATE_EDITORIAL_CAROUSEL handler started");
         const platform = requestPlatform || "instagram";
 
+        {
+          // Pre-check com o mínimo do formato (4 slides); a cobrança real é por slide gerado.
+          const denyMsg = await insufficientCredits(svc, userId, "carousel_slide", 4);
+          if (denyMsg) { replyOverride = denyMsg; break; }
+        }
+
         // 1. Fonte (texto digitado / link / documento)
         const urlMatch = message.match(/https?:\/\/[^\s]+/);
         const docMatch = message.match(/"""\s*([\s\S]*?)\s*"""/);
@@ -2099,6 +2140,11 @@ Responda APENAS em JSON:
       case "FREE_IMAGE": {
         console.log("[ai-chat] FREE_IMAGE handler started");
         const platform = requestPlatform || "instagram";
+
+        {
+          const denyMsg = await insufficientCredits(svc, userId, "free_image");
+          if (denyMsg) { replyOverride = denyMsg; break; }
+        }
         // Tira o comando ("gere uma imagem de...") e deixa só o assunto pro modelo.
         const subject = (message || "")
           .replace(/^\s*(ger[ae]|gera|crie|cria|fa[çc]a|desenh[ae]|ilustre|me\s+d[êe]|quero|gostaria\s+de)\s+(uma?\s+)?(imagem|foto(grafia)?|ilustra[çc][ãa]o|arte|desenho|logo(tipo)?|figura|render)\s*(de|do|da|com|sobre|pra|para|que|:)?\s*/i, "")
@@ -2193,6 +2239,13 @@ Responda APENAS em JSON:
         const existingPlatform = generationParams?.newPlatform || existing.platform || "instagram";
         const existingFormat = generationParams?.newContentType || existing.content_type || "post";
         const isAdapting = !!(generationParams?.newPlatform || generationParams?.newContentType);
+
+        // Edição regenera 1 imagem (custo real de provider) — cobra como post/story.
+        const editAction = existingFormat === "story" ? "story" : "post";
+        {
+          const denyMsg = await insufficientCredits(svc, userId, editAction);
+          if (denyMsg) { replyOverride = denyMsg; break; }
+        }
 
         // Load brand context for edit prompt
         let editBrandContext = "";
@@ -2309,6 +2362,7 @@ ${SAFE_AREA_RULES}`;
             updatePayload.content_type = existingFormat;
           }
           await svc.from("generated_contents").update(updatePayload).eq("id", targetId);
+          await chargeCredits(svc, userId, editAction, 1, targetId);
 
           replyOverride = isAdapting
             ? `Conteúdo adaptado para ${platformLabel} ${existingFormat}! Confira o resultado.`

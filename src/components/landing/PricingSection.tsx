@@ -1,58 +1,57 @@
 import { motion } from "framer-motion";
-import { Check, ArrowRight } from "lucide-react";
+import { Check, ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 
-const PLANS = [
+// Espelha os PACKS da edge function create-credit-charge (e do BuyCreditsModal).
+// Tradução crédito→resultado usa credit_pricing: post 4cr, carrossel 4cr/slide, story 6cr.
+const PACKS = [
   {
-    name: "Free",
-    price: "0",
-    period: "",
-    description: "Para experimentar",
+    name: "Inicial",
+    price: "50",
+    credits: 500,
+    description: "Pra começar a publicar",
     features: [
-      "5 gerações por mês",
-      "1 marca",
-      "Post, carrossel e story",
-      "Download de imagens",
+      "≈ 125 posts com imagem",
+      "ou ≈ 25 carrosséis completos",
+      "Todos os formatos liberados",
+      "Publicação e agendamento em 9 redes",
     ],
-    cta: "Começar Grátis",
+    cta: "Comprar créditos",
     variant: "outline" as const,
     popular: false,
   },
   {
-    name: "Pro",
-    price: "147",
-    period: "/mês",
-    description: "Para criadores ativos",
+    name: "Popular",
+    price: "100",
+    credits: 1050,
+    bonus: "+5% de bônus",
+    description: "Mais de 8 meses de post diário",
     features: [
-      "100 gerações por mês",
-      "5 marcas",
-      "Todos os formatos",
-      "Publicação direta",
-      "Agendamento",
-      "Imagens premium (IA avançada)",
+      "≈ 260 posts com imagem",
+      "ou ≈ 52 carrosséis completos",
+      "Todos os formatos liberados",
+      "Publicação e agendamento em 9 redes",
       "Legendas bilíngues",
     ],
-    cta: "Assinar Pro",
+    cta: "Comprar créditos",
     variant: "default" as const,
     popular: true,
   },
   {
-    name: "Business",
-    price: "297",
-    period: "/mês",
-    description: "Para agências e equipes",
+    name: "Pro",
+    price: "200",
+    credits: 2200,
+    bonus: "+10% de bônus",
+    description: "1 ano e meio de post diário",
     features: [
-      "Gerações ilimitadas",
-      "10 marcas",
-      "Todos os formatos",
-      "Publicação direta",
-      "Agendamento",
-      "Imagens premium",
-      "Analytics avançado",
-      "Suporte prioritário",
+      "≈ 550 posts com imagem",
+      "ou ≈ 110 carrosséis completos",
+      "Todos os formatos liberados",
+      "Publicação e agendamento em 9 redes",
+      "Legendas bilíngues",
     ],
-    cta: "Assinar Business",
+    cta: "Comprar créditos",
     variant: "outline" as const,
     popular: false,
   },
@@ -62,60 +61,68 @@ export function PricingSection() {
   const navigate = useNavigate();
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-5xl mx-auto">
-      {PLANS.map((plan, i) => (
-        <motion.div
-          key={plan.name}
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.4, delay: i * 0.1 }}
-          className={`relative ${plan.popular ? "md:-mt-4 md:mb-4" : ""}`}
-        >
-          {plan.popular && (
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-medium px-3 py-1 rounded-full z-10">
-              Mais popular
-            </div>
-          )}
-          <div
-            className={`bg-card rounded-xl p-6 h-full flex flex-col border ${
-              plan.popular
-                ? "border-primary shadow-lg"
-                : "border-border/60 shadow-sm"
-            }`}
+    <div className="max-w-5xl mx-auto">
+      <div className="text-center mb-8">
+        <p className="inline-flex items-center gap-2 text-sm font-medium text-primary bg-primary/10 px-4 py-2 rounded-full">
+          <Sparkles className="w-4 h-4" />
+          Crie a conta e ganhe 50 créditos grátis — sem cartão
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {PACKS.map((pack, i) => (
+          <motion.div
+            key={pack.name}
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.4, delay: i * 0.1 }}
+            className={`relative ${pack.popular ? "md:-mt-4 md:mb-4" : ""}`}
           >
-            <div className="mb-4">
-              <h3 className="font-heading font-semibold text-lg text-foreground">{plan.name}</h3>
-              <p className="text-xs text-muted-foreground">{plan.description}</p>
-            </div>
-
-            <div className="mb-6">
-              <span className="text-4xl font-heading font-bold text-foreground">
-                R${plan.price}
-              </span>
-              <span className="text-muted-foreground text-sm">{plan.period}</span>
-            </div>
-
-            <ul className="space-y-2.5 mb-8 flex-1">
-              {plan.features.map((feature) => (
-                <li key={feature} className="flex items-start gap-2 text-sm">
-                  <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
-                  <span className="text-foreground">{feature}</span>
-                </li>
-              ))}
-            </ul>
-
-            <Button
-              variant={plan.variant}
-              className={`w-full gap-2 ${plan.popular ? "" : ""}`}
-              onClick={() => navigate("/auth")}
+            {pack.popular && (
+              <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-primary-foreground text-xs font-medium px-3 py-1 rounded-full z-10">
+                Mais popular
+              </div>
+            )}
+            <div
+              className={`bg-card rounded-xl p-6 h-full flex flex-col border ${
+                pack.popular ? "border-primary shadow-lg" : "border-border/60 shadow-sm"
+              }`}
             >
-              {plan.cta}
-              <ArrowRight className="w-4 h-4" />
-            </Button>
-          </div>
-        </motion.div>
-      ))}
+              <div className="mb-4">
+                <h3 className="font-heading font-semibold text-lg text-foreground">{pack.name}</h3>
+                <p className="text-xs text-muted-foreground">{pack.description}</p>
+              </div>
+
+              <div className="mb-1">
+                <span className="text-4xl font-heading font-bold text-foreground">R${pack.price}</span>
+              </div>
+              <p className="text-sm text-muted-foreground mb-6">
+                {pack.credits.toLocaleString("pt-BR")} créditos
+                {pack.bonus && <span className="text-primary font-medium"> · {pack.bonus}</span>}
+              </p>
+
+              <ul className="space-y-2.5 mb-8 flex-1">
+                {pack.features.map((feature) => (
+                  <li key={feature} className="flex items-start gap-2 text-sm">
+                    <Check className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+                    <span className="text-foreground">{feature}</span>
+                  </li>
+                ))}
+              </ul>
+
+              <Button variant={pack.variant} className="w-full gap-2" onClick={() => navigate("/auth")}>
+                {pack.cta}
+                <ArrowRight className="w-4 h-4" />
+              </Button>
+            </div>
+          </motion.div>
+        ))}
+      </div>
+
+      <p className="text-center text-sm text-muted-foreground mt-8">
+        Sem mensalidade. Seus créditos <strong className="text-foreground">não expiram</strong> — pague só pelo que criar. PIX na hora.
+      </p>
     </div>
   );
 }

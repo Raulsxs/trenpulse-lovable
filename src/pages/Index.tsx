@@ -153,7 +153,7 @@ const Index = () => {
         <div className="container mx-auto px-6">
           <div className="flex flex-wrap items-center justify-center gap-8 md:gap-16 text-center">
             <Stat value="Posts, Carrosséis, Stories" label="Todos os formatos" />
-            <Stat value="Instagram & LinkedIn" label="Publicação direta" />
+            <Stat value="9 redes sociais" label="Publicação direta" />
             <Stat value="< 30s" label="Tempo de geração" />
             <Stat value="Sua marca" label="Identidade visual preservada" />
           </div>
@@ -224,8 +224,8 @@ const Index = () => {
       <section id="precos" className="py-20 px-6 bg-muted/20">
         <div className="container mx-auto">
           <SectionHeader
-            title="Planos simples, sem surpresa"
-            subtitle="Comece grátis. Escale quando precisar."
+            title="Sem mensalidade, sem surpresa"
+            subtitle="Créditos que não expiram. Comece com 50 grátis."
           />
           <PricingSection />
         </div>

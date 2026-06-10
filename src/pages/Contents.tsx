@@ -258,14 +258,14 @@ const Contents = () => {
               <p className="text-muted-foreground text-sm text-center max-w-sm">
                 {searchQuery
                   ? "Tente buscar com outros termos"
-                  : "Vá ao Dashboard e gere seu primeiro conteúdo a partir de uma tendência"}
+                  : "Abra o chat e descreva o que você quer — a IA gera seu primeiro conteúdo em segundos"}
               </p>
               {!searchQuery && (
                 <Button
                   className="mt-4"
-                  onClick={() => navigate("/dashboard")}
+                  onClick={() => navigate("/chat")}
                 >
-                  Ir para o Dashboard
+                  Criar no chat
                 </Button>
               )}
             </CardContent>

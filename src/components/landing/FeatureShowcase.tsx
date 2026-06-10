@@ -29,7 +29,7 @@ const FEATURES = [
   {
     icon: Share2,
     title: "Publicação Direta",
-    description: "Publique no Instagram e LinkedIn com um clique. Sem baixar, sem complicação.",
+    description: "Publique em 9 redes com um clique: Instagram, LinkedIn, TikTok, X e mais. Sem baixar, sem complicação.",
     color: "bg-pink-500/10 text-pink-500",
   },
   {

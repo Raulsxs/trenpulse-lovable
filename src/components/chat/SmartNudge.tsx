@@ -30,7 +30,7 @@ const NUDGES: NudgeConfig[] = [
     id: "connect-social",
     icon: <Link2 className="w-5 h-5 text-blue-500" />,
     title: "Conecte suas redes para publicar direto",
-    description: "Com Instagram e LinkedIn conectados, você agenda e publica direto pelo TrendPulse sem sair da plataforma.",
+    description: "Com suas redes conectadas (Instagram, LinkedIn, TikTok e mais), você agenda e publica direto pelo TrendPulse sem sair da plataforma.",
     cta: "Conectar em Meu Perfil",
     action: "navigate",
     href: "/profile",

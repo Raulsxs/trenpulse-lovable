@@ -1,20 +1,47 @@
 /**
- * Pricing page — shows subscription plans.
- * Accessible both as public page (/pricing) and from within the app.
+ * Pricing — créditos prepagos (sem assinatura).
+ * Logado: abre o BuyCreditsModal (PIX via create-credit-charge/Asaas).
+ * Deslogado: mostra os packs e manda pro signup (50cr grátis na conta nova).
+ * (Substitui o fluxo de assinatura manage-subscription, que apontava pro Asaas sandbox.)
  */
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/layout/DashboardLayout";
-import PricingCards from "@/components/billing/PricingCards";
-import CpfCnpjModal from "@/components/billing/CpfCnpjModal";
-import { useSubscription } from "@/hooks/useSubscription";
+import BuyCreditsModal from "@/components/billing/BuyCreditsModal";
+import { PricingSection } from "@/components/landing/PricingSection";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "sonner";
+import { Sparkles } from "lucide-react";
+
+// O que cada ação custa (espelha a tabela credit_pricing)
+const COSTS = [
+  { label: "Post com imagem", credits: 4 },
+  { label: "Carrossel (por slide)", credits: 4 },
+  { label: "Story 9:16", credits: 6 },
+  { label: "Carrossel de tweet card", credits: 2 },
+  { label: "Imagem livre", credits: 4 },
+];
+
+function CostsTable() {
+  return (
+    <div className="max-w-md mx-auto bg-muted/40 rounded-xl p-5">
+      <p className="text-sm font-semibold text-foreground mb-3">Quanto custa cada criação</p>
+      <ul className="space-y-2">
+        {COSTS.map((c) => (
+          <li key={c.label} className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">{c.label}</span>
+            <span className="font-medium text-foreground">{c.credits} créditos</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
 
 export default function Pricing() {
   const navigate = useNavigate();
-  const { usage, loading } = useSubscription();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [buyOpen, setBuyOpen] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -22,156 +49,55 @@ export default function Pricing() {
     });
   }, []);
 
-  const [subscribing, setSubscribing] = useState(false);
-  const [showCpfModal, setShowCpfModal] = useState(false);
-  const pendingPlanRef = useRef<string | null>(null);
-
-  const handleSelectPlan = (planName: string) => {
-    if (!isAuthenticated) {
-      navigate("/auth");
-      return;
-    }
-
-    if (planName === "free") {
-      toast.info("Você já está no plano gratuito!");
-      return;
-    }
-
-    pendingPlanRef.current = planName;
-    setShowCpfModal(true);
-  };
-
-  const handleCpfConfirm = async (cpfCnpj: string) => {
-    const planName = pendingPlanRef.current;
-    if (!planName) return;
-
-    setSubscribing(true);
-    try {
-      const { data: session } = await supabase.auth.getSession();
-      if (!session.session) throw new Error("Não autenticado");
-
-      const user = session.session.user;
-      const userId = user.id;
-
-      // Step 1: Create Asaas customer with CPF/CNPJ
-      const { data: customerData, error: custErr } = await supabase.functions.invoke("manage-subscription", {
-        body: {
-          action: "create-customer",
-          user_id: userId,
-          name: user.user_metadata?.full_name || user.email?.split("@")[0] || "Cliente",
-          email: user.email,
-          cpf_cnpj: cpfCnpj,
-        },
-      });
-
-      if (custErr) throw new Error(custErr.message || "Erro ao criar cliente");
-      const customerId = customerData.customer_id;
-
-      // Step 2: Create subscription
-      const { data: subData, error: subErr } = await supabase.functions.invoke("manage-subscription", {
-        body: {
-          action: "create-subscription",
-          user_id: userId,
-          plan_name: planName,
-          customer_id: customerId,
-          billing_type: "UNDEFINED",
-        },
-      });
-
-      if (subErr) throw new Error(subErr.message || "Erro ao criar assinatura");
-
-      setShowCpfModal(false);
-
-      if (subData.payment_link) {
-        toast.success(`Assinatura ${subData.plan} criada!`, {
-          description: "Redirecionando para pagamento...",
-        });
-        window.open(subData.payment_link, "_blank");
-      } else {
-        toast.success(`Assinatura ${subData.plan} criada!`);
-      }
-    } catch (err: any) {
-      console.error("[Pricing] Subscription error:", err);
-      toast.error("Erro ao processar assinatura", {
-        description: err.message || "Tente novamente.",
-      });
-    } finally {
-      setSubscribing(false);
-    }
-  };
-
-  // If user is authenticated, show inside dashboard layout
+  // Logado: header + botão que abre o modal de compra real (PIX)
   if (isAuthenticated) {
     return (
       <DashboardLayout>
-        <div className="max-w-6xl mx-auto px-4 py-8">
-          <div className="text-center mb-12">
-            <h1 className="text-3xl font-bold mb-3">Pare de perder tempo criando conteúdo</h1>
-            <p className="text-muted-foreground text-lg max-w-xl mx-auto">
-              A IA do TrendPulse cria posts profissionais em segundos.
-              Escolha o plano que faz sentido para você.
+        <div className="max-w-4xl mx-auto px-4 py-8 space-y-10">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold mb-3">Créditos que não expiram</h1>
+            <p className="text-muted-foreground text-lg max-w-xl mx-auto mb-6">
+              Sem mensalidade. Recarregue quando quiser e pague só pelo que criar.
             </p>
+            <Button size="lg" className="gap-2" onClick={() => setBuyOpen(true)}>
+              <Sparkles className="w-5 h-5" />
+              Comprar créditos
+            </Button>
           </div>
 
-          <PricingCards
-            currentPlan={usage?.plan_name}
-            onSelectPlan={handleSelectPlan}
-          />
+          <CostsTable />
 
-          {/* Trust signals — reduce anxiety */}
-          <div className="text-center mt-12 space-y-2 text-sm text-muted-foreground">
-            <p>Todos os planos incluem chat com IA, geração visual e publicação direta.</p>
-            <div className="flex items-center justify-center gap-4 mt-3 flex-wrap">
-              <span className="flex items-center gap-1.5">Cancele quando quiser</span>
-              <span className="text-border">|</span>
-              <span className="flex items-center gap-1.5">Sem fidelidade</span>
-              <span className="text-border">|</span>
-              <span className="flex items-center gap-1.5">PIX, boleto ou cartão</span>
-            </div>
-          </div>
+          <p className="text-center text-sm text-muted-foreground">
+            Pagamento via PIX — os créditos caem na hora.
+          </p>
         </div>
-        <CpfCnpjModal
-          open={showCpfModal}
-          onClose={() => setShowCpfModal(false)}
-          onConfirm={handleCpfConfirm}
-          loading={subscribing}
-        />
+        <BuyCreditsModal open={buyOpen} onClose={() => setBuyOpen(false)} />
       </DashboardLayout>
     );
   }
 
-  // Public pricing page (not logged in)
+  // Público (deslogado): packs + CTA pro signup
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-6xl mx-auto px-4 py-16">
-        <div className="text-center mb-12">
-          <h1 className="text-4xl font-bold mb-4">Conteúdo profissional sem designer, sem esforço</h1>
+      <div className="max-w-6xl mx-auto px-4 py-16 space-y-12">
+        <div className="text-center">
+          <h1 className="text-4xl font-bold mb-4">Conteúdo profissional sem designer, sem mensalidade</h1>
           <p className="text-muted-foreground text-xl max-w-2xl mx-auto">
-            A IA do TrendPulse cria posts, carrosséis e documentos LinkedIn
-            em segundos. Teste grátis e veja a diferença.
+            A IA do TrendPulse cria posts, carrosséis e stories em segundos.
+            Comece com 50 créditos grátis.
           </p>
         </div>
 
-        <PricingCards onSelectPlan={handleSelectPlan} />
+        <PricingSection />
 
-        <div className="text-center mt-16 space-y-4">
-          <p className="text-muted-foreground">
-            Aceita PIX, boleto e cartão de crédito
-          </p>
-          <button
-            onClick={() => navigate("/")}
-            className="text-primary hover:underline text-sm"
-          >
+        <CostsTable />
+
+        <div className="text-center">
+          <button onClick={() => navigate("/")} className="text-primary hover:underline text-sm">
             Voltar para a página inicial
           </button>
         </div>
       </div>
-      <CpfCnpjModal
-        open={showCpfModal}
-        onClose={() => setShowCpfModal(false)}
-        onConfirm={handleCpfConfirm}
-        loading={subscribing}
-      />
     </div>
   );
 }
