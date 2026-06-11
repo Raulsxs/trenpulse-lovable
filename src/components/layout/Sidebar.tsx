@@ -256,22 +256,27 @@ const Sidebar = () => {
 
         </nav>
 
-        {/* Credits Banner */}
-        <div className="p-4 pt-0">
-          <div className="bg-sidebar-accent rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Coins className="w-5 h-5 text-sidebar-primary" />
-              <span className="text-sm font-semibold text-sidebar-foreground">Seus créditos</span>
-            </div>
-            <div className="flex items-baseline gap-1.5 mb-3">
-              <span className="text-2xl font-bold text-sidebar-foreground tabular-nums">
+        {/* Saldo de créditos — barra âmbar (escala: 1 pack popular = 1050cr) */}
+        <div className="p-3 pt-0">
+          <div className="bg-sidebar-accent rounded-lg p-3">
+            <div className="flex items-center justify-between mb-1">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-sidebar-foreground">
+                <Coins className="w-3.5 h-3.5 text-sidebar-primary" />
+                Créditos
+              </span>
+              <span className="text-base font-bold text-sidebar-foreground tabular-nums leading-none">
                 {balance ?? "—"}
               </span>
-              <span className="text-xs text-sidebar-foreground/50">disponíveis</span>
             </div>
-            <Button size="sm" onClick={() => setBuyOpen(true)} className="w-full gap-1.5">
-              <Sparkles className="w-3.5 h-3.5" />
-              Comprar créditos
+            <div className="h-1 rounded-full bg-sidebar-background/60 overflow-hidden mb-2.5">
+              <div
+                className="h-full rounded-full bg-[hsl(var(--credit))] transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.round(((balance ?? 0) / 1050) * 100))}%` }}
+              />
+            </div>
+            <Button size="sm" onClick={() => setBuyOpen(true)} className="w-full h-7 gap-1.5 text-xs">
+              <Sparkles className="w-3 h-3" />
+              Recarregar
             </Button>
           </div>
         </div>

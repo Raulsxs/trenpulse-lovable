@@ -156,6 +156,11 @@ export default function BuyCreditsModal({
               ))}
             </div>
 
+            {/* Tradução crédito → resultado (ancoragem: psicologia do plano-ideal) */}
+            <div className="rounded-lg border border-[hsl(var(--credit))]/25 bg-[hsl(var(--credit-bg))] px-3 py-2 text-center text-xs font-medium text-[hsl(var(--credit))] tabular-nums">
+              {selected.credits.toLocaleString("pt-BR")} créditos ≈ {Math.floor(selected.credits / 4)} posts com imagem · não expiram
+            </div>
+
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">CPF/CNPJ (para o PIX)</label>
               <Input

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, RefreshCw, X, Send, ChevronDown, Play, ArrowRightLeft } from "lucide-react";
+import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, RefreshCw, X, Send, ChevronDown, Download, ArrowRightLeft } from "lucide-react";
+import { CostChip } from "@/components/ui/cost-chip";
 import { Skeleton } from "@/components/ui/skeleton";
 import ScheduleModal from "@/components/content/ScheduleModal";
 import SlideBgOverlayRenderer from "@/components/content/SlideBgOverlayRenderer";
@@ -202,6 +203,12 @@ export default function ActionCard({
   const [publishResults, setPublishResults] = useState<Record<string, { success: boolean; error?: string; pending?: boolean }> | null>(null);
   // At least one platform confirmed as truly published (used to permanently lock the publish button)
   const publishedSuccessfully = !!publishResults && Object.values(publishResults).some((r) => r.success === true);
+
+  // Custo visível nas ações que regeneram (espelha credit_pricing; manter em sincronia).
+  // Refazer = geração completa do formato; Ajustar/Adaptar = EDIT_CONTENT (1 imagem).
+  const REGEN_COST: Record<string, number> = { post: 4, story: 20, carousel: 20, document: 20, tweet_card: 2 };
+  const regenCost = REGEN_COST[contentType] ?? 4;
+  const editCost = contentType === "story" ? 20 : 4;
   // Any pending platform waiting for downstream confirmation — lock button to prevent duplicate publishes
   const publishHasPending = !!publishResults && Object.values(publishResults).some((r) => r.pending === true);
   const publishLocked = publishedSuccessfully || publishHasPending;
@@ -878,9 +885,27 @@ export default function ActionCard({
               )}
             </div>
           )}
-          {scheduledAt && (
-            <p className="mb-2 text-xs text-muted-foreground">📅 Agendado: {new Date(scheduledAt).toLocaleDateString("pt-BR")}</p>
-          )}
+          {/* Stepper do loop "do prompt ao feed" — onde este conteúdo está */}
+          <div className="flex items-center gap-1.5 mb-2.5 text-[10px] font-semibold select-none">
+            <span className="flex items-center gap-1 text-success">
+              <span className="w-3.5 h-3.5 rounded-full bg-success text-success-foreground flex items-center justify-center"><Check className="w-2.5 h-2.5" /></span>
+              Gerado
+            </span>
+            <span className="h-px flex-1 bg-border" aria-hidden="true" />
+            <span className={`flex items-center gap-1 ${scheduledAt ? "text-success" : publishedSuccessfully ? "text-muted-foreground/60" : "text-primary"}`}>
+              <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${scheduledAt ? "bg-success text-success-foreground" : publishedSuccessfully ? "bg-muted text-muted-foreground" : "bg-primary text-primary-foreground"}`}>
+                {scheduledAt ? <Check className="w-2.5 h-2.5" /> : <CalendarDays className="w-2 h-2" />}
+              </span>
+              {scheduledAt ? `Agendado ${new Date(scheduledAt).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}` : "Agendar"}
+            </span>
+            <span className="h-px flex-1 bg-border" aria-hidden="true" />
+            <span className={`flex items-center gap-1 ${publishedSuccessfully ? "text-success" : "text-muted-foreground/60"}`}>
+              <span className={`w-3.5 h-3.5 rounded-full flex items-center justify-center ${publishedSuccessfully ? "bg-success text-success-foreground" : "bg-muted text-muted-foreground"}`}>
+                {publishedSuccessfully ? <Check className="w-2.5 h-2.5" /> : <Send className="w-2 h-2" />}
+              </span>
+              {publishedSuccessfully ? "Publicado" : "Publicar"}
+            </span>
+          </div>
 
           {/* Row 1: Primary actions — Publicar agora / Agendar / Studio */}
           <div className="flex gap-2 mb-2">
@@ -1011,25 +1036,27 @@ export default function ActionCard({
             </Button>
             <Button
               size="sm"
-              variant="ghost"
-              className="flex-1 text-xs text-muted-foreground hover:text-foreground"
-              onClick={() => navigate(`/content/${contentId}`)}
+              variant="outline"
+              className="flex-1 text-xs gap-1"
+              onClick={() => navigate(`/download/${contentId}`)}
             >
-              <ExternalLink className="w-3 h-3" />
-              Studio
+              <Download className="w-3 h-3" />
+              Baixar
+              <CostChip free />
             </Button>
           </div>
 
-          {/* Row 2: Regeneration + Animate actions */}
+          {/* Row 2: Regeneration actions — custo visível antes do clique */}
           <div className="flex gap-2 mb-2">
-            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={handleRegenerateImage} disabled={isRegeneratingImage}>
+            <Button size="sm" variant="outline" className="flex-1 text-xs gap-1" onClick={handleRegenerateImage} disabled={isRegeneratingImage}>
               {isRegeneratingImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pencil className="w-3 h-3" />}
               Ajustar
+              <CostChip cost={editCost} />
             </Button>
             <Button
               size="sm"
               variant="outline"
-              className="flex-1 text-xs"
+              className="flex-1 text-xs gap-1"
               disabled={isRefazendo}
               onClick={() => {
                 setIsRefazendo(true);
@@ -1042,6 +1069,7 @@ export default function ActionCard({
             >
               {isRefazendo ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
               {isRefazendo ? "Refazendo..." : "Refazer"}
+              {!isRefazendo && <CostChip cost={regenCost} />}
             </Button>
             {onAdapt && (contentType as string) !== "cron_config" && (
               <Popover open={adaptOpen} onOpenChange={setAdaptOpen}>
@@ -1081,6 +1109,15 @@ export default function ActionCard({
                 </PopoverContent>
               </Popover>
             )}
+            <Button
+              size="sm"
+              variant="ghost"
+              className="px-2 text-muted-foreground hover:text-foreground"
+              onClick={() => navigate(`/content/${contentId}`)}
+              title="Abrir no editor avançado"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+            </Button>
           </div>
 
           {/* Save background nudge — only for ai_background mode (has bg image + overlay text) */}

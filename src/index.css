@@ -85,6 +85,11 @@
     --sidebar-border: 215 20% 25%;
     --sidebar-ring: 210 100% 50%;
 
+    /* Créditos — assinatura do design: custo visível antes do clique.
+       Âmbar reservado EXCLUSIVAMENTE pra créditos (não usar em outros contextos). */
+    --credit: 33 94% 32%;
+    --credit-bg: 39 100% 94%;
+
     /* Custom - Score Gradient */
     --score-high: 158 64% 42%;
     --score-medium: 38 92% 50%;
@@ -159,6 +164,13 @@
     font-family: 'Inter', system-ui, sans-serif;
     overflow: hidden;
     height: 100%;
+  }
+
+  /* Densidade (Onda 1): root 15px encolhe toda a escala rem ~6% — o app parecia
+     "landing page inflada"; ferramenta profissional pede densidade. Cortes maiores
+     são pontuais por componente, não globais. */
+  html {
+    font-size: 15px;
   }
 
   /* Allow scroll on landing page (no DashboardLayout) */
