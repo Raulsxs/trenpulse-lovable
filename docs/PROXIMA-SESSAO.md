@@ -53,7 +53,7 @@ planejar Horizonte 2+. 3 decisões pendentes no fim do doc. NÃO atropela o lan�
 - [x] Criação de marca consolidada: `/brands/new/simple` (BrandNew) aposentado.
 - [x] Blotato removido: intent `GENERATE_TEMPLATE` + `detectBlotataTemplate` + botão Animar + templates Vídeo/Produto/Antes-Depois do dropdown. "Tutorial passo a passo" re-roteado pra GENERATE_CAROUSEL. ⚠️ **Raul: cancelar a assinatura Blotato ($29/mês)!**
 - [ ] **Smoke test Maikon (PRÉ 3) pendente:** gerar 1 post com a marca `photo_backgrounds` em prod e conferir.
-- [ ] **Delete remoto das 16 fns restantes** (classifier exige ordem nomeada do Raul; Blotato+Tendências já deletadas): `check-usage manage-subscription create-visual-brief build-image-prompts generate-image-variations rank-and-select generate-slide-backgrounds analyze-image-layout instagram-config instagram-oauth-callback refresh-instagram-token publish-instagram linkedin-config linkedin-oauth-callback refresh-linkedin-token publish-linkedin`
+- [x] Delete remoto das 20 fns concluído (2026-06-11, autorização explícita) — Supabase só com funções vivas.
 
 ## SPRINT 4 — Melhorar (já existe, subutilizado)
 - [ ] **Calendário vira herói:** a análise de telas confirmou que a TELA está pronta (drag-drop semana/mês, backlog, reagendar, publicar via PFM) — falta só exposição: subir na sidebar, botão "Agendar" no `ActionCard`, copy "agende o mês e esqueça", nudge "você tem 3 posts prontos — agenda a semana?".
