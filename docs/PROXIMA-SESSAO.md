@@ -37,17 +37,23 @@
 - [ ] Trocar `ASAAS_PROD_KEY` pela key permanente do Raul.
 - [ ] Ligar `CREDITS_ENFORCED=true` **só no lançamento** (decisão do Raul).
 
-## SPRINT 3 — Poda pesada (confirm-then-cut, depende das 3 decisões)
-*Ordem importa — pré-requisitos primeiro (achados da análise de telas, `analise-telas-2026-06.md`):*
-- [ ] **PRÉ 1:** mover `BrandExamples` + `BrandPhotoBackgrounds` de `components/studio/` → `components/brand/` (servem o **BrandEdit do Maikon** — sem isso a poda do Studio quebra a tela mais crítica).
-- [ ] **PRÉ 2:** desacoplar `BrandWizard` do pipeline Studio: step 4 chama `generate-template-sets` — simplificar (terminar no `analyze-brand-examples`). É o único fio segurando o pipeline vivo.
-- [ ] **PRÉ 3 (smoke test Maikon):** após cada corte, gerar 1 post com a marca `photo_backgrounds` antes de pushar.
-- [ ] Pipeline Studio órfão (6 edge fns: create-visual-brief, build-image-prompts, generate-image-variations, rank-and-select, generate-slide-backgrounds, analyze-image-layout) + páginas `Studio*`/`ManualStudioEditor` + rotas `/studio/*` (fora da sidebar, zero links de entrada).
-- [ ] Billing assinatura legado: `manage-subscription` (sandbox), `check-usage`, `useSubscription`, `Pricing.tsx`, `Paywall`.
-- [ ] OAuth IG/LinkedIn direto (6 edge fns + `Instagram/LinkedInConnectionCard` + rotas `/auth/*/callback` + `/instagram/history` — órfã, zero links de entrada).
-- [ ] Páginas self_serve restantes (`Discover`, `TemplateGenerator`, `Library`, `SelfServePlaceholder`) **+ os testes delas**: ⚠️ 39 dos 67 testes da suíte cobrem essas páginas mortas (discover/library/template-*.test) — vão junto, e a suíte real encolhe pra ~28.
-- [ ] Consolidar criação de marca: 3 fluxos hoje (BrandWizard `/brands/new` = default, BrandNew `/brands/new/simple`, chat CRIAR_MARCA) → manter wizard simplificado + chat; aposentar `/simple`.
-- [ ] Blotato (se decisão = sair): re-rotear `GENERATE_TEMPLATE`, remover `blotato-proxy`/`render-template` engine=blotato, **cancelar assinatura $29/mês**.
+## 🆕 VISÃO NOVA (2026-06-11): multigeração + publicação
+Raul propôs posicionar como plataforma self-serve de IAs (imagem+vídeo, N modelos
+inference.sh) com o loop de distribuição como moat. Análise completa, gap analysis,
+economia e fases em **`docs/visao-produto-multigeracao-2026-06.md`** — ler antes de
+planejar Horizonte 2+. 3 decisões pendentes no fim do doc. NÃO atropela o lançamento.
+
+## SPRINT 3 — Poda pesada ✅ FEITO (2026-06-11, commit e4d2b3c) — decisões: Blotato SAI, Tendências SAI, Analytics ESCONDE
+- [x] PRÉ 1: `BrandExamples`/`BrandPhotoBackgrounds` movidos → `components/brand/` (BrandEdit do Maikon intacto).
+- [x] PRÉ 2 **caiu**: `generate-template-sets` NÃO era órfão do Studio — o `CRIAR_MARCA_ANALYZE` do chat também chama. Função PRESERVADA; BrandWizard step 4 fica como está.
+- [x] Pipeline Studio (6 edge fns + páginas `Studio*` + `ManualStudioEditor` + hooks) removidos.
+- [x] Billing assinatura legado removido (`manage-subscription`, `check-usage`, `useSubscription`, `Paywall`, `PricingCards`, `CpfCnpjModal`).
+- [x] OAuth IG/LinkedIn direto removido (8 edge fns + cards + callbacks + `/instagram/history`).
+- [x] Páginas self_serve restantes + 39 testes removidos (suíte: 67 → 28 reais).
+- [x] Criação de marca consolidada: `/brands/new/simple` (BrandNew) aposentado.
+- [x] Blotato removido: intent `GENERATE_TEMPLATE` + `detectBlotataTemplate` + botão Animar + templates Vídeo/Produto/Antes-Depois do dropdown. "Tutorial passo a passo" re-roteado pra GENERATE_CAROUSEL. ⚠️ **Raul: cancelar a assinatura Blotato ($29/mês)!**
+- [ ] **Smoke test Maikon (PRÉ 3) pendente:** gerar 1 post com a marca `photo_backgrounds` em prod e conferir.
+- [ ] **Delete remoto das 16 fns restantes** (classifier exige ordem nomeada do Raul; Blotato+Tendências já deletadas): `check-usage manage-subscription create-visual-brief build-image-prompts generate-image-variations rank-and-select generate-slide-backgrounds analyze-image-layout instagram-config instagram-oauth-callback refresh-instagram-token publish-instagram linkedin-config linkedin-oauth-callback refresh-linkedin-token publish-linkedin`
 
 ## SPRINT 4 — Melhorar (já existe, subutilizado)
 - [ ] **Calendário vira herói:** a análise de telas confirmou que a TELA está pronta (drag-drop semana/mês, backlog, reagendar, publicar via PFM) — falta só exposição: subir na sidebar, botão "Agendar" no `ActionCard`, copy "agende o mês e esqueça", nudge "você tem 3 posts prontos — agenda a semana?".
