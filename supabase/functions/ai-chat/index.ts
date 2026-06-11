@@ -148,7 +148,6 @@ A imagem gerada É o conteúdo final — uma ARTE GRÁFICA CHAPADA (flat design)
 const VISUAL_RICHNESS_RULE = `RECURSO VISUAL (além do texto): inclua ALGUNS elementos ilustrativos relevantes ao tema — ícones, uma ilustração central simples (ex.: órgão, objeto ou símbolo do assunto) ou formas que comuniquem a ideia visualmente. Com MODERAÇÃO: o objetivo é NÃO ser só texto, mas sem poluir nem virar uma cena complexa demais. O texto continua legível e protagonista; a ilustração apoia a mensagem.`;
 
 const INTENTS = [
-  "GENERATE_TEMPLATE",
   "GENERATE",
   "GENERATE_CAROUSEL",
   "GENERATE_TWEET_CARD",
@@ -180,46 +179,6 @@ function detectFormat(msg: string): string {
 // ── Helper: detect if message is a quote/phrase request ──
 function detectContentStyle(msg: string): string | null {
   if (/\b(frase|citação|citacao|quote|imagem com a frase|imagem com frase|frase inspiracional|frase motivacional)\b/i.test(msg)) return "quote";
-  return null;
-}
-
-// ── Helper: detect if message should use a Blotato template ──
-interface BlotataTemplateMatch {
-  templateKey: string;
-  templateType: "tweet" | "tutorial" | "quote" | "infographic" | "video" | "product" | "before-after";
-}
-
-function detectBlotataTemplate(msg: string): BlotataTemplateMatch | null {
-  const m = msg.toLowerCase();
-  // Tweet card
-  if (/\b(tweet\s*card|card\s*de\s*tweet|tweet\s*visual|visual\s*de\s*tweet|estilo\s*tweet|estilo\s*twitter)\b/.test(m)) {
-    const hasPhoto = /\b(com\s+foto|foto\s+de\s+fundo|background|com\s+imagem)\b/.test(m);
-    return { templateKey: hasPhoto ? "tweet-photo" : "tweet-minimal", templateType: "tweet" };
-  }
-  // Tutorial carousel
-  if (/\b(carrossel\s+tutorial|tutorial.*passo\s*a\s*passo|passo\s*a\s*passo.*slides|carousel\s+tutorial)\b/.test(m)) {
-    return { templateKey: "tutorial-monocolor", templateType: "tutorial" };
-  }
-  // Quote card
-  if (/\b(quote\s*card|card\s*de\s*(frase|cita[çc][aã]o)|cita[çc][aã]o\s*visual)\b/.test(m)) {
-    return { templateKey: "quote-paper", templateType: "quote" };
-  }
-  // Infographic
-  if (/\b(infogr[aá]fico|infographic)\b/.test(m)) {
-    return { templateKey: "infographic-newspaper", templateType: "infographic" };
-  }
-  // Video / Reels
-  if (/\b(v[ií]deo\s*reels|reels|v[ií]deo\s*IA|v[ií]deo\s*para\s*(instagram|tiktok|reels)|crie\s*um\s*v[ií]deo)\b/.test(m)) {
-    return { templateKey: "video-story", templateType: "video" };
-  }
-  // Product placement
-  if (/\b(product\s*placement|produto\s*(em|no|na)\s*(cen[aá]rio|ambiente|contexto)|coloque\s*(meu|o)\s*produto|foto\s*do\s*produto)\b/.test(m)) {
-    return { templateKey: "product-placement", templateType: "product" };
-  }
-  // Before/After comparison
-  if (/\b(antes\s*e?\s*depois|before.*after|compara[çc][aã]o|antes\s*vs|antes\s*x\s*depois)\b/.test(m)) {
-    return { templateKey: "before-after", templateType: "before-after" };
-  }
   return null;
 }
 
@@ -326,10 +285,12 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
     const internalServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    // apikey DEVE ser a MESMA key do Authorization: desde 2026-06-11 o gateway rejeita
+    // headers com keys diferentes ("Conflicting API keys" 401) — antes aceitava anon+service.
     const internalHeaders = {
       Authorization: `Bearer ${internalServiceKey}`,
       "Content-Type": "application/json",
-      apikey: supabaseAnonKey,
+      apikey: internalServiceKey,
     };
 
     // User-scoped client (for RLS)
@@ -481,8 +442,7 @@ Seja concisa mas completa nas respostas.`;
       detectedIntent = intent_hint;
     } else {
       const classifyPrompt = `Classifique a intenção da mensagem em UMA categoria:
-- GENERATE_TEMPLATE: quer criar tweet card, card estilo twitter, carrossel tutorial passo a passo, quote card visual, citação visual, infográfico
-- GENERATE: quer criar post, story, imagem, conteúdo visual com design artístico
+- GENERATE: quer criar post, story, imagem, conteúdo visual com design artístico (inclui quote card, citação visual, infográfico)
 - GENERATE_CAROUSEL: quer criar carrossel, múltiplos slides, série de posts, documento
 - FREE_IMAGE: quer só uma imagem/foto avulsa e livre (ex: "gere uma imagem de um gato astronauta", "crie uma foto de um produto", "desenhe um logo", "faça uma ilustração de..."), SEM virar post nem legenda de rede social
 - GENERATE_EDITORIAL_CAROUSEL: quer um carrossel "editorial" / "estilo revista ou notícia" / "de gancho viral" / "cinematográfico" — foto dramática com headline de impacto e palavras destacadas
@@ -493,8 +453,7 @@ Seja concisa mas completa nas respostas.`;
 - CHAT: conversa geral, pergunta, ajuda, dica
 
 IMPORTANTE: Se a mensagem contém um link (URL), classifique como LINK_PARA_POST.
-Se pede "carrossel", "múltiplos slides", "série", "documento", classifique como GENERATE_CAROUSEL.
-Se menciona "tweet card", "estilo tweet", "tutorial passo a passo", "quote card", "citação visual", "infográfico", "vídeo reels", "crie um vídeo", "produto em cenário", "product placement", "antes e depois", "before after", classifique como GENERATE_TEMPLATE.
+Se pede "carrossel", "múltiplos slides", "série", "documento", "tutorial passo a passo", classifique como GENERATE_CAROUSEL.
 
 Responda APENAS com o nome da categoria.
 
@@ -536,9 +495,7 @@ Mensagem: "${message}"`;
       detectedIntent = "GENERATE";
     }
 
-    // Tweet-card carousel — deterministic override. The AI classifier lumps "tweet card"
-    // into GENERATE_TEMPLATE, which routed to the now-cancelled Blotato. Route it to our
-    // own Satori renderer instead. Runs BEFORE the Blotato template detection below.
+    // Tweet-card carousel — deterministic override (Satori renderer próprio).
     if (/tweet[\s-]*cards?|carross\S*\s+(de|com|estilo)\s+tweets?|cards?\s+de\s+tweets?|estilo\s+(tweet|twitter|x)\b|thread\s+(de|em|no)\s+(tweets?|x|twitter)/i.test(message)) {
       detectedIntent = "GENERATE_TWEET_CARD";
     }
@@ -558,10 +515,11 @@ Mensagem: "${message}"`;
       detectedIntent = "FREE_IMAGE";
     }
 
-    // Template detection AFTER all conversions — if message matches a Blotato template, upgrade
-    // This runs last so it takes priority over GENERATE/GENERATE_CAROUSEL
-    if ((detectedIntent === "GENERATE" || detectedIntent === "GENERATE_CAROUSEL" || detectedIntent === "CHAT") && detectBlotataTemplate(message)) {
-      detectedIntent = "GENERATE_TEMPLATE";
+    // Pós-Blotato (cancelado no Sprint 3): "tutorial passo a passo" vira carrossel comum —
+    // o classifier às vezes manda pra GENERATE, cujo handler gera 1 slide só.
+    if ((detectedIntent === "GENERATE" || detectedIntent === "CHAT") &&
+        /\b(carrossel\s+tutorial|tutorial.*passo\s*a\s*passo|passo\s*a\s*passo.*slides)\b/i.test(message)) {
+      detectedIntent = "GENERATE_CAROUSEL";
     }
 
     // Format-aware re-route: if the message/params indicate a multi-slide format (carousel or
@@ -595,443 +553,6 @@ Mensagem: "${message}"`;
     // ══════════════════════════════════════════════════════════════════════════
 
     switch (detectedIntent) {
-
-      // ════════════════════════════════════════════════════════════════════════
-      // GENERATE_TEMPLATE — Blotato template-based visual generation
-      // ════════════════════════════════════════════════════════════════════════
-      case "GENERATE_TEMPLATE": {
-        const templateMatch = detectBlotataTemplate(message);
-        if (!templateMatch) {
-          // This shouldn't happen (post-classification already checked), but just in case
-          console.log("[ai-chat] GENERATE_TEMPLATE: no template match, will use GENERATE instead");
-          // Cannot fall through in switch — set flag and break, GENERATE will be handled after switch
-          replyOverride = null;
-          detectedIntent = "GENERATE";
-          // NOTE: break exits the switch; GENERATE won't run. The response will be a generic chat reply.
-          // This is acceptable since this case should never happen (detection runs before switch).
-          break;
-        }
-
-        console.log(`[ai-chat] GENERATE_TEMPLATE: template=${templateMatch.templateKey}, type=${templateMatch.templateType}`);
-
-        {
-          const denyMsg = await insufficientCredits(svc, userId, "template");
-          if (denyMsg) { replyOverride = denyMsg; break; }
-        }
-
-        // 1. Load user profile for author info
-        const { data: userProfile } = await svc.from("profiles")
-          .select("full_name, instagram_handle, avatar_url")
-          .eq("user_id", userId).maybeSingle();
-
-        // 2. Load brand context if provided
-        let templateBrandContext = "";
-        let templateBrandSnapshot: Record<string, any> | null = null;
-        let brandColors: string[] = [];
-        let brandName = "";
-        let brandLogo = "";
-
-        if (requestBrandId && requestBrandId !== "none") {
-          const { data: brand } = await svc.from("brands")
-            .select("name, palette, fonts, visual_tone, do_rules, dont_rules, visual_preferences, logo_url, creation_mode")
-            .eq("id", requestBrandId).single();
-          if (brand) {
-            templateBrandSnapshot = brand;
-            brandName = brand.name || "";
-            brandLogo = brand.logo_url || "";
-            brandColors = (brand.palette as any[] || []).map((c: any) => typeof c === "string" ? c : c.hex).filter(Boolean);
-            const parts: string[] = [];
-            parts.push(`Marca: ${brand.name}`);
-            if (brandColors.length) parts.push(`Cores: ${brandColors.join(", ")}`);
-            if (brand.visual_tone) parts.push(`Tom visual: ${brand.visual_tone}`);
-            if (brand.do_rules) parts.push(`FAÇA: ${brand.do_rules}`);
-            if (brand.dont_rules) parts.push(`NÃO FAÇA: ${brand.dont_rules}`);
-            templateBrandContext = parts.join("\n");
-          }
-        }
-
-        // Author info: prefer brand name/logo when a brand is active
-        const authorName = brandName || userProfile?.full_name || "Autor";
-        const authorHandle = userProfile?.instagram_handle || "";
-        const authorImage = brandLogo || userProfile?.avatar_url || "";
-
-        // 3. Use AI to structure content into template inputs
-        let templateInputs: Record<string, any> = {};
-        let templatePrompt = message;
-
-        const inputPrompts: Record<string, string> = {
-          tweet: `Transforme a mensagem do usuário em conteúdo para um CARROSSEL estilo tweet/Twitter.
-Crie 4-6 frases impactantes que formem uma narrativa — como um thread do Twitter.
-Cada frase será um slide separado do carrossel.
-${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
-${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
-${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}` : ""}
-
-REGRAS:
-- Frase 1: gancho provocativo que prende atenção (pode incluir dado ou pergunta)
-- Frases 2-4: desenvolvimento do argumento, uma ideia por frase
-- Frase 5-6: conclusão forte + CTA ("Salve e compartilhe")
-- Cada frase: 1-3 parágrafos curtos, máx 280 chars por frase
-- Tom: autoridade, como um especialista compartilhando insight valioso
-- NÃO use asteriscos, markdown ou formatação especial no texto
-- SEMPRE responda em português brasileiro (PT-BR)
-
-Responda APENAS em JSON válido:
-{
-  "quotes": ["frase 1 (gancho)", "frase 2 (argumento)", "frase 3", "frase 4", "frase 5 (conclusão/CTA)"],
-  "theme": "light"
-}
-
-Mensagem: "${message}"`,
-
-          tutorial: `Transforme a mensagem do usuário em um carrossel tutorial educativo com 5-7 slides.
-${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
-${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
-${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}` : ""}
-
-REGRAS:
-- SEMPRE responda em português brasileiro (PT-BR) — NUNCA em inglês
-- NÃO use asteriscos, markdown ou formatação especial
-- Cada slide deve ter título curto e descrição objetiva
-
-Responda APENAS em JSON válido:
-{
-  "title": "Título do carrossel em PT-BR (curto, max 60 chars)",
-  "contentSlides": [
-    { "title": "Passo 1: ...", "description": "Explicação breve do passo (max 120 chars)" },
-    { "title": "Passo 2: ...", "description": "Explicação breve (max 120 chars)" },
-    { "title": "Passo 3: ...", "description": "Explicação breve (max 120 chars)" },
-    { "title": "Passo 4: ...", "description": "Explicação breve (max 120 chars)" },
-    { "title": "Passo 5: ...", "description": "Explicação breve (max 120 chars)" }
-  ],
-  "ctaGreeting": "Gostou? Siga para mais!",
-  "ctaDescription": "Salve este post e compartilhe"
-}
-
-Mensagem: "${message}"`,
-
-          quote: `Transforme a mensagem do usuário em frases para um quote card visual.
-Divida em 4-6 frases/slides impactantes. Cada frase será exibida em um slide separado.
-${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
-
-REGRAS:
-- NÃO use asteriscos, markdown, negrito ou formatação especial — apenas texto puro
-- SEMPRE responda em português brasileiro (PT-BR) — NUNCA em inglês
-- Cada frase deve ser completa e funcionar sozinha como slide
-- Tom: inspiracional, profissional e impactante
-
-Responda APENAS em JSON válido:
-{
-  "title": "Título temático curto em PT-BR (max 40 chars)",
-  "quotes": ["frase 1 em português", "frase 2 em português", "frase 3 em português", "frase 4 em português"]
-}
-
-Mensagem: "${message}"`,
-
-          infographic: `Transforme a mensagem do usuário em conteúdo para um infográfico visual.
-${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
-${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
-
-Responda APENAS em JSON válido:
-{
-  "description": "Descrição detalhada do infográfico: dados, fatos, estatísticas e informações visuais (max 500 chars)",
-  "footerText": "${authorName}"
-}
-
-Mensagem: "${message}"`,
-
-          video: `Crie o roteiro de um vídeo curto (30-60 segundos) para Instagram Reels/TikTok.
-Divida em 3-5 cenas. Cada cena precisa de uma descrição visual (para gerar imagem IA) e um script de narração.
-${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
-${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
-${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}` : ""}
-
-Responda APENAS em JSON válido:
-{
-  "scenes": [
-    { "aiPrompt": "descrição visual da cena (em inglês, para IA gerar imagem)", "voiceoverScript": "texto que será narrado nesta cena (em português)" },
-    { "aiPrompt": "...", "voiceoverScript": "..." }
-  ],
-  "voiceName": "pt-BR-francisca"
-}
-
-Mensagem: "${message}"`,
-
-          product: `O usuário quer colocar um produto em um cenário profissional gerado por IA.
-Extraia da mensagem: qual é o produto e que tipo de cenário/ambiente ele quer.
-${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
-
-Responda APENAS em JSON válido:
-{
-  "sceneDescription": "Descrição detalhada do cenário desejado em inglês (para IA gerar, max 200 chars). Ex: 'Modern minimalist kitchen counter with soft morning light, marble surface'"
-}
-
-Mensagem: "${message}"`,
-
-          "before-after": `Crie um conteúdo visual de comparação "Antes vs Depois" sobre o tema do usuário.
-Pense em um cenário de transformação claro e impactante.
-${templateBrandContext ? `Contexto da marca:\n${templateBrandContext}` : ""}
-${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
-
-Responda APENAS em JSON válido:
-{
-  "firstSlideText": "Texto de abertura chamativo (max 60 chars)",
-  "firstSlideImagePrompt": "Descrição visual do cenário ANTES em inglês (para IA gerar imagem)",
-  "comparisonTextTop": "ANTES: frase curta descrevendo o problema",
-  "comparisonTextBottom": "DEPOIS: frase curta descrevendo a solução",
-  "lastSlideText": "CTA final motivacional (max 60 chars)",
-  "lastSlideImagePrompt": "Descrição visual do cenário DEPOIS em inglês (para IA gerar imagem)"
-}
-
-Mensagem: "${message}"`,
-        };
-
-        const structPrompt = inputPrompts[templateMatch.templateType];
-        if (structPrompt) {
-          try {
-            const structResp = await aiGatewayFetch({
-              model: "openrouter/minimax-m-25",
-              messages: [{ role: "user", content: structPrompt }],
-            });
-            if (structResp.ok) {
-              const structData = await structResp.json();
-              const raw = structData.choices?.[0]?.message?.content || "";
-              const jsonMatch = raw.match(/\{[\s\S]*\}/);
-              if (jsonMatch) {
-                const parsed = JSON.parse(jsonMatch[0]);
-                templateInputs = parsed;
-                console.log(`[ai-chat] GENERATE_TEMPLATE: AI structured inputs OK, keys: ${Object.keys(parsed).join(", ")}`);
-              } else {
-                console.warn("[ai-chat] GENERATE_TEMPLATE: AI response had no JSON, using fallback");
-              }
-            } else {
-              console.warn("[ai-chat] GENERATE_TEMPLATE: AI structuring call failed, status:", structResp.status);
-            }
-          } catch (parseErr: any) {
-            console.warn("[ai-chat] GENERATE_TEMPLATE: AI input structuring failed:", parseErr?.message);
-          }
-        } else {
-          console.log(`[ai-chat] GENERATE_TEMPLATE: no structPrompt for type "${templateMatch.templateType}", using message as-is`);
-        }
-
-        // Fallback: if AI didn't produce inputs, create sensible defaults from the user message
-        if (templateMatch.templateType === "tweet" && !templateInputs.quotes?.length) {
-          // Extract topic from message (remove "Crie um tweet card visual sobre: " prefix)
-          const topicText = message.replace(/^.*?(sobre|com a frase|visual)\s*:?\s*/i, "").trim() || message;
-          templateInputs.quotes = [topicText];
-          console.log("[ai-chat] GENERATE_TEMPLATE: tweet fallback — using message as quote");
-        }
-        if (templateMatch.templateType === "quote" && !templateInputs.quotes?.length) {
-          const topicText = message.replace(/^.*?(sobre|com a frase|visual)\s*:?\s*/i, "").trim() || message;
-          templateInputs.quotes = [topicText];
-        }
-        if (templateMatch.templateType === "tutorial") {
-          // Map contentSlides → contentItems if AI used the old field name
-          if (templateInputs.contentSlides?.length && !templateInputs.contentItems?.length) {
-            templateInputs.contentItems = templateInputs.contentSlides;
-            delete templateInputs.contentSlides;
-          }
-          // Fallback: if AI produced no content, generate minimal default slides
-          if (!templateInputs.contentItems?.length) {
-            const topic = message.replace(/^.*?(sobre|passo a passo)\s*:?\s*/i, "").trim().substring(0, 60) || message.substring(0, 60);
-            templateInputs.title = templateInputs.title || topic;
-            templateInputs.contentItems = [
-              { title: "Passo 1: Introdução", description: `Conheça os fundamentos de: ${topic}` },
-              { title: "Passo 2: Preparação", description: "Prepare tudo o que você precisa antes de começar" },
-              { title: "Passo 3: Execução", description: "Coloque em prática seguindo cada etapa com atenção" },
-              { title: "Passo 4: Revisão", description: "Verifique o resultado e faça os ajustes necessários" },
-              { title: "Passo 5: Conclusão", description: "Parabéns! Você completou todas as etapas" },
-            ];
-          }
-          if (!templateInputs.ctaGreeting) templateInputs.ctaGreeting = "Gostou? Siga para mais!";
-          if (!templateInputs.ctaDescription) templateInputs.ctaDescription = "Salve este post e compartilhe";
-        }
-
-        // 4. Enrich inputs with profile and brand data
-        if (templateMatch.templateType === "tweet" || templateMatch.templateType === "tutorial") {
-          templateInputs.authorName = authorName;
-          templateInputs.handle = authorHandle;
-          if (authorImage) templateInputs.profileImage = authorImage;
-          templateInputs.verified = false;
-        }
-
-        if (templateMatch.templateType === "tweet") {
-          templateInputs.aspectRatio = "1:1";
-          // Apply brand colors to tweet card
-          if (brandColors[0]) templateInputs.accentColor = brandColors[0];
-          if (brandColors[1]) templateInputs.backgroundColor = brandColors[1];
-        }
-
-        if (templateMatch.templateType === "tutorial") {
-          if (brandColors[0]) templateInputs.accentColor = brandColors[0];
-          if (brandColors[1]) templateInputs.introBackgroundColor = brandColors[1];
-          if (brandColors[1]) templateInputs.contentBackgroundColor = brandColors[1];
-          templateInputs.aspectRatio = "1:1";
-        }
-
-        if (templateMatch.templateType === "quote") {
-          templateInputs.aspectRatio = "1:1";
-        }
-
-        if (templateMatch.templateType === "video") {
-          templateInputs.enableVoiceover = true;
-          templateInputs.aspectRatio = "9:16";
-          templateInputs.captionPosition = "bottom";
-          templateInputs.highlightColor = brandColors[0] || "#FFD700";
-          templateInputs.transition = "crossfade";
-          // Ensure scenes use mediaSource.aiPrompt format
-          if (templateInputs.scenes) {
-            templateInputs.scenes = templateInputs.scenes.map((s: any) => ({
-              mediaSource: { aiPrompt: s.aiPrompt || s.mediaSource?.aiPrompt || "professional background" },
-              voiceoverScript: s.voiceoverScript || s.script || "",
-            }));
-          }
-        }
-
-        if (templateMatch.templateType === "before-after") {
-          templateInputs.aspectRatio = "1:1";
-          templateInputs.slideDuration = 4;
-        }
-
-        // 5. Call blotato-proxy
-        console.log(`[ai-chat] GENERATE_TEMPLATE: calling blotato-proxy with inputs:`, JSON.stringify(templateInputs).substring(0, 300));
-
-        let blotatoImageUrls: string[] = [];
-        let blotatoMediaUrl: string | null = null;
-        try {
-          const blotatoResp = await fetch(`${supabaseUrl}/functions/v1/blotato-proxy`, {
-            method: "POST",
-            headers: internalHeaders,
-            body: JSON.stringify({
-              action: "create_visual",
-              templateKey: templateMatch.templateKey,
-              prompt: message,
-              inputs: templateInputs,
-            }),
-          });
-
-          if (blotatoResp.ok) {
-            const blotatoData = await blotatoResp.json();
-            blotatoImageUrls = blotatoData.imageUrls || [];
-            blotatoMediaUrl = blotatoData.mediaUrl || null;
-            console.log(`[ai-chat] GENERATE_TEMPLATE: Blotato returned ${blotatoImageUrls.length} images, mediaUrl=${!!blotatoMediaUrl}`);
-          } else {
-            const errText = await blotatoResp.text().catch(() => "");
-            console.error(`[ai-chat] GENERATE_TEMPLATE: blotato-proxy failed: ${blotatoResp.status} ${errText.substring(0, 200)}`);
-          }
-        } catch (blotatoErr: any) {
-          console.error("[ai-chat] GENERATE_TEMPLATE: blotato-proxy error:", blotatoErr?.message);
-        }
-
-        if (blotatoImageUrls.length === 0 && !blotatoMediaUrl) {
-          replyOverride = "Não foi possível gerar o visual. Tente novamente ou use outro formato.";
-          break;
-        }
-
-        // 6. Generate caption
-        let templateCaption = "";
-        let templateHashtags: string[] = [];
-        let templateTitle = templateInputs.title || message.substring(0, 80);
-        let templatePlatformCaptions: Record<string, string> | null = null;
-
-        try {
-          const templateBilingual = secondaryLang && bilingualPlatforms.length > 0
-            ? `\nIMPORTANTE: A legenda DEVE ser bilíngue — primeiro em português, depois "---" e a versão em ${secondaryLangName}.`
-            : "";
-          const captionPrompt = `Gere uma legenda para Instagram/LinkedIn sobre este conteúdo.
-Tema: ${message}
-${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
-${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}${templateBilingual}
-
-Responda em JSON: { "title": "título curto (max 8 palavras)", "caption": "legenda (max 300 chars)", "hashtags": ["tag1", "tag2", "tag3"] }`;
-
-          const captionResp = await aiGatewayFetch({
-            model: "openrouter/minimax-m-25",
-            messages: [{ role: "user", content: captionPrompt }],
-          });
-
-          if (captionResp.ok) {
-            const captionData = await captionResp.json();
-            const raw = captionData.choices?.[0]?.message?.content || "";
-            const jsonMatch = raw.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              const parsed = JSON.parse(jsonMatch[0]);
-              templateTitle = parsed.title || templateTitle;
-              templateCaption = parsed.caption || "";
-              templateHashtags = parsed.hashtags || [];
-            }
-          }
-        } catch (capErr: any) {
-          console.warn("[ai-chat] GENERATE_TEMPLATE: caption generation failed:", capErr?.message);
-        }
-
-        // 7. Save to generated_contents
-        const isVideo = templateMatch.templateType === "video";
-        const isCarousel = blotatoImageUrls.length > 1;
-
-        const templateSlides = isVideo && blotatoMediaUrl
-          ? [{ headline: "", body: "", bullets: [], image_url: blotatoMediaUrl, background_image_url: blotatoMediaUrl, render_mode: "ai_full_design", media_type: "video" }]
-          : blotatoImageUrls.map((url: string) => ({
-              headline: "", body: "", bullets: [],
-              image_url: url, background_image_url: url, render_mode: "ai_full_design",
-            }));
-
-        // Use platform from user request, or infer from template type
-        const templatePlatformMap: Record<string, string> = {
-          tweet: "x", tutorial: "instagram", quote: "instagram",
-          infographic: "instagram", video: "instagram",
-          product: "instagram", "before-after": "instagram",
-        };
-        const platform = requestPlatform || templatePlatformMap[templateMatch.templateType] || detectPlatform(message);
-
-        // Content type: tweets/quotes are carousels if multiple slides, tutorials always carousel
-        const templateContentType = isVideo ? "story"
-          : templateMatch.templateType === "tutorial" ? "carousel"
-          : isCarousel ? "carousel"
-          : "post";
-        const savedTemplateContentId = await persistGeneratedContent({
-          generatedContent: {
-            title: templateTitle,
-            caption: templateCaption,
-            hashtags: templateHashtags,
-            platformCaptions: templatePlatformCaptions,
-            slides: templateSlides,
-          },
-          fallbackTitle: templateTitle,
-          contentType: templateContentType,
-          brandId: requestBrandId || null,
-          brandSnapshot: templateBrandSnapshot,
-          platform,
-          visualMode: isVideo ? "blotato_video" : "blotato_template",
-        });
-
-        if (savedTemplateContentId) {
-          const updatePayload: Record<string, any> = {};
-          if (blotatoImageUrls.length > 0) updatePayload.image_urls = blotatoImageUrls;
-          if (blotatoMediaUrl) updatePayload.rendered_image_urls = [blotatoMediaUrl];
-          if (Object.keys(updatePayload).length > 0) {
-            await svc.from("generated_contents")
-              .update(updatePayload)
-              .eq("id", savedTemplateContentId);
-          }
-          await chargeCredits(svc, userId, "template", 1, savedTemplateContentId);
-        }
-
-        replyOverride = isVideo
-          ? "Vídeo Reels gerado! Confira abaixo."
-          : blotatoImageUrls.length > 1
-            ? `Carrossel gerado com ${blotatoImageUrls.length} slides! Confira abaixo.`
-            : "Visual gerado! Confira abaixo.";
-
-        actionResult = savedTemplateContentId ? {
-          content_id: savedTemplateContentId,
-          content_type: templateContentType,
-          platform,
-          preview_image_url: blotatoImageUrls[0] || blotatoMediaUrl || undefined,
-        } : null;
-
-        break;
-      }
 
       // ════════════════════════════════════════════════════════════════════════
       // GENERATE — Single post/story image generation

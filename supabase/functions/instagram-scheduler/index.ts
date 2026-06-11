@@ -76,13 +76,15 @@ Deno.serve(async (req) => {
           continue;
         }
 
-        // Call publish-postforme with service role key (internal call)
+        // Call publish-postforme with service role key (internal call).
+        // apikey = MESMA key do Authorization: o gateway rejeita keys diferentes
+        // ("Conflicting API keys" 401) desde 2026-06-11.
         const publishResp = await fetch(`${supabaseUrl}/functions/v1/publish-postforme`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${serviceKey}`,
-            "apikey": Deno.env.get("SUPABASE_ANON_KEY")!,
+            "apikey": serviceKey,
           },
           body: JSON.stringify({
             contentId: content.id,
