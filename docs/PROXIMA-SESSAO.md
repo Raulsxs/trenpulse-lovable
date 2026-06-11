@@ -33,7 +33,7 @@
 - [x] **Pre-check de saldo** (`insufficientCredits`) em TODOS os cases de geração — gated por `CREDITS_ENFORCED` (off = só loga).
 - [x] **Pricing → créditos**: `Pricing.tsx` reescrito (logado abre `BuyCreditsModal` PIX; o fluxo sandbox `manage-subscription` morreu) + `PricingSection` da landing com packs/tradução em resultado.
 - [x] "9 redes" padronizado (3 lugares) + empty state `/contents` → chat. (`useSubscription` no Profile já não existia.)
-- [ ] **SQL em prod (Raul roda — classifier bloqueia agente):** (a) linha `template` na credit_pricing; (b) backfill 50cr pros perfis sem ledger. SQL pronto no chat da sessão 2026-06-09.
+- [x] **SQL em prod aplicado** (2026-06-11, autorização explícita): linha `template` 4cr na credit_pricing + backfill 50cr em 8 perfis (guard pulou Maikon, 864cr). Todos os 9 perfis têm créditos.
 - [ ] Trocar `ASAAS_PROD_KEY` pela key permanente do Raul.
 - [ ] Ligar `CREDITS_ENFORCED=true` **só no lançamento** (decisão do Raul).
 
