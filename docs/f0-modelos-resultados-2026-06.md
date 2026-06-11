@@ -40,6 +40,17 @@ commitados. ⚠️ SQL em prod pendente de autorização nomeada do Raul:
 5. Preço por modelo NÃO é público na API — está no dashboard logado. `usage_events`
    da task tem billing_record_id mas não o valor em $.
 
+## Custos REAIS (dashboard inference.sh, 2026-06-11)
+
+| App | Custo real/call | Implicação |
+|---|---|---|
+| `gpt-image-2` | **$0.0625** (44 calls/$2.75) | ⚠️ **2.6x acima dos $0.024 da memória!** Post a 4cr (R$0,38) tem margem de só ~11% — com retry vira negativa. RECOMENDAÇÃO: post/carousel_slide 4 → **8cr** (regra ×2.5 = R$0,86). Pendente de ok do Raul. |
+| `gemini-3-pro-image` (Nano Banana) | **$0.15** (28/$4.20) | ✓ confirma a memória; story 20cr correto (margem 57%) — APLICADO em prod. |
+| `seedream-4-0` | **$0.03** | Estante: 4cr (×2.5 = R$0,41). |
+| `klingai/video-v2-5` | **$0.35**/vídeo 5s | Estante: 60cr (×3 ≈ R$5,71) ✓ como no mockup. |
+| `seedance-2-0-fast` | **$0.605**/vídeo | Caro E sem 9:16 → fora da estante inicial (reserva 90cr se voltar). |
+| `klingai/image-v2-1` | $0.015 | Fundos sem texto, ~2cr se entrar. |
+
 ## Próximo (Onda 1)
 
 Design system + densidade nas telas existentes (mockup 02 → aprovação → /impeccable).
