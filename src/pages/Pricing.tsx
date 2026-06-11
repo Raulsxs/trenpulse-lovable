@@ -17,7 +17,7 @@ import { Sparkles } from "lucide-react";
 const COSTS = [
   { label: "Post com imagem", credits: 4 },
   { label: "Carrossel (por slide)", credits: 4 },
-  { label: "Story 9:16", credits: 6 },
+  { label: "Story 9:16 (modelo premium)", credits: 20 },
   { label: "Carrossel de tweet card", credits: 2 },
   { label: "Imagem livre", credits: 4 },
 ];
