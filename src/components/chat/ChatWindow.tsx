@@ -7,6 +7,7 @@ import ChatInput from "./ChatInput";
 import BrandAnalysisLoader from "./BrandAnalysisLoader";
 import { Sparkles, ArrowDown, X, MessageSquarePlus } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { CostChip } from "@/components/ui/cost-chip";
 import { toast } from "sonner";
 import SmartNudge from "./SmartNudge";
 import BrandCreationModal from "./BrandCreationModal";
@@ -73,12 +74,16 @@ const buildCompletionMsg = (data: { name?: string; handle?: string; niche?: stri
 };
 
 // Quick actions: always visible, most common actions
+// Atalhos com custo visível (assinatura do design: preço antes do clique) e curadoria
+// que promove os formatos de maior engajamento — carrossel e editorial saíram do
+// dropdown pra primeira fileira. Custos espelham credit_pricing (caso típico).
 const QUICK_ACTIONS = [
-  { emoji: "📷", label: "Post", template: "Crie um post para Instagram sobre: " },
-  { emoji: "📱", label: "Story", template: "Crie um story para Instagram sobre: " },
-  { emoji: "💼", label: "LinkedIn", template: "Crie um post para LinkedIn sobre: " },
-  { emoji: "💬", label: "Frase", template: "Crie uma imagem com a frase: " },
-  { emoji: "🐦", label: "Tweet", template: "Crie um tweet card visual sobre: " },
+  { emoji: "📷", label: "Post", cost: 4, template: "Crie um post para Instagram sobre: " },
+  { emoji: "🎠", label: "Carrossel", cost: 20, template: "Crie um carrossel de 5 slides educativos e visualmente impactantes para Instagram sobre: " },
+  { emoji: "📰", label: "Editorial", cost: 16, template: "Crie um carrossel editorial cinematográfico sobre: " },
+  { emoji: "📱", label: "Story", cost: 20, template: "Crie um story para Instagram sobre: " },
+  { emoji: "🐦", label: "Tweet", cost: 2, template: "Crie um tweet card visual sobre: " },
+  { emoji: "💼", label: "LinkedIn", cost: 4, template: "Crie um post para LinkedIn sobre: " },
 ];
 
 // Default prompt templates: richer prompts for better results
@@ -962,14 +967,15 @@ export default function ChatWindow({ initialPrefill }: { initialPrefill?: string
               <p className="text-sm text-muted-foreground/70 max-w-sm mb-8">
                 Cole um link, descreva um tema, ou escolha abaixo para começar.
               </p>
-              <div className="flex flex-wrap justify-center gap-2.5 max-w-md">
+              <div className="flex flex-wrap justify-center gap-2 max-w-lg">
                 {QUICK_ACTIONS.map((action) => (
                   <button
                     key={action.label}
-                    className="border border-border/60 bg-background text-foreground/80 rounded-xl px-4 py-2.5 text-[13px] hover:bg-primary/5 hover:border-primary/30 hover:text-foreground transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                    className="inline-flex items-center gap-1.5 border border-border/60 bg-background text-foreground/80 rounded-xl px-3.5 py-2 text-[13px] hover:bg-primary/5 hover:border-primary/30 hover:text-foreground transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
                     onClick={() => handleQuickAction(action.template)}
                   >
                     {action.emoji} {action.label}
+                    <CostChip cost={action.cost} />
                   </button>
                 ))}
                 <button
@@ -1057,9 +1063,10 @@ export default function ChatWindow({ initialPrefill }: { initialPrefill?: string
             <button
               key={action.label}
               onClick={() => handleQuickAction(action.template)}
-              className="text-[11px] px-3 py-1.5 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150 whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150 whitespace-nowrap shrink-0"
             >
               {action.emoji} {action.label}
+              <CostChip cost={action.cost} />
             </button>
           ))}
           <button onClick={() => setBrandModalOpen(true)}
