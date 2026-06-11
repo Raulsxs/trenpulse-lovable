@@ -37,21 +37,15 @@ interface SavedAccount {
 // Primary: what 90% of users need daily
 const primaryItems = [
   { icon: MessageSquare, label: "Assistente IA", href: "/chat" },
-  { icon: LayoutGrid, label: "Templates", href: "/templates" },
-  { icon: FileText, label: "Meus Conteúdos", href: "/contents" },
   { icon: CalendarDays, label: "Calendário", href: "/calendar" },
+  { icon: FileText, label: "Meus Conteúdos", href: "/contents" },
 ];
 
 // Secondary: configuration and insights
+// Analytics escondido até ter dado real (Apify) — rota /analytics segue viva.
 const secondaryItems = [
   { icon: Palette, label: "Marcas", href: "/brands" },
-  { icon: BarChart3, label: "Analytics", href: "/analytics" },
   { icon: User, label: "Meu Perfil", href: "/profile" },
-];
-
-// Advanced: power user tools
-const advancedItems = [
-  { icon: LayoutDashboard, label: "Explorar Tendências", href: "/dashboard" },
 ];
 
 const Sidebar = () => {
@@ -260,30 +254,6 @@ const Sidebar = () => {
             );
           })}
 
-          {/* Divider */}
-          <div className="pt-3 pb-1 px-4">
-            <p className="text-[10px] font-semibold uppercase tracking-wider text-sidebar-foreground/40">Avançado</p>
-          </div>
-
-          {/* Advanced — power user tools */}
-          {advancedItems.map((item) => {
-            const isActive = location.pathname === item.href;
-            return (
-              <Link
-                key={item.href}
-                to={item.href}
-                className={cn(
-                  "flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
-                  isActive
-                    ? "bg-sidebar-accent text-sidebar-primary"
-                    : "text-sidebar-foreground/50 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
-                )}
-              >
-                <item.icon className="w-4 h-4" />
-                {item.label}
-              </Link>
-            );
-          })}
         </nav>
 
         {/* Credits Banner */}

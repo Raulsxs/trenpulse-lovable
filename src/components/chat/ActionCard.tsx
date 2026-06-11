@@ -192,8 +192,6 @@ export default function ActionCard({
   const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
   const [showImageEditDialog, setShowImageEditDialog] = useState(false);
   const [imageEditInstruction, setImageEditInstruction] = useState("");
-  const [isAnimating, setIsAnimating] = useState(false);
-  const [animatedVideoUrl, setAnimatedVideoUrl] = useState<string | null>(null);
 
   // Multi-platform publish state — uses shared cache to avoid N parallel connect-social calls
   const { accounts: sharedAccounts } = useConnectedAccounts(contentType === "cron_config");
@@ -1083,91 +1081,7 @@ export default function ActionCard({
                 </PopoverContent>
               </Popover>
             )}
-            {composedImageUrls?.[0] && !animatedVideoUrl && (
-              <Button
-                size="sm"
-                variant="outline"
-                className="flex-1 text-xs border-primary/20 text-primary hover:bg-primary/5"
-                disabled={isAnimating}
-                onClick={async () => {
-                  setIsAnimating(true);
-                  try {
-                    const imageUrl = composedImageUrls[0];
-                    const { data, error } = await supabase.functions.invoke("blotato-proxy", {
-                      body: {
-                        action: "create_visual",
-                        templateKey: "image-slideshow",
-                        prompt: captionText || headline || "Animate this image with smooth motion",
-                        inputs: {
-                          slides: [{ uploadedMedia: imageUrl }],
-                          aspectRatio: effectivePlatform === "linkedin" ? "1:1" : contentType === "story" ? "9:16" : "1:1",
-                          slideDuration: 5,
-                          transition: "crossfade",
-                        },
-                      },
-                    });
-                    if (error) throw error;
-
-                    // If done immediately (quick template)
-                    if (data?.status === "done") {
-                      const url = data.mediaUrl || data.imageUrls?.[0];
-                      if (url) {
-                        setAnimatedVideoUrl(url);
-                        toast.success("Video animado gerado!");
-                      } else {
-                        toast.error("Não foi possível gerar a animação");
-                      }
-                      return;
-                    }
-
-                    // Async polling for slow templates
-                    if (data?.creationId && (data?.status === "processing" || data?.status === "timeout")) {
-                      toast.info("⏳ Gerando animação... isso pode levar até 2 minutos.");
-                      const cid = data.creationId;
-                      const maxAttempts = 48; // 48 * 5s = 240s max
-                      for (let i = 0; i < maxAttempts; i++) {
-                        await new Promise(r => setTimeout(r, 5000));
-                        const { data: poll, error: pollErr } = await supabase.functions.invoke("blotato-proxy", {
-                          body: { action: "poll_status", creationId: cid },
-                        });
-                        if (pollErr) continue;
-                        if (poll?.status === "done") {
-                          const url = poll.mediaUrl || poll.imageUrls?.[0];
-                          if (url) {
-                            setAnimatedVideoUrl(url);
-                            toast.success("Video animado gerado!");
-                          } else {
-                            toast.error("Animação concluída mas sem mídia");
-                          }
-                          return;
-                        }
-                        if (poll?.status === "failed") {
-                          toast.error("Falha ao gerar animação");
-                          return;
-                        }
-                      }
-                      toast.error("Animação demorou demais. Tente novamente.");
-                    } else {
-                      toast.error("Não foi possível iniciar a animação");
-                    }
-                  } catch (err: any) {
-                    console.error("[ActionCard] Animate error:", err);
-                    toast.error("Erro ao animar: " + (err?.message || "tente novamente"));
-                  } finally {
-                    setIsAnimating(false);
-                  }
-                }}
-              >
-                {isAnimating ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-                {isAnimating ? "Animando..." : "Animar"}
-              </Button>
-            )}
           </div>
-          {animatedVideoUrl && (
-            <div className="mb-2 rounded-lg overflow-hidden border border-primary/20">
-              <video src={animatedVideoUrl} controls playsInline className="w-full" />
-            </div>
-          )}
 
           {/* Save background nudge — only for ai_background mode (has bg image + overlay text) */}
           {slideData?.background_image_url && slideData?.render_mode !== "ai_full_design" && (

@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
@@ -10,8 +10,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCreateBrand, useUpdateBrand } from "@/hooks/useStudio";
 import { VISUAL_TONES } from "@/types/studio";
-import BrandExamples from "@/components/studio/BrandExamples";
-import BrandPhotoBackgrounds from "@/components/studio/BrandPhotoBackgrounds";
+import BrandExamples from "@/components/brand/BrandExamples";
+import BrandPhotoBackgrounds from "@/components/brand/BrandPhotoBackgrounds";
 import { Plus, X, Upload, Loader2, Image as ImageIcon, Sparkles, Lock } from "lucide-react";
 
 const FONT_OPTIONS = [
@@ -31,11 +31,11 @@ const CREATION_MODE_TO_STYLE: Record<string, string | null> = {
 };
 
 const PRESETS = [
-  { id: "minimalista", label: "Minimalista", emoji: "⚪", visual_tone: "clean", palette: ["#FFFFFF", "#1A1A2E", "#E2E2E2"] },
-  { id: "colorido", label: "Colorido", emoji: "🎨", visual_tone: "playful", palette: ["#FF6B6B", "#4ECDC4", "#FFE66D", "#2C3E50"] },
-  { id: "sofisticado", label: "Sofisticado", emoji: "✨", visual_tone: "luxury", palette: ["#1A1A2E", "#C9A96E", "#F5F5F0"] },
-  { id: "moderno", label: "Moderno", emoji: "💎", visual_tone: "tech", palette: ["#0F0F23", "#00D4FF", "#7B2FFF", "#FFFFFF"] },
-  { id: "organico", label: "Orgânico", emoji: "🌿", visual_tone: "organic", palette: ["#5D4E37", "#8B9D77", "#F5E6D3", "#2D3B2D"] },
+  { id: "minimalista", label: "Minimalista", emoji: "âšª", visual_tone: "clean", palette: ["#FFFFFF", "#1A1A2E", "#E2E2E2"] },
+  { id: "colorido", label: "Colorido", emoji: "ðŸŽ¨", visual_tone: "playful", palette: ["#FF6B6B", "#4ECDC4", "#FFE66D", "#2C3E50"] },
+  { id: "sofisticado", label: "Sofisticado", emoji: "âœ¨", visual_tone: "luxury", palette: ["#1A1A2E", "#C9A96E", "#F5F5F0"] },
+  { id: "moderno", label: "Moderno", emoji: "ðŸ’Ž", visual_tone: "tech", palette: ["#0F0F23", "#00D4FF", "#7B2FFF", "#FFFFFF"] },
+  { id: "organico", label: "OrgÃ¢nico", emoji: "ðŸŒ¿", visual_tone: "organic", palette: ["#5D4E37", "#8B9D77", "#F5E6D3", "#2D3B2D"] },
 ];
 
 const INITIAL_FORM = {
@@ -114,7 +114,7 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
 
   const handleCreate = async () => {
     if (!formData.name.trim()) {
-      toast.error("Nome é obrigatório");
+      toast.error("Nome Ã© obrigatÃ³rio");
       setTab("identity");
       return;
     }
@@ -220,14 +220,14 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles className="w-5 h-5 text-primary" />
-            {brandId ? `Marca "${formData.name}" criada — adicione imagens` : "Criar Nova Marca"}
+            {brandId ? `Marca "${formData.name}" criada â€” adicione imagens` : "Criar Nova Marca"}
           </DialogTitle>
           <DialogDescription>
             {brandId
               ? formData.creation_mode === "photo_backgrounds"
                 ? "Envie suas fotos pessoais para usar como fundo dos posts."
                 : "Envie exemplos de posts do seu estilo para a IA analisar."
-              : "Configure sua identidade visual. Você poderá ajustar tudo depois."}
+              : "Configure sua identidade visual. VocÃª poderÃ¡ ajustar tudo depois."}
           </DialogDescription>
         </DialogHeader>
 
@@ -241,7 +241,7 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
             </TabsTrigger>
           </TabsList>
 
-          {/* ── Tab 1: Identidade ── */}
+          {/* â”€â”€ Tab 1: Identidade â”€â”€ */}
           <TabsContent value="identity" className="space-y-4 pt-4">
             <div className="space-y-2">
               <Label>Nome da Marca *</Label>
@@ -285,15 +285,15 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
             </div>
 
             <div className="space-y-2">
-              <Label>Modo de Criação</Label>
-              <p className="text-xs text-muted-foreground">Define como a IA usa referências visuais ao gerar conteúdo.</p>
+              <Label>Modo de CriaÃ§Ã£o</Label>
+              <p className="text-xs text-muted-foreground">Define como a IA usa referÃªncias visuais ao gerar conteÃºdo.</p>
               <Select value={formData.creation_mode} onValueChange={(v) => setFormData(p => ({ ...p, creation_mode: v }))}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="photo_backgrounds">📸 Fotos pessoais como fundo</SelectItem>
-                  <SelectItem value="style_copy">🎨 Copiar estilo de referências (recomendado)</SelectItem>
-                  <SelectItem value="inspired">💡 Inspirado em referências</SelectItem>
-                  <SelectItem value="from_scratch">✨ Criar do zero (sem referências)</SelectItem>
+                  <SelectItem value="photo_backgrounds">ðŸ“¸ Fotos pessoais como fundo</SelectItem>
+                  <SelectItem value="style_copy">ðŸŽ¨ Copiar estilo de referÃªncias (recomendado)</SelectItem>
+                  <SelectItem value="inspired">ðŸ’¡ Inspirado em referÃªncias</SelectItem>
+                  <SelectItem value="from_scratch">âœ¨ Criar do zero (sem referÃªncias)</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -309,7 +309,7 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
             </div>
 
             <div className="space-y-2">
-              <Label>Aplicar preset rápido</Label>
+              <Label>Aplicar preset rÃ¡pido</Label>
               <p className="text-xs text-muted-foreground">Substitui paleta e tom atuais por um estilo pronto.</p>
               <div className="grid grid-cols-5 gap-2">
                 {PRESETS.map((preset) => (
@@ -380,7 +380,7 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
               <p className="text-xs text-muted-foreground">Usadas nos textos sobrepostos nas imagens.</p>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">Títulos</Label>
+                  <Label className="text-xs text-muted-foreground">TÃ­tulos</Label>
                   <Select
                     value={formData.fonts.headings}
                     onValueChange={(v) => setFormData(p => ({ ...p, fonts: { ...p.fonts, headings: v } }))}
@@ -407,34 +407,34 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
             </div>
           </TabsContent>
 
-          {/* ── Tab 2: Regras para IA ── */}
+          {/* â”€â”€ Tab 2: Regras para IA â”€â”€ */}
           <TabsContent value="generation" className="space-y-4 pt-4">
             <div className="space-y-2">
-              <Label>✅ O que a IA DEVE fazer</Label>
-              <p className="text-xs text-muted-foreground">Regras positivas a seguir em toda geração.</p>
+              <Label>âœ… O que a IA DEVE fazer</Label>
+              <p className="text-xs text-muted-foreground">Regras positivas a seguir em toda geraÃ§Ã£o.</p>
               <Textarea
                 value={formData.do_rules}
                 onChange={(e) => setFormData(p => ({ ...p, do_rules: e.target.value }))}
-                placeholder={"Ex: usar linguagem próxima, headlines curtos, sempre mencionar a marca..."}
+                placeholder={"Ex: usar linguagem prÃ³xima, headlines curtos, sempre mencionar a marca..."}
                 rows={3}
               />
             </div>
 
             <div className="space-y-2">
-              <Label>🚫 O que a IA NÃO deve fazer</Label>
+              <Label>ðŸš« O que a IA NÃƒO deve fazer</Label>
               <p className="text-xs text-muted-foreground">Regras do que evitar.</p>
               <Textarea
                 value={formData.dont_rules}
                 onChange={(e) => setFormData(p => ({ ...p, dont_rules: e.target.value }))}
-                placeholder={"Ex: não usar jargões técnicos, não citar concorrentes, nada de CAPS LOCK..."}
+                placeholder={"Ex: nÃ£o usar jargÃµes tÃ©cnicos, nÃ£o citar concorrentes, nada de CAPS LOCK..."}
                 rows={3}
               />
             </div>
 
             <div className="border-t border-border pt-4 space-y-4">
               <div>
-                <Label>🎨 Preferências visuais</Label>
-                <p className="text-xs text-muted-foreground mt-0.5">Toque para alternar: ✅ sim / 🚫 não / ➖ sem preferência.</p>
+                <Label>ðŸŽ¨ PreferÃªncias visuais</Label>
+                <p className="text-xs text-muted-foreground mt-0.5">Toque para alternar: âœ… sim / ðŸš« nÃ£o / âž– sem preferÃªncia.</p>
               </div>
 
               <div className="grid grid-cols-2 gap-2">
@@ -481,18 +481,18 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">Sem preferência</SelectItem>
+                    <SelectItem value="none">Sem preferÃªncia</SelectItem>
                     <SelectItem value="gradient">Gradiente</SelectItem>
                     <SelectItem value="photo">Foto</SelectItem>
-                    <SelectItem value="solid">Cor sólida</SelectItem>
-                    <SelectItem value="illustration">Ilustração</SelectItem>
+                    <SelectItem value="solid">Cor sÃ³lida</SelectItem>
+                    <SelectItem value="illustration">IlustraÃ§Ã£o</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-2">
-                <Label>📝 Instruções extras para a IA (imagens)</Label>
-                <p className="text-xs text-muted-foreground">Texto livre enviado ao gerador. Descreva o estilo que você quer.</p>
+                <Label>ðŸ“ InstruÃ§Ãµes extras para a IA (imagens)</Label>
+                <p className="text-xs text-muted-foreground">Texto livre enviado ao gerador. Descreva o estilo que vocÃª quer.</p>
                 <Textarea
                   value={formData.visual_preferences.custom_notes}
                   onChange={(e) => setFormData(p => ({
@@ -506,7 +506,7 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
             </div>
           </TabsContent>
 
-          {/* ── Tab 3: Imagens ── */}
+          {/* â”€â”€ Tab 3: Imagens â”€â”€ */}
           <TabsContent value="images" className="space-y-4 pt-4">
             {!brandId ? (
               <div className="text-center py-8 text-sm text-muted-foreground">
@@ -515,7 +515,7 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
             ) : formData.creation_mode === "photo_backgrounds" ? (
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground">
-                  Fotos que serão usadas como fundo dos posts. Ideal para fotos profissionais.
+                  Fotos que serÃ£o usadas como fundo dos posts. Ideal para fotos profissionais.
                 </p>
                 <BrandPhotoBackgrounds brandId={brandId} />
               </div>
@@ -533,7 +533,7 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
               </div>
             ) : (
               <div className="text-center py-8 text-sm text-muted-foreground">
-                Modo "Do zero" não usa imagens de referência.
+                Modo "Do zero" nÃ£o usa imagens de referÃªncia.
               </div>
             )}
           </TabsContent>
@@ -552,7 +552,7 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
             <div className="flex gap-2">
               <Button variant="outline" onClick={handleSaveChanges} disabled={saving}>
                 {saving ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Salvar alterações
+                Salvar alteraÃ§Ãµes
               </Button>
               <Button onClick={closeAndReset}>
                 Concluir
@@ -593,7 +593,7 @@ function VisualPrefToggle({
       }`}
     >
       <span className="text-sm mt-0.5">
-        {value === true ? "✅" : value === false ? "🚫" : "➖"}
+        {value === true ? "âœ…" : value === false ? "ðŸš«" : "âž–"}
       </span>
       <div>
         <p

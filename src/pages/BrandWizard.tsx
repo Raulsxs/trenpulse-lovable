@@ -1,4 +1,4 @@
-import { useState } from "react";
+﻿import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useCreateBrand } from "@/hooks/useStudio";
 import { VISUAL_TONES } from "@/types/studio";
-import BrandExamples from "@/components/studio/BrandExamples";
+import BrandExamples from "@/components/brand/BrandExamples";
 import {
   ArrowLeft, ArrowRight, Plus, X, Loader2, Upload, Sparkles, Check,
   Image as ImageIcon, Palette, Type, FileImage,
@@ -55,7 +55,7 @@ export default function BrandWizard() {
   });
 
   const handleCreateBrand = async () => {
-    if (!formData.name) { toast.error("Nome é obrigatório"); return; }
+    if (!formData.name) { toast.error("Nome Ã© obrigatÃ³rio"); return; }
     try {
       const result = await createBrand.mutateAsync(formData);
       setBrandId(result.id);
@@ -89,7 +89,7 @@ export default function BrandWizard() {
     setUploading(true);
     try {
       const { data: session } = await supabase.auth.getSession();
-      if (!session.session) throw new Error("Não autenticado");
+      if (!session.session) throw new Error("NÃ£o autenticado");
       const ext = file.name.split(".").pop();
       const path = `brands/${Date.now()}-logo.${ext}`;
       const { error } = await supabase.storage.from("content-images").upload(path, file, { upsert: true });
@@ -205,7 +205,7 @@ export default function BrandWizard() {
               <div className="flex justify-end pt-4">
                 <Button onClick={handleCreateBrand} disabled={!formData.name || createBrand.isPending}>
                   {createBrand.isPending ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                  Próximo <ArrowRight className="w-4 h-4 ml-2" />
+                  PrÃ³ximo <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
             </CardContent>
@@ -248,7 +248,7 @@ export default function BrandWizard() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Fonte Títulos</Label>
+                  <Label>Fonte TÃ­tulos</Label>
                   <Select value={formData.fonts.headings} onValueChange={v => setFormData(prev => ({ ...prev, fonts: { ...prev.fonts, headings: v } }))}>
                     <SelectTrigger><SelectValue placeholder="Selecione uma fonte" /></SelectTrigger>
                     <SelectContent>
@@ -268,7 +268,7 @@ export default function BrandWizard() {
               </div>
               <div className="flex justify-between pt-4">
                 <Button variant="outline" onClick={() => setStep(1)}>Voltar</Button>
-                <Button onClick={handleSaveDetails}>Próximo <ArrowRight className="w-4 h-4 ml-2" /></Button>
+                <Button onClick={handleSaveDetails}>PrÃ³ximo <ArrowRight className="w-4 h-4 ml-2" /></Button>
               </div>
             </CardContent>
           </Card>
@@ -279,13 +279,13 @@ export default function BrandWizard() {
           <Card>
             <CardHeader>
               <CardTitle>Exemplos Visuais</CardTitle>
-              <CardDescription>Faça upload de exemplos de posts, stories e carrosséis da sua marca</CardDescription>
+              <CardDescription>FaÃ§a upload de exemplos de posts, stories e carrossÃ©is da sua marca</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <BrandExamples brandId={brandId} brandName={formData.name} onAnalyzeStyle={() => {}} isAnalyzing={false} />
               <div className="flex justify-between pt-4">
                 <Button variant="outline" onClick={() => setStep(2)}>Voltar</Button>
-                <Button onClick={() => setStep(4)}>Próximo <ArrowRight className="w-4 h-4 ml-2" /></Button>
+                <Button onClick={() => setStep(4)}>PrÃ³ximo <ArrowRight className="w-4 h-4 ml-2" /></Button>
               </div>
             </CardContent>
           </Card>
@@ -303,7 +303,7 @@ export default function BrandWizard() {
                 <Sparkles className="w-16 h-16 text-primary mx-auto mb-4" />
                 <p className="text-foreground font-medium mb-2">Tudo pronto!</p>
                 <p className="text-sm text-muted-foreground max-w-md mx-auto">
-                  Clique no botão abaixo para analisar seus exemplos visuais e gerar estilos automáticos baseados na identidade da sua marca.
+                  Clique no botÃ£o abaixo para analisar seus exemplos visuais e gerar estilos automÃ¡ticos baseados na identidade da sua marca.
                 </p>
               </div>
               {(analyzing || generating) && (
@@ -333,7 +333,7 @@ export default function BrandWizard() {
               </div>
               <h3 className="text-xl font-heading font-bold text-foreground">Marca configurada!</h3>
               <p className="text-muted-foreground text-center max-w-md">
-                Seus estilos foram gerados. Agora você pode usar essa marca para gerar conteúdos no Dashboard ou Studio.
+                Seus estilos foram gerados. Agora vocÃª pode usar essa marca para gerar conteÃºdos no Dashboard ou Studio.
               </p>
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => navigate(`/brands/${brandId}/edit`)}>Editar Marca</Button>
