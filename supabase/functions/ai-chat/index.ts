@@ -1528,7 +1528,8 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
 
         {
           // Pre-check com o mínimo do formato (4 slides); a cobrança real é por slide gerado.
-          const denyMsg = await insufficientCredits(svc, userId, "carousel_slide", 4);
+          // editorial_slide tem preço próprio: o motor é Satori (custo ~zero), não gpt-image.
+          const denyMsg = await insufficientCredits(svc, userId, "editorial_slide", 4);
           if (denyMsg) { replyOverride = denyMsg; break; }
         }
 
@@ -1646,7 +1647,7 @@ Responda APENAS em JSON:
         });
         if (savedContentId && edCardUrls.length > 0) {
           await svc.from("generated_contents").update({ image_urls: edCardUrls }).eq("id", savedContentId);
-          await chargeCredits(svc, userId, "carousel_slide", edCardUrls.length, savedContentId);
+          await chargeCredits(svc, userId, "editorial_slide", edCardUrls.length, savedContentId);
         }
         replyOverride = `Carrossel editorial com ${edCardUrls.length} slides gerado! Confira abaixo. 🎬`;
         actionResult = savedContentId ? { content_id: savedContentId, content_type: "carousel", platform, preview_image_url: edCardUrls[0] || null } : null;

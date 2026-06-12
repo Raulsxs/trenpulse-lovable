@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import BrandAnalysisLoader from "./BrandAnalysisLoader";
-import { Sparkles, ArrowDown, X, MessageSquarePlus } from "lucide-react";
+import { Sparkles, ArrowDown, X, MessageSquarePlus, ImageIcon, GalleryHorizontalEnd, Newspaper, Smartphone, MessageSquareQuote, Linkedin, Palette } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CostChip } from "@/components/ui/cost-chip";
 import { toast } from "sonner";
@@ -76,14 +76,15 @@ const buildCompletionMsg = (data: { name?: string; handle?: string; niche?: stri
 // Quick actions: always visible, most common actions
 // Atalhos com custo visível (assinatura do design: preço antes do clique) e curadoria
 // que promove os formatos de maior engajamento — carrossel e editorial saíram do
-// dropdown pra primeira fileira. Custos espelham credit_pricing (caso típico).
+// dropdown pra primeira fileira. Ícones lucide (não emoji): tom de ferramenta, não brinquedo.
+// Custos espelham credit_pricing (caso típico: carrossel 5 slides, editorial 4).
 const QUICK_ACTIONS = [
-  { emoji: "📷", label: "Post", cost: 4, template: "Crie um post para Instagram sobre: " },
-  { emoji: "🎠", label: "Carrossel", cost: 20, template: "Crie um carrossel de 5 slides educativos e visualmente impactantes para Instagram sobre: " },
-  { emoji: "📰", label: "Editorial", cost: 16, template: "Crie um carrossel editorial cinematográfico sobre: " },
-  { emoji: "📱", label: "Story", cost: 20, template: "Crie um story para Instagram sobre: " },
-  { emoji: "🐦", label: "Tweet", cost: 2, template: "Crie um tweet card visual sobre: " },
-  { emoji: "💼", label: "LinkedIn", cost: 4, template: "Crie um post para LinkedIn sobre: " },
+  { icon: ImageIcon, label: "Post", cost: 8, template: "Crie um post para Instagram sobre: " },
+  { icon: GalleryHorizontalEnd, label: "Carrossel", cost: 40, template: "Crie um carrossel de 5 slides educativos e visualmente impactantes para Instagram sobre: " },
+  { icon: Newspaper, label: "Editorial", cost: 16, template: "Crie um carrossel editorial cinematográfico sobre: " },
+  { icon: Smartphone, label: "Story", cost: 20, template: "Crie um story para Instagram sobre: " },
+  { icon: MessageSquareQuote, label: "Tweet", cost: 2, template: "Crie um tweet card visual sobre: " },
+  { icon: Linkedin, label: "LinkedIn", cost: 8, template: "Crie um post para LinkedIn sobre: " },
 ];
 
 // Default prompt templates: richer prompts for better results
@@ -971,18 +972,20 @@ export default function ChatWindow({ initialPrefill }: { initialPrefill?: string
                 {QUICK_ACTIONS.map((action) => (
                   <button
                     key={action.label}
-                    className="inline-flex items-center gap-1.5 border border-border/60 bg-background text-foreground/80 rounded-xl px-3.5 py-2 text-[13px] hover:bg-primary/5 hover:border-primary/30 hover:text-foreground transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                    className="inline-flex items-center gap-1.5 border border-border/60 bg-background text-foreground/80 rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-primary/5 hover:border-primary/30 hover:text-foreground transition-all duration-200 cursor-pointer"
                     onClick={() => handleQuickAction(action.template)}
                   >
-                    {action.emoji} {action.label}
+                    <action.icon className="w-3.5 h-3.5 text-muted-foreground" />
+                    {action.label}
                     <CostChip cost={action.cost} />
                   </button>
                 ))}
                 <button
                   onClick={() => setBrandModalOpen(true)}
-                  className="border border-border/60 bg-background text-foreground/80 rounded-xl px-4 py-2.5 text-[13px] hover:bg-primary/5 hover:border-primary/30 hover:text-foreground transition-all duration-200 cursor-pointer hover:scale-[1.02] active:scale-[0.98]"
+                  className="inline-flex items-center gap-1.5 border border-border/60 bg-background text-foreground/80 rounded-lg px-3 py-2 text-[13px] font-medium hover:bg-primary/5 hover:border-primary/30 hover:text-foreground transition-all duration-200 cursor-pointer"
                 >
-                  🎨 Criar marca
+                  <Palette className="w-3.5 h-3.5 text-muted-foreground" />
+                  Criar marca
                 </button>
               </div>
             </div>
@@ -1063,15 +1066,17 @@ export default function ChatWindow({ initialPrefill }: { initialPrefill?: string
             <button
               key={action.label}
               onClick={() => handleQuickAction(action.template)}
-              className="inline-flex items-center gap-1 text-[11px] px-2.5 py-1.5 rounded-lg border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150 whitespace-nowrap shrink-0"
+              className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-md border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/30 transition-all duration-150 whitespace-nowrap shrink-0"
             >
-              {action.emoji} {action.label}
+              <action.icon className="w-3 h-3" />
+              {action.label}
               <CostChip cost={action.cost} />
             </button>
           ))}
           <button onClick={() => setBrandModalOpen(true)}
-            className="text-xs px-3 py-1.5 rounded-lg border border-border/60 bg-background text-foreground/75 hover:text-foreground hover:bg-primary/5 hover:border-primary/40 transition-all duration-150 whitespace-nowrap shrink-0">
-            🎨 Criar marca
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-1.5 rounded-md border border-border/50 bg-background text-muted-foreground hover:text-foreground hover:bg-primary/5 hover:border-primary/40 transition-all duration-150 whitespace-nowrap shrink-0">
+            <Palette className="w-3 h-3" />
+            Criar marca
           </button>
         </div>
       )}

@@ -205,10 +205,9 @@ export default function ActionCard({
   const publishedSuccessfully = !!publishResults && Object.values(publishResults).some((r) => r.success === true);
 
   // Custo visível nas ações que regeneram (espelha credit_pricing; manter em sincronia).
-  // Refazer = geração completa do formato; Ajustar/Adaptar = EDIT_CONTENT (1 imagem).
-  const REGEN_COST: Record<string, number> = { post: 4, story: 20, carousel: 20, document: 20, tweet_card: 2 };
-  const regenCost = REGEN_COST[contentType] ?? 4;
-  const editCost = contentType === "story" ? 20 : 4;
+  // Ajustar E Refazer passam pelo EDIT_CONTENT (regenera 1 imagem): post 8cr / story 20cr.
+  const editCost = contentType === "story" ? 20 : 8;
+  const regenCost = editCost;
   // Any pending platform waiting for downstream confirmation — lock button to prevent duplicate publishes
   const publishHasPending = !!publishResults && Object.values(publishResults).some((r) => r.pending === true);
   const publishLocked = publishedSuccessfully || publishHasPending;

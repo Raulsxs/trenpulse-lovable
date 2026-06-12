@@ -15,11 +15,12 @@ import { Sparkles } from "lucide-react";
 
 // O que cada ação custa (espelha a tabela credit_pricing)
 const COSTS = [
-  { label: "Post com imagem", credits: 4 },
-  { label: "Carrossel (por slide)", credits: 4 },
+  { label: "Post com imagem", credits: 8 },
+  { label: "Carrossel (por slide)", credits: 8 },
+  { label: "Carrossel editorial (por slide)", credits: 4 },
   { label: "Story 9:16 (modelo premium)", credits: 20 },
   { label: "Carrossel de tweet card", credits: 2 },
-  { label: "Imagem livre", credits: 4 },
+  { label: "Imagem livre", credits: 8 },
 ];
 
 function CostsTable() {

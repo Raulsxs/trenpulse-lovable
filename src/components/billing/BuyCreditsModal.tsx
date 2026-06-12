@@ -158,7 +158,7 @@ export default function BuyCreditsModal({
 
             {/* Tradução crédito → resultado (ancoragem: psicologia do plano-ideal) */}
             <div className="rounded-lg border border-[hsl(var(--credit))]/25 bg-[hsl(var(--credit-bg))] px-3 py-2 text-center text-xs font-medium text-[hsl(var(--credit))] tabular-nums">
-              {selected.credits.toLocaleString("pt-BR")} créditos ≈ {Math.floor(selected.credits / 4)} posts com imagem · não expiram
+              {selected.credits.toLocaleString("pt-BR")} créditos ≈ {Math.floor(selected.credits / 8)} posts com imagem · não expiram
             </div>
 
             <div>
