@@ -268,7 +268,18 @@ serve(async (req) => {
       format: requestFormat,
       contentId,
       editInstruction,
+      model: requestModel, // Studio: modelo escolhido na estante (gpt-image-2|nano-banana|seedream). Define rota + custo.
+      creationModeOverride, // Studio: dial de fidelidade ("copy"|"inspire"|"free") sobrescreve o da marca nesta geração
     } = await req.json();
+
+    // Custo por modelo (Studio cobra pelo modelo escolhido, não só pelo formato).
+    // Ausente/desconhecido → null = mantém cobrança por formato (fluxo chat).
+    const MODEL_COST_ACTION: Record<string, string> = {
+      "seedream": "img_seedream",
+      "gpt-image-2": "img_gpt",
+      "nano-banana": "img_nano",
+    };
+    const modelCostAction: string | null = requestModel && MODEL_COST_ACTION[requestModel] ? MODEL_COST_ACTION[requestModel] : null;
 
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY") || Deno.env.get("INFERENCE_SH_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY");
     if (!lovableApiKey) throw new Error("No AI API key configured (INFERENCE_SH_API_KEY, GOOGLE_AI_API_KEY, or LOVABLE_API_KEY)");
@@ -569,7 +580,7 @@ Mensagem: "${message}"`;
         console.log(`[ai-chat] GENERATE: platform=${platform}, format=${format}, contentStyle=${contentStyle || "news"}, headline="${slideHeadline}"`);
 
         {
-          const denyMsg = await insufficientCredits(svc, userId, format === "story" ? "story" : "post");
+          const denyMsg = await insufficientCredits(svc, userId, modelCostAction || (format === "story" ? "story" : "post"));
           if (denyMsg) { replyOverride = denyMsg; break; }
         }
 
@@ -766,6 +777,7 @@ ${SAFE_AREA_RULES}`;
             headers: internalHeaders,
             body: JSON.stringify({
               userId,
+              model: requestModel,
               slide: { role: "cover", headline: slideHeadline, body: "" },
               slideIndex: 0,
               totalSlides: 1,
@@ -968,7 +980,7 @@ Responda APENAS em JSON:
             .update({ image_urls: [imageUrl] })
             .eq("id", savedContentId);
           // Débito de créditos (só se gerou imagem)
-          await chargeCredits(svc, userId, format === "story" ? "story" : "post", 1, savedContentId);
+          await chargeCredits(svc, userId, modelCostAction || (format === "story" ? "story" : "post"), 1, savedContentId);
         }
 
         // 11. Set reply
@@ -1007,7 +1019,7 @@ Responda APENAS em JSON:
         console.log(`[ai-chat] GENERATE_CAROUSEL: platform=${platform}, format=${format}, effectiveSlideFormat=${effectiveSlideFormat}, isStoryCarousel=${isStoryCarousel}, slides=${slideCount}`);
 
         {
-          const denyMsg = await insufficientCredits(svc, userId, "carousel_slide", slideCount);
+          const denyMsg = await insufficientCredits(svc, userId, modelCostAction || "carousel_slide", slideCount);
           if (denyMsg) { replyOverride = denyMsg; break; }
         }
 
@@ -1197,6 +1209,7 @@ Responda APENAS com a imagem gerada.`;
                 headers: internalHeaders,
                 body: JSON.stringify({
                   userId,
+                  model: requestModel,
                   slide,
                   slideIndex: i,
                   totalSlides: slides.length,
@@ -1330,7 +1343,7 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
             .update({ image_urls: imageUrls_arr })
             .eq("id", savedContentId);
           // Débito: 1 ação por slide gerado
-          await chargeCredits(svc, userId, "carousel_slide", imageUrls_arr.length, savedContentId);
+          await chargeCredits(svc, userId, modelCostAction || "carousel_slide", imageUrls_arr.length, savedContentId);
         }
 
         // 10. Set reply
@@ -1664,7 +1677,7 @@ Responda APENAS em JSON:
         const platform = requestPlatform || "instagram";
 
         {
-          const denyMsg = await insufficientCredits(svc, userId, "free_image");
+          const denyMsg = await insufficientCredits(svc, userId, modelCostAction || "free_image");
           if (denyMsg) { replyOverride = denyMsg; break; }
         }
         // Tira o comando ("gere uma imagem de...") e deixa só o assunto pro modelo.
@@ -1683,6 +1696,7 @@ Responda APENAS em JSON:
             headers: internalHeaders,
             body: JSON.stringify({
               userId,
+              model: requestModel,
               slide: { role: "cover", headline: subject.slice(0, 80), body: "" },
               slideIndex: 0,
               totalSlides: 1,
@@ -1723,7 +1737,7 @@ Responda APENAS em JSON:
           });
           if (savedContentId) {
             await svc.from("generated_contents").update({ image_urls: [imageUrl] }).eq("id", savedContentId);
-            await chargeCredits(svc, userId, "free_image", 1, savedContentId);
+            await chargeCredits(svc, userId, modelCostAction || "free_image", 1, savedContentId);
           }
           replyOverride = "Imagem gerada! Confira abaixo. 🎨";
           actionResult = savedContentId ? { content_id: savedContentId, content_type: "post", platform, preview_image_url: imageUrl } : null;
