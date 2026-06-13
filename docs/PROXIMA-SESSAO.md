@@ -3,6 +3,14 @@
 > Abra este doc primeiro. Ele ordena TUDO (auditoria + roadmap) em sprints prontos pra executar.
 > Detalhe completo: `auditoria-completa-2026-06.md`. Tese/produto: `plano-produto-trendpulse-2026.md`. Roadmap original: `roadmap-proximas-sessoes.md`.
 
+## 🟢 ESTADO 2026-06-12 — Ondas 1-3 do redesign NO AR (todas deployadas)
+- **Onda 1** design system: densidade (root 15px), CostChip âmbar (custo antes do clique), stepper do loop no ActionCard, atalhos com ícones lucide. ✅
+- **Onda 2 Studio multigeração** (`/studio`): estante de modelos (GPT-Image 8cr / Seedream 4cr / Nano Banana 20cr / Vídeo "em breve"), presets de formato, dial de fidelidade (copy/inspire/free, guardado por !photo_backgrounds → Maikon intocado), home híbrida (conta nova→Studio, existente→chat). Backend: `model` param no generate-slide-images + ai-chat cobra por modelo (img_seedream/img_gpt/img_nano em prod). ✅
+- **Onda 3 cartão**: BuyCreditsModal abas PIX|Cartão; create-credit-charge fork CREDIT_CARD. ✅
+- **Pricing em prod** (custo real ×2.5): post/carousel/free 8cr, story 20cr, editorial_slide 4cr, tweet 2cr.
+- **GATES PENDENTES DO RAUL antes de seguir:** (1) testar `/studio` ao vivo (gerar, trocar modelo, ver débito por modelo); (2) smoke Maikon (1 post chat); (3) `ASAAS_PROD_KEY` definitiva (cartão E lançamento dependem); (4) `CREDITS_ENFORCED=true` no lançamento.
+- **Onda 4 pendente (precisa do Raul):** vídeo (Kling testado na F0, mas publicar Reels via PFM toca conta IG real) + galeria pública de modelos (SEO) + landing reposicionada (superfície de conversão, revisar antes). Plano: `~/.claude/plans/partitioned-swimming-waffle.md`.
+
 ## Como começar a sessão nova
 1. Leia este doc + `docs/auditoria-completa-2026-06.md` + a memória do projeto (`project_billing_credits`, etc.).
 2. **Insight-chave:** o produto está mais construído do que parece — o trabalho é **podar, ligar, consertar onboarding e vender**, não construir mais.
