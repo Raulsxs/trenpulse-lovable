@@ -29,6 +29,47 @@ PROIBIDO ABSOLUTO — NUNCA renderize a arte como um OBJETO FÍSICO 3D ou foto d
 
 A imagem gerada É o conteúdo final — uma ARTE GRÁFICA CHAPADA (flat design), 2D, vista totalmente de frente. Ela DEVE preencher 100% do quadro (full-bleed): o fundo/arte sangra até TODAS as bordas, sem nenhuma margem de cor sólida, sem moldura e sem espaço vazio em volta. Não é uma prévia de como ficaria dentro de um app nem a foto de um objeto.`;
 
+// ══════ MODEL REGISTRY (estante de modelos do Studio) ══════
+// Cada modelo de imagem do inference.sh com seu builder de body. O Studio passa `model`;
+// sem `model`, o roteamento cai no hybrid por aspect (default histórico).
+type ImageModelId = "gpt-image-2" | "nano-banana" | "seedream";
+
+function isImageModelId(m: unknown): m is ImageModelId {
+  return m === "gpt-image-2" || m === "nano-banana" || m === "seedream";
+}
+
+/** Resolve o modelo: respeita o pedido do Studio; senão hybrid (9:16 → Nano Banana, resto → gpt-image-2). */
+function resolveImageModel(requested: unknown, aspectRatio: string): ImageModelId {
+  if (isImageModelId(requested)) return requested;
+  return aspectRatio === "9:16" ? "nano-banana" : "gpt-image-2";
+}
+
+/** Monta o body do inference.sh por modelo. refImages: image-to-image / referência de estilo. */
+function buildInferenceBody(model: ImageModelId, promptText: string, aspectRatio: string, refImages: string[]) {
+  switch (model) {
+    case "nano-banana":
+      return {
+        app: "google/gemini-3-pro-image-preview",
+        wait: true,
+        input: { prompt: promptText, aspect_ratio: aspectRatio, num_images: 1, ...(refImages.length > 0 ? { images: refImages } : {}) },
+      };
+    case "seedream":
+      // Seedream 4.0: rápido (~14s) e barato ($0.03), texto pt-BR ~90%. Aceita 1 ref (image-to-image).
+      return {
+        app: "bytedance/seedream-4-0",
+        wait: true,
+        input: { prompt: promptText, aspect_ratio: aspectRatio, ...(refImages.length > 0 ? { image: refImages[0] } : {}) },
+      };
+    case "gpt-image-2":
+    default:
+      return {
+        app: "openai/gpt-image-2",
+        wait: true,
+        input: { prompt: promptText, quality: "medium", n: 1, width: 1024, height: aspectRatio === "4:5" ? 1536 : 1024, ...(refImages.length > 0 ? { images: refImages } : {}) },
+      };
+  }
+}
+
 serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
@@ -70,6 +111,7 @@ serve(async (req) => {
       platform: requestPlatform,
       allSlides: requestAllSlides, // all slides data for narrative context in carousels
       userId: requestUserId, // when set, look up profiles.gemini_api_key for per-user Gemini override
+      model: requestModel, // "gpt-image-2" | "nano-banana" | "seedream" — força modelo (Studio); ausente = hybrid por aspect
     } = await req.json();
     const platform = requestPlatform || "instagram";
 
@@ -428,34 +470,12 @@ ${brandColorHint}
               console.log(`[generate-slide-images] inference.sh retry ${infAttempt}...`);
               await new Promise(r => setTimeout(r, 2000));
             }
-            // Hybrid model routing (custo × aspect ratio):
-            // - 9:16 (story) precisa de vertical nativo → Nano Banana Pro (gemini-3-pro-image).
-            // - 1:1 / 4:5 → gpt-image-2 @ medium: mesma fidelidade de texto pt-BR por ~6x menos
-            //   ($0.024 vs $0.15), mas só gera 1024² / 1024×1536 (sem 9:16 verdadeiro).
-            const useNanoBananaPro = aspectRatio === "9:16";
-            const infBody = useNanoBananaPro
-              ? {
-                  app: "google/gemini-3-pro-image-preview",
-                  wait: true,
-                  input: {
-                    prompt: promptText,
-                    aspect_ratio: aspectRatio,
-                    num_images: 1,
-                    ...(refImages.length > 0 ? { images: refImages } : {}),
-                  },
-                }
-              : {
-                  app: "openai/gpt-image-2",
-                  wait: true,
-                  input: {
-                    prompt: promptText,
-                    quality: "medium",
-                    n: 1,
-                    width: 1024,
-                    height: aspectRatio === "4:5" ? 1536 : 1024,
-                    ...(refImages.length > 0 ? { images: refImages } : {}),
-                  },
-                };
+            // Roteamento por modelo (Studio passa `model`; sem ele, hybrid por aspect):
+            // - 9:16 (story) → Nano Banana Pro (vertical nativo + texto pt-BR perfeito).
+            // - 1:1 / 4:5 → gpt-image-2 medium (texto pt-BR perfeito; sem 9:16 verdadeiro).
+            // - seedream → rápido/barato, texto pt-BR ~90% (escolha do usuário no Studio).
+            const resolvedModel = resolveImageModel(requestModel, aspectRatio);
+            const infBody = buildInferenceBody(resolvedModel, promptText, aspectRatio, refImages);
             console.log(`[generate-slide-images] inference.sh request: app=${infBody.app}, aspect=${aspectRatio}, refs=${refImages.length}, promptLen=${promptText.length}, bodySize=${JSON.stringify(infBody).length}`);
             const infRes = await fetch("https://api.inference.sh/run", {
               method: "POST",
@@ -473,13 +493,16 @@ ${brandColorHint}
               const responseKeys = Object.keys(infData || {});
               console.log(`[generate-slide-images] inference.sh response keys: ${responseKeys.join(", ")}, output keys: ${Object.keys(infData?.output || {}).join(", ")}`);
 
-              // Try multiple response formats — with wait:true, data is in infData.data.output
+              // Try multiple response formats — with wait:true, data is in infData.data.output.
+              // Seedream devolve `output.image` que pode ser string OU objeto {uri/url}; normaliza.
               const infOutput = infData.data?.output || infData.output || {};
-              const imageUrl = infOutput.images?.[0]
-                || infOutput.image
-                || infData.images?.[0]
-                || infData.image
-                || infOutput.url;
+              const pickUrl = (v: any): string | undefined =>
+                typeof v === "string" ? v : (v?.uri || v?.url);
+              const imageUrl = pickUrl(infOutput.images?.[0])
+                || pickUrl(infOutput.image)
+                || pickUrl(infData.images?.[0])
+                || pickUrl(infData.image)
+                || pickUrl(infOutput.url);
 
               if (imageUrl && typeof imageUrl === "string" && imageUrl.startsWith("http")) {
                 console.log(`[generate-slide-images] inference.sh returned image URL: ${imageUrl.substring(0, 100)}`);
