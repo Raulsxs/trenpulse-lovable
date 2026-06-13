@@ -1045,78 +1045,78 @@ export default function ActionCard({
             </Button>
           </div>
 
-          {/* Row 2: Regeneration actions — custo visível antes do clique */}
+          {/* Row 2 (secundária): ações de edição agrupadas num "Editar ▾".
+              Menos botões na cara (Hick's law) + custo no momento da DECISÃO,
+              não tatuado em cada botão (loss aversion). */}
           <div className="flex gap-2 mb-2">
-            <Button size="sm" variant="outline" className="flex-1 text-xs gap-1" onClick={handleRegenerateImage} disabled={isRegeneratingImage}>
-              {isRegeneratingImage ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pencil className="w-3 h-3" />}
-              Ajustar
-              <CostChip cost={editCost} />
-            </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              className="flex-1 text-xs gap-1"
-              disabled={isRefazendo}
-              onClick={() => {
-                setIsRefazendo(true);
-                toast.success("Refazendo conteúdo do zero...", {
-                  description: "O novo visual vai aparecer no chat em instantes.",
-                });
-                onRegenerate?.();
-                setTimeout(() => setIsRefazendo(false), 3000);
-              }}
-            >
-              {isRefazendo ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCw className="w-3 h-3" />}
-              {isRefazendo ? "Refazendo..." : "Refazer"}
-              {!isRefazendo && <CostChip cost={regenCost} />}
-            </Button>
-            {onAdapt && (contentType as string) !== "cron_config" && (
-              <Popover open={adaptOpen} onOpenChange={setAdaptOpen}>
-                <PopoverTrigger asChild>
-                  <Button size="sm" variant="outline" className="flex-1 text-xs" disabled={isAdapting}>
-                    {isAdapting ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowRightLeft className="w-3 h-3" />}
-                    {isAdapting ? "Adaptando..." : "Adaptar"}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-56 p-2" align="start">
-                  <p className="text-xs font-medium mb-1.5 px-1">Adaptar para:</p>
-                  <div className="space-y-0.5 max-h-52 overflow-y-auto">
-                    {ADAPT_FORMATS
-                      .filter(f => !(f.platform === effectivePlatform && f.contentType === contentType))
-                      .map(f => (
-                        <button
-                          key={`${f.platform}-${f.contentType}`}
-                          className="w-full text-left px-2 py-1.5 text-xs rounded-md hover:bg-muted/80 transition-colors flex justify-between items-center"
-                          onClick={() => {
-                            setAdaptOpen(false);
-                            setIsAdapting(true);
-                            toast.success(`Adaptando para ${f.label}...`, {
-                              description: `Formato ${f.dim}. O novo conteúdo vai aparecer no chat em até 30s.`,
-                            });
-                            onAdapt(contentId, f.platform, f.contentType);
-                            // Geração via EDIT_CONTENT demora ~15-20s; 3s era curto demais — Maikon
-                            // achava que estava quebrado quando o botão voltava ao normal e o conteúdo
-                            // ainda nem tinha sido gerado. 30s cobre o pior caso típico.
-                            setTimeout(() => setIsAdapting(false), 30000);
-                          }}
-                        >
-                          <span>{f.label}</span>
-                          <span className="text-[10px] text-muted-foreground">{f.dim}</span>
-                        </button>
-                      ))}
-                  </div>
-                </PopoverContent>
-              </Popover>
-            )}
-            <Button
-              size="sm"
-              variant="ghost"
-              className="px-2 text-muted-foreground hover:text-foreground"
+            <Popover open={adaptOpen} onOpenChange={setAdaptOpen}>
+              <PopoverTrigger asChild>
+                <Button size="sm" variant="ghost" className="text-xs gap-1.5 text-muted-foreground hover:text-foreground" disabled={isRegeneratingImage || isRefazendo || isAdapting}>
+                  {(isRegeneratingImage || isRefazendo || isAdapting) ? <Loader2 className="w-3 h-3 animate-spin" /> : <Pencil className="w-3 h-3" />}
+                  {isRegeneratingImage ? "Ajustando..." : isRefazendo ? "Refazendo..." : isAdapting ? "Adaptando..." : "Editar"}
+                  {!(isRegeneratingImage || isRefazendo || isAdapting) && <ChevronDown className="w-3 h-3 opacity-60" />}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-60 p-1.5" align="start" side="top">
+                <button
+                  className="w-full text-left px-2 py-2 text-xs rounded-md hover:bg-muted/80 transition-colors flex items-center gap-2"
+                  onClick={() => { setAdaptOpen(false); handleRegenerateImage(); }}
+                >
+                  <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="flex-1"><b>Ajustar</b> — pequenas mudanças no visual</span>
+                  <CostChip cost={editCost} />
+                </button>
+                <button
+                  className="w-full text-left px-2 py-2 text-xs rounded-md hover:bg-muted/80 transition-colors flex items-center gap-2"
+                  onClick={() => {
+                    setAdaptOpen(false);
+                    setIsRefazendo(true);
+                    toast.success("Refazendo conteúdo do zero...", { description: "O novo visual aparece em instantes." });
+                    onRegenerate?.();
+                    setTimeout(() => setIsRefazendo(false), 3000);
+                  }}
+                >
+                  <RefreshCw className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="flex-1"><b>Refazer</b> — visual completamente novo</span>
+                  <CostChip cost={regenCost} />
+                </button>
+                {onAdapt && (contentType as string) !== "cron_config" && (
+                  <>
+                    <div className="border-t border-border/60 my-1" />
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground px-2 pt-1 pb-0.5 flex items-center gap-1">
+                      <ArrowRightLeft className="w-3 h-3" /> Adaptar para outro formato
+                    </p>
+                    <div className="max-h-40 overflow-y-auto">
+                      {ADAPT_FORMATS
+                        .filter(f => !(f.platform === effectivePlatform && f.contentType === contentType))
+                        .map(f => (
+                          <button
+                            key={`${f.platform}-${f.contentType}`}
+                            className="w-full text-left px-2 py-1.5 text-xs rounded-md hover:bg-muted/80 transition-colors flex justify-between items-center gap-2"
+                            onClick={() => {
+                              setAdaptOpen(false);
+                              setIsAdapting(true);
+                              toast.success(`Adaptando para ${f.label}...`, { description: `Formato ${f.dim}. Aparece em até 30s.` });
+                              onAdapt(contentId, f.platform, f.contentType);
+                              setTimeout(() => setIsAdapting(false), 30000);
+                            }}
+                          >
+                            <span>{f.label}</span>
+                            <span className="inline-flex items-center gap-1.5"><span className="text-[10px] text-muted-foreground">{f.dim}</span><CostChip cost={editCost} /></span>
+                          </button>
+                        ))}
+                    </div>
+                  </>
+                )}
+              </PopoverContent>
+            </Popover>
+            <button
+              className="ml-auto inline-flex items-center gap-1 text-[11px] text-muted-foreground/70 hover:text-foreground transition-colors"
               onClick={() => navigate(`/content/${contentId}`)}
               title="Abrir no editor avançado"
             >
-              <ExternalLink className="w-3.5 h-3.5" />
-            </Button>
+              Editor avançado <ExternalLink className="w-3 h-3" />
+            </button>
           </div>
 
           {/* Save background nudge — only for ai_background mode (has bg image + overlay text) */}
