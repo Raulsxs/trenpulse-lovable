@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Check, Copy, Loader2, QrCode } from "lucide-react";
+import { Check, Copy, Loader2, QrCode, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // Espelha os PACKS da edge function create-credit-charge
@@ -32,11 +32,20 @@ export default function BuyCreditsModal({
   onCredited?: () => void;
 }) {
   const [pack, setPack] = useState("100");
+  const [method, setMethod] = useState<"pix" | "card">("pix");
   const [cpf, setCpf] = useState("");
   const [loading, setLoading] = useState(false);
   const [charge, setCharge] = useState<Charge | null>(null);
   const [paid, setPaid] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Cartão
+  const [cardNumber, setCardNumber] = useState("");
+  const [cardName, setCardName] = useState("");
+  const [cardExpiry, setCardExpiry] = useState("");
+  const [cardCcv, setCardCcv] = useState("");
+  const [cep, setCep] = useState("");
+  const [addrNum, setAddrNum] = useState("");
+  const [phone, setPhone] = useState("");
   const startBalance = useRef<number | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -45,10 +54,49 @@ export default function BuyCreditsModal({
     if (!open) {
       if (pollRef.current) clearInterval(pollRef.current);
       setTimeout(() => {
-        setCharge(null); setPaid(false); setCpf(""); setLoading(false);
+        setCharge(null); setPaid(false); setCpf(""); setLoading(false); setMethod("pix");
+        setCardNumber(""); setCardName(""); setCardExpiry(""); setCardCcv(""); setCep(""); setAddrNum(""); setPhone("");
       }, 200);
     }
   }, [open]);
+
+  // Quando o pagamento cai (PIX ou cartão), o webhook credita — aqui só detectamos o aumento de saldo.
+  function pollUntilCredited() {
+    pollRef.current = setInterval(async () => {
+      const b = await readBalance();
+      if (startBalance.current !== null && b > startBalance.current) {
+        if (pollRef.current) clearInterval(pollRef.current);
+        setPaid(true);
+        onCredited?.();
+      }
+    }, 4000);
+  }
+
+  async function handleCardPay() {
+    const digits = cpf.replace(/\D/g, "");
+    if (digits.length !== 11 && digits.length !== 14) { toast.error("Informe um CPF ou CNPJ válido"); return; }
+    const [mm, aa] = cardExpiry.split("/").map((s) => s.trim());
+    if (!cardNumber || !cardName || !mm || !aa || !cardCcv) { toast.error("Preencha os dados do cartão"); return; }
+    if (!cep || !addrNum || !phone) { toast.error("Preencha CEP, número e telefone do titular"); return; }
+    setLoading(true);
+    try {
+      startBalance.current = await readBalance();
+      const { data, error } = await supabase.functions.invoke("create-credit-charge", {
+        body: {
+          pack, cpfCnpj: digits, method: "card",
+          card: { number: cardNumber, holderName: cardName, expiryMonth: mm, expiryYear: aa.length === 2 ? `20${aa}` : aa, ccv: cardCcv },
+          holder: { postalCode: cep, addressNumber: addrNum, phone },
+        },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || "Falha no pagamento");
+      if (data?.paid) { setPaid(true); onCredited?.(); }
+      else { toast.info("Pagamento em processamento…"); pollUntilCredited(); }
+    } catch (e: any) {
+      toast.error(e.message || "Cartão recusado. Tente outro ou use o PIX.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function readBalance(): Promise<number> {
     const { data: { user } } = await supabase.auth.getUser();
@@ -71,15 +119,7 @@ export default function BuyCreditsModal({
       });
       if (error || data?.error) throw new Error(data?.error || error?.message || "Falha ao gerar cobrança");
       setCharge(data as Charge);
-      // polling até o pagamento cair
-      pollRef.current = setInterval(async () => {
-        const b = await readBalance();
-        if (startBalance.current !== null && b > startBalance.current) {
-          if (pollRef.current) clearInterval(pollRef.current);
-          setPaid(true);
-          onCredited?.();
-        }
-      }, 4000);
+      pollUntilCredited();
     } catch (e: any) {
       toast.error(e.message || "Erro ao gerar PIX");
     } finally {
@@ -161,20 +201,53 @@ export default function BuyCreditsModal({
               {selected.credits.toLocaleString("pt-BR")} créditos ≈ {Math.floor(selected.credits / 8)} posts com imagem · não expiram
             </div>
 
-            <div>
-              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">CPF/CNPJ (para o PIX)</label>
-              <Input
-                value={cpf}
-                onChange={(e) => setCpf(e.target.value)}
-                placeholder="000.000.000-00"
-                inputMode="numeric"
-              />
+            {/* Abas de método */}
+            <div className="flex gap-1 rounded-lg bg-muted/40 p-1">
+              {(["pix", "card"] as const).map((m) => (
+                <button
+                  key={m}
+                  onClick={() => setMethod(m)}
+                  className={cn(
+                    "flex-1 inline-flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition-colors",
+                    method === m ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {m === "pix" ? <QrCode className="w-3.5 h-3.5" /> : <CreditCard className="w-3.5 h-3.5" />}
+                  {m === "pix" ? "PIX · na hora" : "Cartão"}
+                </button>
+              ))}
             </div>
 
-            <Button onClick={handleGenerate} disabled={loading} className="w-full gap-2">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
-              Gerar PIX de R${selected.value}
-            </Button>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">CPF/CNPJ</label>
+              <Input value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" />
+            </div>
+
+            {method === "pix" ? (
+              <Button onClick={handleGenerate} disabled={loading} className="w-full gap-2">
+                {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
+                Gerar PIX de R${selected.value}
+              </Button>
+            ) : (
+              <div className="space-y-2.5">
+                <Input value={cardNumber} onChange={(e) => setCardNumber(e.target.value)} placeholder="Número do cartão" inputMode="numeric" />
+                <Input value={cardName} onChange={(e) => setCardName(e.target.value)} placeholder="Nome impresso no cartão" />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input value={cardExpiry} onChange={(e) => setCardExpiry(e.target.value)} placeholder="Validade MM/AA" inputMode="numeric" />
+                  <Input value={cardCcv} onChange={(e) => setCardCcv(e.target.value)} placeholder="CVV" inputMode="numeric" />
+                </div>
+                <div className="grid grid-cols-3 gap-2">
+                  <Input value={cep} onChange={(e) => setCep(e.target.value)} placeholder="CEP" inputMode="numeric" />
+                  <Input value={addrNum} onChange={(e) => setAddrNum(e.target.value)} placeholder="Nº" inputMode="numeric" />
+                  <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Telefone" inputMode="numeric" />
+                </div>
+                <Button onClick={handleCardPay} disabled={loading} className="w-full gap-2">
+                  {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
+                  Pagar R${selected.value} no cartão
+                </Button>
+                <p className="text-[10px] text-muted-foreground text-center">🔒 Processado pelo Asaas. Os créditos caem em até 1 min.</p>
+              </div>
+            )}
           </div>
         )}
       </DialogContent>
