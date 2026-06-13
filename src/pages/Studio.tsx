@@ -4,7 +4,7 @@
  * clique. Reusa o pipeline do ai-chat (param `model` cobra pela estante) e renderiza o
  * resultado no ActionCard (publicar/agendar/baixar/refazer). Chat segue como modo assistido.
  */
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import ActionCard from "@/components/chat/ActionCard";
@@ -12,22 +12,25 @@ import BrandCreationModal from "@/components/chat/BrandCreationModal";
 import { CostChip } from "@/components/ui/cost-chip";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useBrands } from "@/hooks/useStudio";
 import { useCredits } from "@/hooks/useCredits";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   Sparkles, Loader2, ImageIcon, GalleryHorizontalEnd, Smartphone, Wand2,
-  Zap, Crown, Gauge, Film, Lock, Palette, Check,
+  Zap, Crown, Gauge, Film, Lock, Palette, Check, MessageSquareQuote, ChevronDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ── Formatos (preset esconde aspect ratio do usuário) ──
-type FormatId = "post" | "carousel" | "story" | "free";
-const FORMATS: { id: FormatId; label: string; icon: any; intent: string; format: string; slides: number }[] = [
+// ── Formatos (preset esconde aspect ratio do usuário). Tweet card = Satori (motor próprio,
+// custo fixo 2cr, não usa a estante de modelos). Grande case pra empresário/autoridade. ──
+type FormatId = "post" | "carousel" | "story" | "tweet" | "free";
+const FORMATS: { id: FormatId; label: string; icon: any; intent: string; format: string; slides: number; fixedCost?: number; satori?: boolean }[] = [
   { id: "post", label: "Post 1:1", icon: ImageIcon, intent: "GENERATE", format: "post", slides: 1 },
   { id: "carousel", label: "Carrossel", icon: GalleryHorizontalEnd, intent: "GENERATE_CAROUSEL", format: "carousel", slides: 5 },
   { id: "story", label: "Story 9:16", icon: Smartphone, intent: "GENERATE", format: "story", slides: 1 },
+  { id: "tweet", label: "Tweet card", icon: MessageSquareQuote, intent: "GENERATE_TWEET_CARD", format: "post", slides: 1, fixedCost: 2, satori: true },
   { id: "free", label: "Imagem livre", icon: Wand2, intent: "FREE_IMAGE", format: "post", slides: 1 },
 ];
 
@@ -77,13 +80,35 @@ export default function Studio() {
   const [dial, setDial] = useState("copy");
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<{ contentId: string; contentType: any; platform?: string } | null>(null);
+  const [recents, setRecents] = useState<{ id: string; img: string }[]>([]);
 
   const format = FORMATS.find((f) => f.id === formatId)!;
   const model = MODELS.find((m) => m.id === modelId)!;
+  const isSatori = !!format.satori; // tweet card = motor próprio, estante não se aplica
   // Story precisa de 9:16 nativo → Nano Banana (os outros não fazem vertical de verdade).
   const effectiveModel = formatId === "story" ? "nano-banana" : modelId;
-  const effectiveCost = (MODELS.find((m) => m.id === effectiveModel)?.cost ?? model.cost) * format.slides;
+  const effectiveCost = format.fixedCost ?? (MODELS.find((m) => m.id === effectiveModel)?.cost ?? model.cost) * format.slides;
   const selectedBrand = brands?.find((b: any) => b.id === brandId);
+  const brandSwatch = (b: any) => (b?.palette?.[0] && (typeof b.palette[0] === "string" ? b.palette[0] : b.palette[0]?.hex)) || "#94a3b8";
+
+  // Últimas geradas do usuário — viram a galeria (real, pessoal). Estático só se não houver nenhuma.
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase
+        .from("generated_contents")
+        .select("id, image_urls")
+        .eq("user_id", user.id)
+        .not("image_urls", "is", null)
+        .order("created_at", { ascending: false })
+        .limit(6);
+      const list = (data || [])
+        .map((r: any) => ({ id: r.id, img: r.image_urls?.[0] }))
+        .filter((r: any) => !!r.img);
+      setRecents(list);
+    })();
+  }, [result]);
 
   async function generate() {
     if (!prompt.trim() || generating) return;
@@ -97,8 +122,9 @@ export default function Studio() {
           format: format.format,
           platform: "instagram",
           brandId: brandId || undefined,
-          model: effectiveModel,
-          creationModeOverride: brandId ? dial : undefined,
+          // Tweet card é Satori (custo fixo 2cr) — NÃO mandar model, senão cobraria por img_<model>.
+          model: isSatori ? undefined : effectiveModel,
+          creationModeOverride: brandId && !isSatori ? dial : undefined,
           generationParams: format.slides > 1 ? { slideCount: format.slides } : undefined,
         },
       });
@@ -159,41 +185,83 @@ export default function Studio() {
           </div>
         </div>
 
-        {/* Marca — linha única com scroll (sem wrap-bagunça), swatch de cor por marca */}
+        {/* ── ZONA DE RESULTADO — aparece logo abaixo do prompt, empurrando o resto pra
+            baixo. A imagem que está sendo criada fica no topo, em foco. ── */}
+        {generating && (
+          <div className="rounded-xl border border-border bg-card overflow-hidden animate-scale-in">
+            <div className="skeleton-shimmer aspect-[16/10] w-full" />
+            <div className="p-4 flex items-center gap-2.5">
+              <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
+              <div className="min-w-0">
+                <p className="text-sm font-medium">Criando {format.label.toLowerCase()}{isSatori ? "" : ` com ${model.name}`}…</p>
+                <p className="text-xs text-muted-foreground">{format.slides > 1 ? `${format.slides} slides · ` : ""}{isSatori ? "renderizando" : `isso leva ${model.speed.replace("~", "")}`}. Pode trocar de aba, a gente avisa.</p>
+              </div>
+            </div>
+          </div>
+        )}
+        {result && !generating && (
+          <div className="animate-scale-in">
+            <ActionCard contentId={result.contentId} contentType={result.contentType} platform={result.platform} />
+            <button onClick={() => { setResult(null); setPrompt(""); }} className="mt-2 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
+              <Sparkles className="w-3 h-3" /> Criar outro
+            </button>
+          </div>
+        )}
+
+        {/* Marca — dropdown limpo (swatch + nome), em vez de chips espremidos */}
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold text-muted-foreground inline-flex items-center gap-1.5 shrink-0">
             <Palette className="w-3.5 h-3.5" /> Marca
           </span>
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-thin py-0.5 min-w-0">
-            <button
-              onClick={() => setBrandId(null)}
-              className={cn("shrink-0 rounded-full px-3 py-1 text-xs border transition-colors", !brandId ? "bg-primary/10 text-primary border-primary/40 font-medium" : "bg-background text-muted-foreground border-border hover:border-primary/30")}
-            >
-              Sem marca
-            </button>
-            {brands?.map((b: any) => {
-              const swatch = (b.palette?.[0] && (typeof b.palette[0] === "string" ? b.palette[0] : b.palette[0]?.hex)) || "#94a3b8";
-              return (
+          <Popover>
+            <PopoverTrigger asChild>
+              <button className="inline-flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-1.5 text-xs hover:border-primary/40 transition-colors min-w-[180px]">
+                {selectedBrand ? (
+                  <>
+                    <span className="w-3 h-3 rounded-full border border-border/50 shrink-0" style={{ backgroundColor: brandSwatch(selectedBrand) }} />
+                    <span className="font-medium truncate">{(selectedBrand as any).name}</span>
+                  </>
+                ) : (
+                  <span className="text-muted-foreground">Sem marca</span>
+                )}
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-auto shrink-0" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64 p-1.5" align="start">
+              <button
+                onClick={() => setBrandId(null)}
+                className={cn("w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs hover:bg-muted/80 transition-colors", !brandId && "bg-primary/5 text-primary font-medium")}
+              >
+                <span className="w-3 h-3 rounded-full border border-dashed border-muted-foreground/40 shrink-0" />
+                Sem marca
+                {!brandId && <Check className="w-3.5 h-3.5 ml-auto" />}
+              </button>
+              <div className="max-h-56 overflow-y-auto">
+                {brands?.map((b: any) => (
+                  <button
+                    key={b.id}
+                    onClick={() => setBrandId(b.id)}
+                    className={cn("w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs hover:bg-muted/80 transition-colors", brandId === b.id && "bg-primary/5 text-primary font-medium")}
+                  >
+                    <span className="w-3 h-3 rounded-full border border-border/50 shrink-0" style={{ backgroundColor: brandSwatch(b) }} />
+                    <span className="truncate">{b.name}</span>
+                    {brandId === b.id && <Check className="w-3.5 h-3.5 ml-auto shrink-0" />}
+                  </button>
+                ))}
+              </div>
+              <div className="border-t border-border/60 mt-1 pt-1">
                 <button
-                  key={b.id}
-                  onClick={() => setBrandId(b.id)}
-                  className={cn("shrink-0 inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs border transition-colors", brandId === b.id ? "bg-primary/10 text-primary border-primary/40 font-medium" : "bg-background text-muted-foreground border-border hover:border-primary/30")}
+                  onClick={() => setBrandModalOpen(true)}
+                  className="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs text-primary hover:bg-primary/5 transition-colors"
                 >
-                  <span className="w-2.5 h-2.5 rounded-full border border-border/50" style={{ backgroundColor: swatch }} />
-                  {b.name}
+                  <Sparkles className="w-3.5 h-3.5" /> Criar nova marca
                 </button>
-              );
-            })}
-          </div>
-          <button
-            onClick={() => setBrandModalOpen(true)}
-            className="shrink-0 inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs border border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-foreground transition-colors"
-          >
-            <Sparkles className="w-3 h-3" /> Criar marca
-          </button>
+              </div>
+            </PopoverContent>
+          </Popover>
         </div>
 
-        {selectedBrand && (
+        {selectedBrand && !isSatori && (
           <div className="flex gap-2">
             {DIAL.map((d) => (
               <button
@@ -211,107 +279,110 @@ export default function Studio() {
           </div>
         )}
 
-        {/* Estante de modelos */}
-        <div>
-          <div className="flex items-baseline gap-2 mb-2">
-            <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Modelo</h2>
-            {formatId === "story" && <span className="text-[11px] text-muted-foreground">story usa Nano Banana (9:16 nativo)</span>}
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 stagger-children">
-            {MODELS.map((m) => {
-              const active = effectiveModel === m.id;
-              const locked = formatId === "story" && m.id !== "nano-banana";
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => !locked && setModelId(m.id)}
-                  disabled={locked}
-                  className={cn(
-                    "group text-left rounded-xl border overflow-hidden transition-all duration-200 relative",
-                    active ? "border-primary ring-2 ring-primary/30 shadow-sm" : "border-border hover:border-primary/40 hover:shadow-sm",
-                    locked && "opacity-40 cursor-not-allowed",
-                  )}
-                >
-                  {/* Amostra real do modelo — "show, don't tell" */}
-                  <div className="relative h-20 overflow-hidden bg-muted">
-                    <img src={m.sample} alt={`Exemplo ${m.name}`} loading="lazy" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                    {m.tag && !locked && <span className="absolute top-1.5 left-1.5 text-[8px] font-bold uppercase tracking-wide bg-primary text-primary-foreground px-1.5 py-0.5 rounded shadow">{m.tag}</span>}
-                    {active && <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center"><Check className="w-3 h-3" /></span>}
-                  </div>
-                  <div className="p-2.5">
-                    <div className="flex items-center gap-1 mb-0.5">
-                      <m.icon className={cn("w-3.5 h-3.5", m.tone)} />
-                      <span className="text-xs font-bold leading-tight">{m.name}</span>
-                    </div>
-                    <div className="text-[10px] text-muted-foreground leading-tight mb-1.5 line-clamp-2">{m.forte}</div>
-                    <div className="flex items-center gap-1.5">
-                      <CostChip cost={m.cost} />
-                      <span className="text-[10px] text-muted-foreground font-semibold">{m.speed}</span>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
-            {/* Vídeo — Onda 4 */}
-            <div className="rounded-xl border border-dashed border-border overflow-hidden opacity-70">
-              <div className="h-20 bg-gradient-to-br from-muted to-muted/40 flex items-center justify-center">
-                <Film className="w-6 h-6 text-muted-foreground/50" />
-              </div>
-              <div className="p-2.5">
-                <div className="text-xs font-bold leading-tight flex items-center gap-1">Vídeo <Lock className="w-3 h-3" /></div>
-                <div className="text-[10px] text-muted-foreground leading-tight mt-0.5">Kling / Seedance</div>
-                <span className="text-[10px] text-muted-foreground font-semibold">em breve</span>
-              </div>
+        {/* Estante de modelos — não se aplica ao Tweet card (motor Satori próprio) */}
+        {!isSatori && (
+          <div>
+            <div className="flex items-baseline gap-2 mb-2">
+              <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Modelo</h2>
+              {formatId === "story" && <span className="text-[11px] text-muted-foreground">story usa Nano Banana (9:16 nativo)</span>}
             </div>
-          </div>
-        </div>
-
-        {/* ── Resultado / loader / vitrine ── */}
-        {generating && (
-          <div className="rounded-xl border border-border bg-card overflow-hidden animate-scale-in">
-            <div className="skeleton-shimmer aspect-[16/10] w-full" />
-            <div className="p-4 flex items-center gap-2.5">
-              <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
-              <div className="min-w-0">
-                <p className="text-sm font-medium">Gerando com {model.name}…</p>
-                <p className="text-xs text-muted-foreground">{format.slides > 1 ? `${format.slides} slides · ` : ""}isso leva {model.speed.replace("~", "")}. Pode trocar de aba, a gente avisa.</p>
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 stagger-children">
+              {MODELS.map((m) => {
+                const active = effectiveModel === m.id;
+                const locked = formatId === "story" && m.id !== "nano-banana";
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => !locked && setModelId(m.id)}
+                    disabled={locked}
+                    className={cn(
+                      "group text-left rounded-xl border overflow-hidden transition-all duration-200 relative",
+                      active ? "border-primary ring-2 ring-primary/30 shadow-sm" : "border-border hover:border-primary/40 hover:shadow-sm",
+                      locked && "opacity-40 cursor-not-allowed",
+                    )}
+                  >
+                    <div className="relative h-20 overflow-hidden bg-muted">
+                      <img src={m.sample} alt={`Exemplo ${m.name}`} loading="lazy" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                      {m.tag && !locked && <span className="absolute top-1.5 left-1.5 text-[8px] font-bold uppercase tracking-wide bg-primary text-primary-foreground px-1.5 py-0.5 rounded shadow">{m.tag}</span>}
+                      {active && <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center"><Check className="w-3 h-3" /></span>}
+                    </div>
+                    <div className="p-2.5">
+                      <div className="flex items-center gap-1 mb-0.5">
+                        <m.icon className={cn("w-3.5 h-3.5", m.tone)} />
+                        <span className="text-xs font-bold leading-tight">{m.name}</span>
+                      </div>
+                      <div className="text-[10px] text-muted-foreground leading-tight mb-1.5 line-clamp-2">{m.forte}</div>
+                      <div className="flex items-center gap-1.5">
+                        <CostChip cost={m.cost} />
+                        <span className="text-[10px] text-muted-foreground font-semibold">{m.speed}</span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+              <div className="rounded-xl border border-dashed border-border overflow-hidden opacity-70">
+                <div className="h-20 bg-gradient-to-br from-muted to-muted/40 flex items-center justify-center">
+                  <Film className="w-6 h-6 text-muted-foreground/50" />
+                </div>
+                <div className="p-2.5">
+                  <div className="text-xs font-bold leading-tight flex items-center gap-1">Vídeo <Lock className="w-3 h-3" /></div>
+                  <div className="text-[10px] text-muted-foreground leading-tight mt-0.5">Kling / Seedance</div>
+                  <span className="text-[10px] text-muted-foreground font-semibold">em breve</span>
+                </div>
               </div>
             </div>
           </div>
         )}
 
-        {result && !generating && (
-          <div className="animate-scale-in">
-            <ActionCard contentId={result.contentId} contentType={result.contentType} platform={result.platform} />
+        {isSatori && (
+          <div className="rounded-xl border border-border bg-muted/30 p-3 flex items-center gap-2.5 text-xs text-muted-foreground">
+            <MessageSquareQuote className="w-4 h-4 text-primary shrink-0" />
+            <span>O <b className="text-foreground">Tweet card</b> usa nosso motor próprio (tipografia fiel ao X), com a sua foto e @ de perfil. Sem escolha de modelo.</span>
           </div>
         )}
 
-        {/* Empty-state: vitrine de inspiração (mata o vácuo + "show, don't tell") */}
+        {/* Galeria: suas últimas criações (real, pessoal). Estático só no 1º acesso sem conteúdo.
+            Some quando há resultado/gerando — a tela já está cheia de valor em cima. */}
         {!result && !generating && (
           <div className="pt-1 animate-fade-in">
-            <div className="flex items-baseline gap-2 mb-2.5">
-              <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">O que dá pra criar</h2>
-              <span className="text-[11px] text-muted-foreground">tudo isto saiu daqui, em segundos</span>
-            </div>
-            <div className="grid grid-cols-3 gap-2.5 mb-4">
-              {SHOWCASE.map((s, i) => (
-                <div key={i} className="rounded-xl overflow-hidden border border-border bg-muted aspect-[4/5] group cursor-default">
-                  <img src={s.src} alt={`Exemplo ${s.label}`} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+            {recents.length > 0 ? (
+              <>
+                <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2.5">Suas últimas criações</h2>
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {recents.map((r) => (
+                    <a key={r.id} href={`/content/${r.id}`} className="rounded-lg overflow-hidden border border-border bg-muted aspect-square group">
+                      <img src={r.img} alt="" loading="lazy" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+                    </a>
+                  ))}
                 </div>
-              ))}
-            </div>
-            <p className="text-xs font-semibold text-muted-foreground mb-2">Sem ideia? Comece por uma destas:</p>
-            <div className="flex flex-wrap gap-1.5">
-              {EXAMPLE_PROMPTS.map((ex) => (
-                <button
-                  key={ex}
-                  onClick={() => setPrompt(ex)}
-                  className="text-xs px-3 py-1.5 rounded-full border border-border bg-background text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors"
-                >
-                  {ex}
-                </button>
-              ))}
-            </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-2 mb-2.5">
+                  <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">O que dá pra criar</h2>
+                  <span className="text-[11px] text-muted-foreground">tudo isto saiu daqui, em segundos</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2.5 mb-4">
+                  {SHOWCASE.map((s, i) => (
+                    <div key={i} className="rounded-xl overflow-hidden border border-border bg-muted aspect-[4/5] group cursor-default">
+                      <img src={s.src} alt={`Exemplo ${s.label}`} loading="lazy" className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                    </div>
+                  ))}
+                </div>
+                <p className="text-xs font-semibold text-muted-foreground mb-2">Sem ideia? Comece por uma destas:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {EXAMPLE_PROMPTS.map((ex) => (
+                    <button
+                      key={ex}
+                      onClick={() => setPrompt(ex)}
+                      className="text-xs px-3 py-1.5 rounded-full border border-border bg-background text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-primary/5 transition-colors"
+                    >
+                      {ex}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         )}
       </div>
