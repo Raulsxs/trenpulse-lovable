@@ -125,9 +125,11 @@ export default function Onboarding() {
         },
         { onConflict: "user_id" },
       );
-      // Prompt pré-armado: o ChatWindow preenche o input com isso (editável, não envia sozinho)
-      const prefill = !skipped && nicheLabel ? `Crie um post para Instagram sobre: ${mockupHeadline}` : undefined;
-      navigate("/chat", prefill ? { state: { prefill } } : undefined);
+      // Home híbrida: conta nova (passou pelo onboarding) cai no Studio — a vitrine de
+      // modelos/formatos. Contas existentes nunca chegam aqui e seguem no chat (Index → /chat).
+      // Prefill = prompt pré-armado do nicho (editável, não envia sozinho).
+      const prefill = !skipped && mockupHeadline ? mockupHeadline : undefined;
+      navigate("/studio", prefill ? { state: { prefill } } : undefined);
     } finally {
       setSaving(false);
     }

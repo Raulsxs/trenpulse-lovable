@@ -36,6 +36,7 @@ interface SavedAccount {
 
 // Primary: what 90% of users need daily
 const primaryItems = [
+  { icon: Wand2, label: "Studio", href: "/studio" },
   { icon: MessageSquare, label: "Assistente IA", href: "/chat" },
   { icon: CalendarDays, label: "Calendário", href: "/calendar" },
   { icon: FileText, label: "Meus Conteúdos", href: "/contents" },
