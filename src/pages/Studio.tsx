@@ -8,6 +8,7 @@ import { useState } from "react";
 import { useLocation } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import ActionCard from "@/components/chat/ActionCard";
+import BrandCreationModal from "@/components/chat/BrandCreationModal";
 import { CostChip } from "@/components/ui/cost-chip";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -48,8 +49,9 @@ const DIAL: { id: string; label: string; hint: string }[] = [
 ];
 
 export default function Studio() {
-  const { data: brands } = useBrands();
+  const { data: brands, refetch: refetchBrands } = useBrands();
   const { balance, refresh: refreshCredits } = useCredits();
+  const [brandModalOpen, setBrandModalOpen] = useState(false);
 
   // Prefill do onboarding (novas contas caem aqui com o prompt do nicho pré-armado)
   const onboardingPrefill = (useLocation().state as { prefill?: string } | null)?.prefill;
@@ -162,6 +164,12 @@ export default function Studio() {
               {b.name}
             </button>
           ))}
+          <button
+            onClick={() => setBrandModalOpen(true)}
+            className="inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs border border-dashed border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
+          >
+            <Sparkles className="w-3 h-3" /> Criar marca
+          </button>
         </div>
 
         {selectedBrand && (
@@ -237,6 +245,12 @@ export default function Studio() {
           </div>
         )}
       </div>
+
+      <BrandCreationModal
+        open={brandModalOpen}
+        onOpenChange={setBrandModalOpen}
+        onCreated={async (newId) => { await refetchBrands(); setBrandId(newId); }}
+      />
     </DashboardLayout>
   );
 }
