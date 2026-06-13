@@ -765,6 +765,16 @@ ${NO_UI_MOCKUP_RULE}
 ${SAFE_AREA_RULES}`;
         }
 
+        // Dial de fidelidade (Studio): ajusta a aderência às referências da marca.
+        // photo_backgrounds (Maikon) é INTOCADO — o modo dele já define a relação com a foto.
+        if (creationModeOverride && !isPhotoBackground) {
+          imagePrompt += creationModeOverride === "free"
+            ? "\n\nLIBERDADE CRIATIVA: ignore referências de estilo; use APENAS a paleta e o tom da marca. Crie a arte do zero."
+            : creationModeOverride === "inspire"
+              ? "\n\nINSPIRAÇÃO: use as referências como inspiração de estilo, com liberdade pra variar composição e elementos."
+              : "\n\nFIDELIDADE MÁXIMA: replique fielmente cores, tipografia, layout e composição das referências da marca; mude APENAS o conteúdo do texto.";
+        }
+
         // 6. Call generate-slide-images
         console.log("[ai-chat] GENERATE: calling generate-slide-images");
         let imageUrl: string | null = null;
