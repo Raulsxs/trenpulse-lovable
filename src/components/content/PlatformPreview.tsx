@@ -75,7 +75,8 @@ export default function PlatformPreview({ open, onOpenChange, images, caption, h
               {f.label}
             </button>
           ))}
-          <button onClick={() => onOpenChange(false)} className="px-2 text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+          {/* fecha: o próprio DialogContent já tem o X no canto — não duplicar aqui */}
+          <span className="w-6 shrink-0" aria-hidden="true" />
         </div>
 
         <div className="max-h-[78vh] overflow-y-auto">

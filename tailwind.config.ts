@@ -108,6 +108,12 @@ export default {
         "shimmer": {
           "100%": { transform: "translateX(100%)" },
         },
+        // Cresce a altura empurrando o conteúdo abaixo pra baixo, com fade — o resultado
+        // "abre" no topo e a estrutura desce suave (efeito de foco no que está sendo criado).
+        "grow-down": {
+          from: { "max-height": "0", opacity: "0", transform: "translateY(-6px)" },
+          to: { "max-height": "1400px", opacity: "1", transform: "translateY(0)" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
@@ -118,6 +124,7 @@ export default {
         "scale-in": "scale-in 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
         "pulse-soft": "pulse-soft 2s ease-in-out infinite",
         "shimmer": "shimmer 1.6s infinite",
+        "grow-down": "grow-down 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
       },
     },
   },

@@ -19,7 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   Sparkles, Loader2, ImageIcon, GalleryHorizontalEnd, Smartphone, Wand2,
-  Zap, Crown, Gauge, Film, Lock, Palette, Check, MessageSquareQuote, ChevronDown, Camera,
+  Zap, Crown, Gauge, Film, Lock, Palette, Check, MessageSquareQuote, ChevronDown, Camera, X,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -71,6 +71,11 @@ export default function Studio() {
   const { data: brands, refetch: refetchBrands } = useBrands();
   const { balance, refresh: refreshCredits } = useCredits();
   const [brandModalOpen, setBrandModalOpen] = useState(false);
+  // Hint de marca no 1º acesso — garante que o usuário aprenda essa feature de valor.
+  const [showBrandHint, setShowBrandHint] = useState(() => {
+    try { return localStorage.getItem("tp_brand_hint_seen") !== "1"; } catch { return true; }
+  });
+  const dismissBrandHint = () => { try { localStorage.setItem("tp_brand_hint_seen", "1"); } catch { /* ignore */ } setShowBrandHint(false); };
 
   // Prefill do onboarding (novas contas caem aqui com o prompt do nicho pré-armado)
   const onboardingPrefill = (useLocation().state as { prefill?: string } | null)?.prefill;
@@ -189,7 +194,7 @@ export default function Studio() {
         {/* ── ZONA DE RESULTADO — aparece logo abaixo do prompt, empurrando o resto pra
             baixo. A imagem que está sendo criada fica no topo, em foco. ── */}
         {generating && (
-          <div className="rounded-xl border border-border bg-card overflow-hidden animate-scale-in">
+          <div className="rounded-xl border border-border bg-card overflow-hidden animate-grow-down">
             <div className="skeleton-shimmer aspect-[16/10] w-full" />
             <div className="p-4 flex items-center gap-2.5">
               <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
@@ -201,11 +206,26 @@ export default function Studio() {
           </div>
         )}
         {result && !generating && (
-          <div className="animate-scale-in">
+          <div className="animate-grow-down overflow-hidden">
             <ActionCard contentId={result.contentId} contentType={result.contentType} platform={result.platform} />
             <button onClick={() => { setResult(null); setPrompt(""); }} className="mt-2 text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1">
               <Sparkles className="w-3 h-3" /> Criar outro
             </button>
+          </div>
+        )}
+
+        {/* Hint de marca (1º acesso) — explica a feature de valor: marca = sua cara em tudo */}
+        {showBrandHint && (
+          <div className="flex items-start gap-2.5 rounded-xl border border-accent/30 bg-accent/5 p-3 animate-fade-in">
+            <Palette className="w-4 h-4 text-accent shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs text-foreground"><b>Crie sua marca uma vez</b> e todo conteúdo sai com a sua cara — cores, fontes, tom e estilo aplicados automaticamente. Mande exemplos que você curte e a IA copia.</p>
+              <div className="flex items-center gap-3 mt-2">
+                <button onClick={() => { dismissBrandHint(); setBrandModalOpen(true); }} className="text-xs font-semibold text-accent hover:underline">Criar minha marca</button>
+                <button onClick={dismissBrandHint} className="text-xs text-muted-foreground hover:text-foreground">Entendi</button>
+              </div>
+            </div>
+            <button onClick={dismissBrandHint} className="text-muted-foreground hover:text-foreground shrink-0"><X className="w-3.5 h-3.5" /></button>
           </div>
         )}
 
