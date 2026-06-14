@@ -5,6 +5,7 @@ import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, Re
 import { CostChip } from "@/components/ui/cost-chip";
 import { Skeleton } from "@/components/ui/skeleton";
 import ScheduleModal from "@/components/content/ScheduleModal";
+import PlatformPreview from "@/components/content/PlatformPreview";
 import SlideBgOverlayRenderer from "@/components/content/SlideBgOverlayRenderer";
 import { getContentDimensions } from "@/lib/contentDimensions";
 import { supabase } from "@/integrations/supabase/client";
@@ -227,6 +228,9 @@ export default function ActionCard({
   const [captionText, setCaptionText] = useState<string | null>(null);
   const [hashtagsList, setHashtagsList] = useState<string[] | null>(null);
   const [showFullCaption, setShowFullCaption] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [platformCaptions, setPlatformCaptions] = useState<Record<string, string> | null>(null);
+  const [captionCopied, setCaptionCopied] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(360);
 
@@ -359,7 +363,7 @@ export default function ActionCard({
       try {
         const { data } = await supabase
           .from("generated_contents")
-          .select("slides, brand_snapshot, platform, content_type, created_at, image_urls, generation_metadata, caption, hashtags")
+          .select("slides, brand_snapshot, platform, content_type, created_at, image_urls, generation_metadata, caption, hashtags, platform_captions")
           .eq("id", contentId)
           .maybeSingle();
 
@@ -388,6 +392,7 @@ export default function ActionCard({
           if (data.platform) setResolvedPlatform(data.platform);
           if ((data as any).caption) setCaptionText((data as any).caption);
           if ((data as any).hashtags) setHashtagsList((data as any).hashtags);
+          if ((data as any).platform_captions) setPlatformCaptions((data as any).platform_captions);
           const fetchedImageUrls = data.image_urls as string[] | null;
           if (fetchedImageUrls?.length) setComposedImageUrls(fetchedImageUrls);
 
@@ -803,10 +808,15 @@ export default function ActionCard({
         {/* Client-side preview — SAME renderer as Studio for pixel-perfect match */}
         <div className="p-3 pb-0" ref={previewContainerRef}>
           <div
-            className="overflow-hidden rounded-lg bg-muted relative group cursor-pointer hover:brightness-[0.97] transition-all"
-            onClick={() => navigate(`/content/${contentId}`)}
-            title="Clique para ver no Studio"
+            className="overflow-hidden rounded-lg bg-muted relative group cursor-pointer transition-all max-h-[440px] flex items-center justify-center"
+            onClick={() => setPreviewOpen(true)}
           >
+            {/* Overlay "Ver no preview" — fidelização: ver no contexto da rede */}
+            <div className="absolute inset-0 z-20 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
+              <span className="inline-flex items-center gap-1.5 bg-white/95 text-black text-xs font-semibold px-3 py-1.5 rounded-full shadow-lg">
+                <ImageIcon className="w-3.5 h-3.5" /> Ver no preview
+              </span>
+            </div>
             <ActionCardPreview
               slideData={allSlides[currentSlideIndex] || slideData}
               composedImageUrls={composedImageUrls ? [composedImageUrls[currentSlideIndex] || composedImageUrls[0]].filter(Boolean) : null}
@@ -826,6 +836,7 @@ export default function ActionCard({
             {/* Carousel navigation arrows */}
             {allSlides.length > 1 && !isPolling && !isRegeneratingImage && (
               <>
+                <div className="absolute top-2 right-2 z-10 bg-black/55 text-white text-[10px] font-semibold px-2 py-0.5 rounded-full tabular-nums">{currentSlideIndex + 1}/{allSlides.length}</div>
                 {currentSlideIndex > 0 && (
                   <button
                     className="absolute left-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-black/50 hover:bg-black/70 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity z-10"
@@ -860,21 +871,41 @@ export default function ActionCard({
         </div>
 
         <CardContent className="p-3 pt-2.5">
-          <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-primary/60">{platformLabel} · {typeLabel}</div>
+          <div className="mb-2 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            {(() => {
+              const pInfo = PLATFORMS.find((p) => p.id === effectivePlatform);
+              return pInfo ? <span className={`w-4 h-4 rounded ${pInfo.bgColor} ${pInfo.iconColor} flex items-center justify-center`}><pInfo.icon className="w-2.5 h-2.5" /></span> : null;
+            })()}
+            {platformLabel} · {typeLabel}
+          </div>
           {headline && <p className="mb-2 text-sm font-semibold text-foreground line-clamp-2">{headline}</p>}
           {captionText && (
             <div className="mb-3 rounded-lg bg-muted/40 px-3 py-2.5">
               <p className={`text-[13px] leading-relaxed text-foreground/80 whitespace-pre-line ${showFullCaption ? "" : "line-clamp-4"}`}>
                 {captionText}
               </p>
-              {captionText.length > 120 && (
+              <div className="flex items-center gap-3 mt-1.5">
+                {captionText.length > 120 && (
+                  <button
+                    className="text-[11px] text-primary font-medium hover:underline"
+                    onClick={() => setShowFullCaption(!showFullCaption)}
+                  >
+                    {showFullCaption ? "ver menos" : "ver mais"}
+                  </button>
+                )}
                 <button
-                  className="text-[11px] text-primary font-medium hover:underline mt-1.5 block"
-                  onClick={() => setShowFullCaption(!showFullCaption)}
+                  className="text-[11px] text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                  onClick={() => {
+                    const full = [captionText, hashtagsList?.length ? hashtagsList.map(h => h.startsWith("#") ? h : `#${h}`).join(" ") : ""].filter(Boolean).join("\n\n");
+                    navigator.clipboard.writeText(full);
+                    setCaptionCopied(true);
+                    setTimeout(() => setCaptionCopied(false), 1500);
+                  }}
                 >
-                  {showFullCaption ? "ver menos" : "ver mais"}
+                  {captionCopied ? <Check className="w-3 h-3 text-green-500" /> : <Save className="w-3 h-3" />}
+                  {captionCopied ? "copiado" : "copiar"}
                 </button>
-              )}
+              </div>
               {hashtagsList && hashtagsList.length > 0 && (
                 <p className="text-[11px] text-primary/60 mt-2 leading-relaxed flex flex-wrap gap-x-1.5 gap-y-0.5">
                   {hashtagsList.map(h => (
@@ -1167,6 +1198,21 @@ export default function ActionCard({
       </Card>
 
       <ScheduleModal open={scheduleOpen} onClose={() => setScheduleOpen(false)} onSchedule={handleSchedule} isScheduling={isScheduling} />
+
+      {/* Preview no contexto da rede de destino (Instagram feed/story, LinkedIn) */}
+      <PlatformPreview
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        images={(() => {
+          const src = allSlides.length > 0 ? allSlides : (slideData ? [slideData] : []);
+          const imgs = src.map((s: any, i: number) => composedImageUrls?.[i] || s?.background_image_url || s?.image_url).filter(Boolean) as string[];
+          return imgs.length > 0 ? imgs : (previewImageUrl ? [previewImageUrl] : []);
+        })()}
+        caption={captionText || ""}
+        hashtags={hashtagsList || undefined}
+        platformCaptions={platformCaptions}
+        defaultFrame={effectivePlatform === "linkedin" ? "linkedin" : (contentType as string) === "story" ? "story" : "instagram"}
+      />
 
       <Dialog open={showImageEditDialog} onOpenChange={setShowImageEditDialog}>
         <DialogContent className="max-w-md">
