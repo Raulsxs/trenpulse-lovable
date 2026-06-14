@@ -252,6 +252,16 @@ export default function ActionCard({
     }
   }, []);
 
+  // Legendas por plataforma — buscadas SÓ ao abrir o preview (isola qualquer erro de
+  // query desse campo da renderização do card; degrada pra legenda base se falhar).
+  useEffect(() => {
+    if (!previewOpen || platformCaptions !== null) return;
+    (async () => {
+      const { data } = await supabase.from("generated_contents").select("platform_captions").eq("id", contentId).maybeSingle();
+      setPlatformCaptions(((data as any)?.platform_captions) || {});
+    })();
+  }, [previewOpen, contentId, platformCaptions]);
+
   // ── Sync connected accounts from shared cache ──
   useEffect(() => {
     if (contentType === "cron_config" || sharedAccounts.length === 0) return;
@@ -365,13 +375,18 @@ export default function ActionCard({
     // Check if slide data already exists
     const checkExisting = async () => {
       try {
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from("generated_contents")
-          .select("slides, brand_snapshot, platform, content_type, created_at, image_urls, generation_metadata, caption, hashtags, platform_captions")
+          .select("slides, brand_snapshot, platform, content_type, created_at, image_urls, generation_metadata, caption, hashtags")
           .eq("id", contentId)
           .maybeSingle();
 
-        // Content was deleted — stop polling and show "removed" state
+        // Erro de query (rede, schema, transitório) NÃO é "removido" — segue tentando.
+        if (error) {
+          console.warn("[ActionCard] fetch error (mantém polling):", error.message);
+          return false;
+        }
+        // Só marca como removido quando a linha realmente não existe (data null, sem erro).
         if (!cancelled && !data) {
           setContentDeleted(true);
           setIsPolling(false);
@@ -396,7 +411,6 @@ export default function ActionCard({
           if (data.platform) setResolvedPlatform(data.platform);
           if ((data as any).caption) setCaptionText((data as any).caption);
           if ((data as any).hashtags) setHashtagsList((data as any).hashtags);
-          if ((data as any).platform_captions) setPlatformCaptions((data as any).platform_captions);
           const fetchedImageUrls = data.image_urls as string[] | null;
           if (fetchedImageUrls?.length) setComposedImageUrls(fetchedImageUrls);
 
