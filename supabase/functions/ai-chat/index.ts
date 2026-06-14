@@ -279,6 +279,7 @@ serve(async (req) => {
       "gpt-image-2": "img_gpt",
       "nano-banana": "img_nano",
       "qwen": "img_qwen",
+      "reve": "img_reve",
     };
     const modelCostAction: string | null = requestModel && MODEL_COST_ACTION[requestModel] ? MODEL_COST_ACTION[requestModel] : null;
 

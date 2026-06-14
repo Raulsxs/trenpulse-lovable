@@ -32,10 +32,10 @@ A imagem gerada É o conteúdo final — uma ARTE GRÁFICA CHAPADA (flat design)
 // ══════ MODEL REGISTRY (estante de modelos do Studio) ══════
 // Cada modelo de imagem do inference.sh com seu builder de body. O Studio passa `model`;
 // sem `model`, o roteamento cai no hybrid por aspect (default histórico).
-type ImageModelId = "gpt-image-2" | "nano-banana" | "seedream" | "qwen";
+type ImageModelId = "gpt-image-2" | "nano-banana" | "seedream" | "qwen" | "reve";
 
 function isImageModelId(m: unknown): m is ImageModelId {
-  return m === "gpt-image-2" || m === "nano-banana" || m === "seedream" || m === "qwen";
+  return m === "gpt-image-2" || m === "nano-banana" || m === "seedream" || m === "qwen" || m === "reve";
 }
 
 /** Resolve o modelo: respeita o pedido do Studio; senão hybrid (9:16 → Nano Banana, resto → gpt-image-2). */
@@ -67,6 +67,15 @@ function buildInferenceBody(model: ImageModelId, promptText: string, aspectRatio
         app: "alibaba/qwen-image-2",
         wait: true,
         input: { prompt: promptText, aspect_ratio: aspectRatio, ...(refImages.length > 0 ? { image: refImages[0] } : {}) },
+      };
+    case "reve":
+      // Reve: melhor renderização de TEXTO pt-BR da estante (acentos perfeitos), estética
+      // minimalista/limpa (texto sobre fundo sólido, sem gráficos). Pra posts clean/quote-card.
+      // Devolve `output.image` (string) — já coberto pelo pickUrl abaixo. Sem image-to-image.
+      return {
+        app: "reve/create",
+        wait: true,
+        input: { prompt: promptText, aspect_ratio: aspectRatio },
       };
     case "gpt-image-2":
     default:
