@@ -110,8 +110,9 @@ export default function PlatformPreview({ open, onOpenChange, images, caption, h
 
           {/* ── INSTAGRAM STORY ── */}
           {frame === "story" && (
-            <div className="relative bg-black aspect-[9/16] max-h-[78vh] mx-auto">
-              <img src={img} alt="" className="w-full h-full object-cover" />
+            <div className="relative bg-neutral-900 aspect-[9/16] max-h-[78vh] mx-auto">
+              {/* object-contain (letterbox) — conteúdo quadrado num frame 9:16 não pode ser cortado */}
+              <img src={img} alt="" className="w-full h-full object-contain" />
               <div className="absolute top-0 inset-x-0 p-2">
                 <div className="flex gap-1 mb-2">{(images.length > 1 ? images : [0]).map((_, i) => <span key={i} className={cn("h-0.5 flex-1 rounded-full", i <= slide ? "bg-white" : "bg-white/40")} />)}</div>
                 <div className="flex items-center gap-2">

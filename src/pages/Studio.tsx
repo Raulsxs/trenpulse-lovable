@@ -194,7 +194,7 @@ export default function Studio() {
               <Loader2 className="w-4 h-4 animate-spin text-primary shrink-0" />
               <div className="min-w-0">
                 <p className="text-sm font-medium">Criando {format.label.toLowerCase()}{isSatori ? "" : ` com ${model.name}`}…</p>
-                <p className="text-xs text-muted-foreground">{format.slides > 1 ? `${format.slides} slides · ` : ""}{isSatori ? "renderizando" : `isso leva ${model.speed.replace("~", "")}`}. Pode trocar de aba, a gente avisa.</p>
+                <p className="text-xs text-muted-foreground">{format.slides > 1 ? `${format.slides} slides · ` : ""}a IA está caprichando no texto e no visual. Pode trocar de aba, a gente avisa quando ficar pronto.</p>
               </div>
             </div>
           </div>
