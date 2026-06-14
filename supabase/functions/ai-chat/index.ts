@@ -278,6 +278,7 @@ serve(async (req) => {
       "seedream": "img_seedream",
       "gpt-image-2": "img_gpt",
       "nano-banana": "img_nano",
+      "qwen": "img_qwen",
     };
     const modelCostAction: string | null = requestModel && MODEL_COST_ACTION[requestModel] ? MODEL_COST_ACTION[requestModel] : null;
 

@@ -32,10 +32,10 @@ A imagem gerada É o conteúdo final — uma ARTE GRÁFICA CHAPADA (flat design)
 // ══════ MODEL REGISTRY (estante de modelos do Studio) ══════
 // Cada modelo de imagem do inference.sh com seu builder de body. O Studio passa `model`;
 // sem `model`, o roteamento cai no hybrid por aspect (default histórico).
-type ImageModelId = "gpt-image-2" | "nano-banana" | "seedream";
+type ImageModelId = "gpt-image-2" | "nano-banana" | "seedream" | "qwen";
 
 function isImageModelId(m: unknown): m is ImageModelId {
-  return m === "gpt-image-2" || m === "nano-banana" || m === "seedream";
+  return m === "gpt-image-2" || m === "nano-banana" || m === "seedream" || m === "qwen";
 }
 
 /** Resolve o modelo: respeita o pedido do Studio; senão hybrid (9:16 → Nano Banana, resto → gpt-image-2). */
@@ -57,6 +57,14 @@ function buildInferenceBody(model: ImageModelId, promptText: string, aspectRatio
       // Seedream 4.0: rápido (~14s) e barato ($0.03), texto pt-BR ~90%. Aceita 1 ref (image-to-image).
       return {
         app: "bytedance/seedream-4-0",
+        wait: true,
+        input: { prompt: promptText, aspect_ratio: aspectRatio, ...(refImages.length > 0 ? { image: refImages[0] } : {}) },
+      };
+    case "qwen":
+      // Qwen Image 2: fotorrealismo excelente (cenas/pessoas/produtos). RUIM em texto pt-BR
+      // (garble) — usar pra Imagem livre/ilustração, não pra posts com headline.
+      return {
+        app: "alibaba/qwen-image-2",
         wait: true,
         input: { prompt: promptText, aspect_ratio: aspectRatio, ...(refImages.length > 0 ? { image: refImages[0] } : {}) },
       };

@@ -19,7 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   Sparkles, Loader2, ImageIcon, GalleryHorizontalEnd, Smartphone, Wand2,
-  Zap, Crown, Gauge, Film, Lock, Palette, Check, MessageSquareQuote, ChevronDown,
+  Zap, Crown, Gauge, Film, Lock, Palette, Check, MessageSquareQuote, ChevronDown, Camera,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,14 +35,15 @@ const FORMATS: { id: FormatId; label: string; icon: any; intent: string; format:
 ];
 
 // ── Estante de modelos (custo = credit_pricing img_<model>; specs validados na F0) ──
-type ModelId = "seedream" | "gpt-image-2" | "nano-banana";
+type ModelId = "seedream" | "gpt-image-2" | "nano-banana" | "qwen";
 const MODELS: {
   id: ModelId; name: string; forte: string; cost: number; speed: string;
-  icon: any; tag?: string; tone: string; sample: string;
+  icon: any; tag?: string; tone: string; sample: string; noText?: boolean;
 }[] = [
   { id: "gpt-image-2", name: "GPT-Image 2", forte: "Texto pt-BR perfeito, design gráfico", cost: 8, speed: "~20s", icon: Crown, tag: "Recomendado", tone: "text-primary", sample: "/showcase/gpt_post.jpg" },
   { id: "seedream", name: "Seedream 4.0", forte: "5x mais rápido, texto bom", cost: 4, speed: "~15s", icon: Zap, tone: "text-[hsl(var(--credit))]", sample: "/showcase/seedream_post.jpg" },
   { id: "nano-banana", name: "Nano Banana Pro", forte: "Premium, melhor pra 9:16", cost: 20, speed: "~80s", icon: Gauge, tone: "text-accent", sample: "/showcase/nano_story.jpg" },
+  { id: "qwen", name: "Qwen", forte: "Fotos e cenas realistas (sem texto)", cost: 5, speed: "~25s", icon: Camera, tone: "text-emerald-600", sample: "/showcase/qwen_photo.jpg", noText: true },
 ];
 
 const DIAL: { id: string; label: string; hint: string }[] = [
@@ -282,11 +283,14 @@ export default function Studio() {
         {/* Estante de modelos — não se aplica ao Tweet card (motor Satori próprio) */}
         {!isSatori && (
           <div>
-            <div className="flex items-baseline gap-2 mb-2">
+            <div className="flex items-baseline gap-2 mb-2 flex-wrap">
               <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Modelo</h2>
               {formatId === "story" && <span className="text-[11px] text-muted-foreground">story usa Nano Banana (9:16 nativo)</span>}
+              {modelId === "qwen" && formatId !== "free" && (
+                <span className="text-[11px] text-[hsl(var(--credit))] font-medium">⚠ Qwen é pra fotos/cenas — não renderiza texto. Ideal em "Imagem livre".</span>
+              )}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 stagger-children">
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 stagger-children">
               {MODELS.map((m) => {
                 const active = effectiveModel === m.id;
                 const locked = formatId === "story" && m.id !== "nano-banana";
