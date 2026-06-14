@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, RefreshCw, X, Send, ChevronDown, Download, ArrowRightLeft } from "lucide-react";
+import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, RefreshCw, X, Send, ChevronDown, Download, ArrowRightLeft, Type } from "lucide-react";
 import { CostChip } from "@/components/ui/cost-chip";
 import { Skeleton } from "@/components/ui/skeleton";
 import ScheduleModal from "@/components/content/ScheduleModal";
@@ -231,6 +231,10 @@ export default function ActionCard({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [platformCaptions, setPlatformCaptions] = useState<Record<string, string> | null>(null);
   const [captionCopied, setCaptionCopied] = useState(false);
+  const [captionEditOpen, setCaptionEditOpen] = useState(false);
+  const [editedCaption, setEditedCaption] = useState("");
+  const [editedHashtags, setEditedHashtags] = useState("");
+  const [savingCaption, setSavingCaption] = useState(false);
   const previewContainerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(360);
 
@@ -1091,6 +1095,14 @@ export default function ActionCard({
               <PopoverContent className="w-60 p-1.5" align="start" side="top">
                 <button
                   className="w-full text-left px-2 py-2 text-xs rounded-md hover:bg-muted/80 transition-colors flex items-center gap-2"
+                  onClick={() => { setAdaptOpen(false); setEditedCaption(captionText || ""); setEditedHashtags((hashtagsList || []).map(h => h.replace(/^#/, "")).join(" ")); setCaptionEditOpen(true); }}
+                >
+                  <Type className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="flex-1"><b>Editar legenda</b> — texto e hashtags</span>
+                  <CostChip free />
+                </button>
+                <button
+                  className="w-full text-left px-2 py-2 text-xs rounded-md hover:bg-muted/80 transition-colors flex items-center gap-2"
                   onClick={() => { setAdaptOpen(false); handleRegenerateImage(); }}
                 >
                   <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
@@ -1198,6 +1210,50 @@ export default function ActionCard({
       </Card>
 
       <ScheduleModal open={scheduleOpen} onClose={() => setScheduleOpen(false)} onSchedule={handleSchedule} isScheduling={isScheduling} />
+
+      {/* Editar legenda — restaura a edição de texto (o editor de conteúdo foi removido) */}
+      <Dialog open={captionEditOpen} onOpenChange={setCaptionEditOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base"><Type className="w-4 h-4" /> Editar legenda</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Legenda</label>
+              <Textarea value={editedCaption} onChange={(e) => setEditedCaption(e.target.value)} rows={5} className="text-sm" placeholder="Escreva a legenda do post…" />
+            </div>
+            <div>
+              <label className="text-xs font-medium text-muted-foreground mb-1.5 block">Hashtags <span className="font-normal">(separadas por espaço)</span></label>
+              <Textarea value={editedHashtags} onChange={(e) => setEditedHashtags(e.target.value)} rows={2} className="text-sm" placeholder="saude bemestar dicas" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setCaptionEditOpen(false)}>Cancelar</Button>
+            <Button
+              disabled={savingCaption}
+              onClick={async () => {
+                setSavingCaption(true);
+                try {
+                  const tags = editedHashtags.split(/[\s,]+/).map(t => t.replace(/^#/, "").trim()).filter(Boolean);
+                  const { error } = await supabase.from("generated_contents").update({ caption: editedCaption, hashtags: tags }).eq("id", contentId);
+                  if (error) throw error;
+                  setCaptionText(editedCaption);
+                  setHashtagsList(tags);
+                  setCaptionEditOpen(false);
+                  toast.success("Legenda atualizada!");
+                } catch (err: any) {
+                  toast.error("Erro ao salvar: " + (err?.message || "tente de novo"));
+                } finally {
+                  setSavingCaption(false);
+                }
+              }}
+            >
+              {savingCaption ? <Loader2 className="w-4 h-4 animate-spin mr-1" /> : <Check className="w-4 h-4 mr-1" />}
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Preview no contexto da rede de destino (Instagram feed/story, LinkedIn) */}
       <PlatformPreview

@@ -4,7 +4,7 @@
  * ficar publicado", com seu avatar/@ reais e a legenda certa por rede. Endowment effect.
  */
 import { useEffect, useState } from "react";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Globe, ThumbsUp, Repeat2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -63,6 +63,7 @@ export default function PlatformPreview({ open, onOpenChange, images, caption, h
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-sm p-0 gap-0 overflow-hidden bg-[#fafafa] dark:bg-neutral-900">
+        <DialogTitle className="sr-only">Pré-visualização do conteúdo na rede social</DialogTitle>
         {/* Switcher de plataforma */}
         <div className="flex items-center gap-1 p-2 bg-background border-b border-border">
           {FRAMES.map((f) => (
