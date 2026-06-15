@@ -782,7 +782,7 @@ ${SAFE_AREA_RULES}`;
         let imageUrl: string | null = null;
         try {
           const genController = new AbortController();
-          const genTimer = setTimeout(() => genController.abort(), 80000); // 80s: inference.sh can take 60s + fallback needs room
+          const genTimer = setTimeout(() => genController.abort(), 130000); // 130s: inference.sh gpt-image-2 degradou p/ ~51s/call e faz 2 tentativas (~104s); 80s estourava e quebrava o POST do Maikon. Sob o teto ~150s do edge.
           const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-slide-images`, {
             signal: genController.signal,
             method: "POST",
@@ -1701,7 +1701,7 @@ Responda APENAS em JSON:
         let imageUrl: string | null = null;
         try {
           const genController = new AbortController();
-          const genTimer = setTimeout(() => genController.abort(), 80000);
+          const genTimer = setTimeout(() => genController.abort(), 130000); // ver nota no GENERATE: inference.sh lento (~51s ×2)
           const genResp = await fetch(`${supabaseUrl}/functions/v1/generate-slide-images`, {
             signal: genController.signal,
             method: "POST",

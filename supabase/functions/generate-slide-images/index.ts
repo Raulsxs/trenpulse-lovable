@@ -475,20 +475,10 @@ ${brandColorHint}
         .filter(Boolean)
         .slice(0, 6);
 
-      // ── Tier 0: per-user Gemini key FIRST (white-glove quality path) ──
-      // Quando o user tem key Google própria E não escolheu modelo no Studio (requestModel
-      // ausente = path white-glove/Maikon via ai-chat), usa gemini-3-pro-image NATIVO antes
-      // do pool compartilhado. Motivo: inference.sh degradou pra ~51s/call e faz 2 tentativas
-      // (~104s) → estoura o timeout de 80s do ai-chat → geração falha. O Gemini nativo é mais
-      // rápido E renderiza texto/acentos pt-BR melhor. Se retornar null, cai no inference.sh abaixo.
-      if (userGeminiKey && !requestModel) {
-        console.log(`[generate-slide-images] Tier-0: Google AI direct FIRST (user ${resolvedUserId}, aspect=${aspectRatio}, refs=${refImages.length})`);
-        base64Image = await tryGoogleAIDirect(userGeminiKey, promptText, refImages, aspectRatio);
-        if (base64Image) console.log(`[generate-slide-images] Tier-0 succeeded for user ${resolvedUserId}`);
-        else console.warn(`[generate-slide-images] Tier-0 returned no image — continuing to inference.sh`);
-      }
-
       // ── Tier 1: inference.sh (shared credit pool) ──
+      // gpt-image-2 (1:1/4:5) é o melhor DESIGN + texto pt-BR — é o path primário do Maikon.
+      // NÃO rotear pro Gemini nativo primeiro: gemini-3-pro-image conserta garble mas faz
+      // design pior. O Gemini do user é só FALLBACK (Tier-2 abaixo) quando o inference.sh falha.
       const INFERENCE_SH_KEY = !base64Image && Deno.env.get("INFERENCE_SH_API_KEY");
       if (INFERENCE_SH_KEY) {
         console.log(`[generate-slide-images] Using inference.sh for ${mode}: platform=${platform}, contentFormat=${contentFormat}, aspect=${aspectRatio}`);
