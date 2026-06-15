@@ -44,7 +44,7 @@ const MODELS: {
   { id: "seedream", name: "Seedream 4.0", forte: "5x mais rápido, texto bom", cost: 4, speed: "~15s", icon: Zap, tone: "text-[hsl(var(--credit))]", sample: "/showcase/seedream_post.jpg" },
   { id: "nano-banana", name: "Nano Banana Pro", forte: "Premium, melhor pra 9:16", cost: 20, speed: "~80s", icon: Gauge, tone: "text-accent", sample: "/showcase/nano_story.jpg" },
   { id: "qwen", name: "Qwen", forte: "Fotos e cenas realistas (sem texto)", cost: 5, speed: "~25s", icon: Camera, tone: "text-emerald-600", sample: "/showcase/qwen_photo.jpg", noText: true },
-  { id: "reve", name: "Reve", forte: "Texto pt-BR impecável, estilo minimalista", cost: 6, speed: "~20s", icon: Type, tone: "text-sky-600", sample: "/showcase/reve_post.jpg" },
+  { id: "reve", name: "Reve", forte: "Texto pt-BR impecável, estilo minimalista", cost: 3, speed: "~20s", icon: Type, tone: "text-sky-600", sample: "/showcase/reve_post.jpg" },
 ];
 
 const DIAL: { id: string; label: string; hint: string }[] = [
