@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
-import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Globe, ThumbsUp, Repeat2, X } from "lucide-react";
+import { Heart, MessageCircle, Send, Bookmark, MoreHorizontal, Globe, ThumbsUp, Repeat2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Frame = "instagram" | "story" | "linkedin";
@@ -115,13 +115,14 @@ export default function PlatformPreview({ open, onOpenChange, images, caption, h
             <div className="relative bg-neutral-900 aspect-[9/16] max-h-[78vh] mx-auto">
               {/* object-contain (letterbox) — conteúdo quadrado num frame 9:16 não pode ser cortado */}
               <img src={img} alt="" className="w-full h-full object-contain" />
-              <div className="absolute top-0 inset-x-0 p-2">
+              {/* scrim de topo: garante leitura do @ mesmo quando a imagem tem topo claro.
+                  Sem X aqui — o Dialog já tem o seu (evita duplo X). */}
+              <div className="absolute top-0 inset-x-0 p-2 bg-gradient-to-b from-black/45 via-black/20 to-transparent pb-6">
                 <div className="flex gap-1 mb-2">{(images.length > 1 ? images : [0]).map((_, i) => <span key={i} className={cn("h-0.5 flex-1 rounded-full", i <= slide ? "bg-white" : "bg-white/40")} />)}</div>
                 <div className="flex items-center gap-2">
                   <Avatar size={28} />
-                  <span className="text-white text-sm font-semibold drop-shadow">{profile.handle}</span>
-                  <span className="text-white/70 text-xs">agora</span>
-                  <X className="w-5 h-5 text-white ml-auto drop-shadow" />
+                  <span className="text-white text-sm font-semibold drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)]">{profile.handle}</span>
+                  <span className="text-white/80 text-xs drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">agora</span>
                 </div>
               </div>
             </div>
