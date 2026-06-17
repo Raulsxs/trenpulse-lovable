@@ -176,6 +176,46 @@ function detectFormat(msg: string): string {
   return "post";
 }
 
+// ── Helper: strip quick-action template boilerplate to get the real subject ──
+// Os atalhos preenchem instruções como "Crie um carrossel ... sobre: <X>". O TEMA real é <X>;
+// sem remover, a instrução vaza pra título/slides/legenda (ex.: um slide que diz literalmente
+// "Crie um carrossel de 5 stories..."). Só remove quando o lead-in é claramente um verbo de
+// instrução, então temas normais passam intactos.
+function stripGenerationBoilerplate(msg: string): string {
+  const s = (msg || "").trim();
+  const m = s.match(/\bsobre:?\s+([\s\S]+)$/i);
+  if (m) {
+    const leadIn = s.slice(0, s.length - m[1].length);
+    if (/\b(crie|gere|fa[çc]a|monte|elabore|escreva|produza|desenvolva)\b/i.test(leadIn)) {
+      return m[1].trim();
+    }
+  }
+  return s;
+}
+
+// ── Helper: extrai o primeiro objeto JSON balanceado de um texto ──
+// Modelos de reasoning (minimax-m-25) emitem texto/raciocínio antes do JSON (ex.: "do.\n{...}").
+// O regex guloso /\{[\s\S]*\}/ pega demais quando há chaves no texto ao redor → JSON.parse quebra.
+// Rastrear profundidade de chaves pega EXATAMENTE o primeiro objeto completo, ignorando o ruído.
+function extractJsonObject(raw: string): string | null {
+  if (!raw) return null;
+  const t = raw.replace(/```json\s*|\s*```/gi, "");
+  const start = t.indexOf("{");
+  if (start < 0) return null;
+  let depth = 0, inStr = false, esc = false;
+  for (let i = start; i < t.length; i++) {
+    const c = t[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+    } else if (c === '"') inStr = true;
+    else if (c === "{") depth++;
+    else if (c === "}") { depth--; if (depth === 0) return t.slice(start, i + 1); }
+  }
+  return null;
+}
+
 // ── Helper: detect if message is a quote/phrase request ──
 function detectContentStyle(msg: string): string | null {
   if (/\b(frase|citação|citacao|quote|imagem com a frase|imagem com frase|frase inspiracional|frase motivacional)\b/i.test(msg)) return "quote";
@@ -648,9 +688,12 @@ Mensagem: "${message}"`;
         const dims = getContentDimensions(platform, format);
 
         // 5. Build image prompt — include FORMATO OBRIGATÓRIO so inference.sh generates correct aspect ratio
+        // subject = mensagem sem o boilerplate do atalho ("Crie um post sobre: X" → "X"), senão a
+        // instrução vaza pro prompt e o modelo renderiza o texto da instrução na imagem.
+        const subject = stripGenerationBoilerplate(message);
         const userTopic = articleContent
           ? `Baseado neste artigo: ${articleContent.substring(0, 2000)}`
-          : message;
+          : subject;
 
         const platformLabel = platform === "linkedin" ? "LinkedIn" : "Instagram";
         const formatLabel = format === "story" ? "story" : format === "carousel" ? "carrossel" : "post";
@@ -823,7 +866,7 @@ ${SAFE_AREA_RULES}`;
         try {
           const topic = articleContent
             ? articleContent.substring(0, 600)
-            : message;
+            : subject;
           const mainBilingual = secondaryLang && bilingualPlatforms.includes(platform)
             ? `\nIMPORTANTE: A legenda DEVE ser bilíngue — primeiro em português, depois "---" e a versão em ${secondaryLangName}.`
             : "";
@@ -876,10 +919,10 @@ JSON: { "title": "...", "caption": "...", "hashtags": ["#..."] }`;
           if (captionResp.ok) {
             const captionData = await captionResp.json();
             const raw = captionData.choices?.[0]?.message?.content || "";
-            const jsonMatch = raw.match(/\{[\s\S]*\}/);
+            const jsonMatch = extractJsonObject(raw);
             if (jsonMatch) {
               try {
-                const parsed = JSON.parse(jsonMatch[0]);
+                const parsed = JSON.parse(jsonMatch);
                 aiTitle = parsed.title || "";
                 caption = parsed.caption || "";
                 hashtags = parsed.hashtags || [];
@@ -907,7 +950,7 @@ JSON: { "title": "...", "caption": "...", "hashtags": ["#..."] }`;
         // 8. Build title — prefer AI-generated title, fallback to phrase/message cleanup
         const title = contentStyle === "quote"
           ? slideHeadline
-          : (aiTitle || (message.replace(/https?:\/\/\S+/g, "").replace(/^(quero|crie|gere|criar|gerar|me\s+d[eê]|fa[çc]a)\s+(um[a]?\s+)?(post|story|carrossel|imagem|conteúdo)\s+(para\s+o\s+)?(instagram|linkedin)?\s*/i, "").trim().substring(0, 80) || message.substring(0, 80)));
+          : (aiTitle || (subject.replace(/https?:\/\/\S+/g, "").replace(/^(quero|crie|gere|criar|gerar|me\s+d[eê]|fa[çc]a)\s+(um[a]?\s+)?(post|story|carrossel|imagem|conteúdo)\s+(para\s+o\s+)?(instagram|linkedin)?\s*/i, "").trim().substring(0, 80) || "Novo conteúdo"));
 
         // 8b. Generate multi-platform caption variants (async, non-blocking)
         let platformCaptions: Record<string, string> | null = null;
@@ -1094,9 +1137,12 @@ Responda APENAS em JSON:
         }
 
         // 4. Generate slide structure with minimax
+        // subject = mensagem SEM o boilerplate do atalho ("Crie um carrossel... sobre: X" → "X").
+        // Sem isso, a instrução vira o TEMA e vaza pros slides/título/legenda.
+        const subject = stripGenerationBoilerplate(message);
         const userTopic = articleContent
           ? `Baseado neste artigo: ${articleContent.substring(0, 2000)}`
-          : message;
+          : subject;
 
         const carouselPlatformGuide = platform === "linkedin"
           ? `FORMATO LINKEDIN DOCUMENT:
@@ -1134,38 +1180,48 @@ Responda em JSON:
   ]
 }`;
 
-        let carouselTitle = message.length > 80 ? message.substring(0, 80) + "..." : message;
+        // Título base = subject limpo (NUNCA a instrução crua). minimax sobrescreve com parsed.title.
+        const cleanSubject = subject.replace(/https?:\/\/[^\s]+/g, "").trim() || "o artigo";
+        let carouselTitle = cleanSubject.length > 80 ? cleanSubject.substring(0, 80) + "..." : cleanSubject;
         let slides: any[] = [];
 
-        try {
+        // Tenta gerar a estrutura; 1 retry porque minimax (reasoning) às vezes devolve texto sem JSON.
+        const runStructure = async (extraInstruction = ""): Promise<void> => {
           const structResp = await aiGatewayFetch({
             model: "openrouter/minimax-m-25",
-            messages: [{ role: "user", content: structurePrompt }],
+            messages: [{ role: "user", content: structurePrompt + extraInstruction }],
           });
-
-          if (structResp.ok) {
-            const structData = await structResp.json();
-            const raw = structData.choices?.[0]?.message?.content || "";
-            const jsonMatch = raw.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              const parsed = JSON.parse(jsonMatch[0]);
-              carouselTitle = parsed.title || carouselTitle;
-              slides = parsed.slides || [];
-            }
+          if (!structResp.ok) return;
+          const structData = await structResp.json();
+          const raw = structData.choices?.[0]?.message?.content || "";
+          const jsonStr = extractJsonObject(raw);
+          if (jsonStr) {
+            const parsed = JSON.parse(jsonStr);
+            carouselTitle = parsed.title || carouselTitle;
+            slides = parsed.slides || [];
           }
+        };
+
+        try {
+          await runStructure();
         } catch (structErr: any) {
           console.error("[ai-chat] GENERATE_CAROUSEL: structure generation failed:", structErr?.message);
         }
-
-        // Fallback: if no slides generated, create basic structure
         if (slides.length === 0) {
-          slides = [
-            { role: "cover", headline: carouselTitle, body: "", bullets: [] },
-            ...Array.from({ length: slideCount - 2 }, (_, i) => ({
-              role: "content", headline: `Ponto ${i + 1}`, body: "Conteúdo será gerado", bullets: [],
-            })),
-            { role: "cta", headline: "Gostou? Siga para mais!", body: "", bullets: [] },
-          ];
+          console.warn("[ai-chat] GENERATE_CAROUSEL: structure empty — retry com instrução JSON estrita");
+          try {
+            await runStructure("\n\nIMPORTANTE: responda SOMENTE com o objeto JSON, sem nenhum texto, raciocínio ou markdown antes ou depois.");
+          } catch (retryErr: any) {
+            console.error("[ai-chat] GENERATE_CAROUSEL: structure retry failed:", retryErr?.message);
+          }
+        }
+
+        // Falhou de vez: NÃO ecoa a instrução nem gera lixo nem cobra. Avisa e sai.
+        if (slides.length === 0) {
+          console.error("[ai-chat] GENERATE_CAROUSEL: structure vazia após retry — abortando sem cobrar");
+          replyOverride = "Não consegui estruturar o carrossel agora — o gerador de texto falhou. Tenta de novo daqui a pouco. (Você não foi cobrado.)";
+          actionResult = null;
+          break;
         }
 
         const tStructureDone = Date.now();
@@ -1275,7 +1331,8 @@ Responda APENAS com a imagem gerada.`;
               : "";
             const carouselNoBioRule = `\nPROIBIDO: nunca escreva "link na bio", "link no perfil", "arrasta pra cima", "swipe up", "veja mais nos stories" ou variações.`;
 
-            const captionPrompt = `Gere uma legenda para um carrossel de ${platform === "linkedin" ? "LinkedIn" : "Instagram"} sobre: "${message}"
+            const captionTopic = articleContent ? `o seguinte artigo: ${articleContent.substring(0, 1200)}` : `"${subject}"`;
+            const captionPrompt = `Gere uma legenda para um carrossel de ${platform === "linkedin" ? "LinkedIn" : "Instagram"} sobre: ${captionTopic}
 ${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
 ${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}
 Legenda curta e engajante. Inclua 5-8 hashtags relevantes no final.${carouselBilingual}${carouselNoBioRule}${carouselSourceRule}
@@ -1289,10 +1346,10 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
             if (captionResp.ok) {
               const captionData = await captionResp.json();
               const raw = captionData.choices?.[0]?.message?.content || "";
-              const jsonMatch = raw.match(/\{[\s\S]*\}/);
+              const jsonMatch = extractJsonObject(raw);
               if (jsonMatch) {
                 try {
-                  const parsed = JSON.parse(jsonMatch[0]);
+                  const parsed = JSON.parse(jsonMatch);
                   caption = parsed.caption || "";
                   hashtags = parsed.hashtags || [];
                 } catch {
