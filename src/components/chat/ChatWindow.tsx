@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import ChatMessage from "./ChatMessage";
 import ChatInput from "./ChatInput";
 import BrandAnalysisLoader from "./BrandAnalysisLoader";
-import { Sparkles, ArrowDown, X, MessageSquarePlus, ImageIcon, GalleryHorizontalEnd, Newspaper, Smartphone, MessageSquareQuote, Linkedin, Palette } from "lucide-react";
+import { Sparkles, ArrowDown, X, MessageSquarePlus, ImageIcon, GalleryHorizontalEnd, Newspaper, Smartphone, MessageSquareQuote, Linkedin, Palette, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { CostChip } from "@/components/ui/cost-chip";
 import { toast } from "sonner";
@@ -126,6 +126,9 @@ export default function ChatWindow({ initialPrefill }: { initialPrefill?: string
   const [selectedBrandId, setSelectedBrandId] = useState<string | null>(null);
   const [prefillText, setPrefillText] = useState("");
   const [prefillKey, setPrefillKey] = useState(0);
+  // Fotos anexadas pelo usuário aguardando a mensagem (ex.: fotos do congresso → carrossel editorial).
+  const [pendingImages, setPendingImages] = useState<string[]>([]);
+  const [uploadingImages, setUploadingImages] = useState(false);
 
   // Prompt pré-armado vindo do onboarding (router state): preenche o input uma vez,
   // editável — o usuário dispara o envio, nunca a gente.
@@ -622,6 +625,31 @@ export default function ChatWindow({ initialPrefill }: { initialPrefill?: string
   // ── Brand image upload handler ──
   const handleBrandImageUpload = useCallback(async (files: File[]) => {
     if (!userId) return;
+
+    // FORA da criação de marca: as fotos viram ANEXOS pendentes (não envia ainda). O usuário
+    // digita o pedido ("carrossel da marca com essas fotos do congresso") e envia junto.
+    const inBrandCreation = brandCreationStep === 1 || brandCreationStep === 3;
+    if (!inBrandCreation) {
+      setUploadingImages(true);
+      try {
+        const urls: string[] = [];
+        for (const file of files) {
+          const ext = file.name.split(".").pop() || "png";
+          const path = `${userId}/${Date.now()}-${Math.random().toString(36).substr(2, 5)}.${ext}`;
+          const { error } = await supabase.storage.from("content-images").upload(path, file, { contentType: file.type });
+          if (error) throw error;
+          const { data: urlData } = supabase.storage.from("content-images").getPublicUrl(path);
+          urls.push(urlData.publicUrl);
+        }
+        setPendingImages(prev => [...prev, ...urls].slice(0, 10));
+      } catch (err) {
+        console.error("[ChatWindow] anexo de fotos falhou:", err);
+      } finally {
+        setUploadingImages(false);
+      }
+      return;
+    }
+
     setIsSending(true);
     const now = formatTime(new Date().toISOString());
     setMessages(prev => [...prev, { role: "user" as const, content: `📎 ${files.length} imagem(ns) enviada(s)`, timestamp: now }]);
@@ -672,7 +700,7 @@ export default function ChatWindow({ initialPrefill }: { initialPrefill?: string
     } finally {
       setIsSending(false);
     }
-  }, [userId, messages]);
+  }, [userId, messages, brandCreationStep]);
 
 
   // ══════ CHAT SEND ══════
@@ -805,14 +833,17 @@ export default function ChatWindow({ initialPrefill }: { initialPrefill?: string
         content: m.content,
       }));
 
+      const attachedImages = pendingImages;
       const { data, error } = await supabase.functions.invoke("ai-chat", {
         body: {
           message: text,
           brandId: selectedBrandId || null,
           history: recentHistory,
+          ...(attachedImages.length ? { imageUrls: attachedImages } : {}),
           ...extraParams,
         },
       });
+      setPendingImages([]); // fotos consumidas nesta mensagem
       if (error) throw error;
 
       // Verificar brand creation step na resposta
@@ -883,7 +914,7 @@ export default function ChatWindow({ initialPrefill }: { initialPrefill?: string
     } finally {
       setIsSending(false);
     }
-  }, [userId, isSending, messages, onboardingStep, processOnboardingAnswer, brandCreationStep, selectedBrandId]);
+  }, [userId, isSending, messages, onboardingStep, processOnboardingAnswer, brandCreationStep, selectedBrandId, pendingImages]);
 
   const handleQuickReply = useCallback((text: string) => {
     handleSend(text);
@@ -1081,11 +1112,31 @@ export default function ChatWindow({ initialPrefill }: { initialPrefill?: string
         </div>
       )}
 
+      {/* Fotos anexadas (ex.: do congresso) — viram um carrossel editorial com a marca ao enviar */}
+      {(pendingImages.length > 0 || uploadingImages) && (
+        <div className="px-3 pt-2 flex items-center gap-2 flex-wrap">
+          {pendingImages.map((url, i) => (
+            <div key={i} className="relative group">
+              <img src={url} alt="" className="w-12 h-12 rounded-md object-cover border border-border" />
+              <button
+                onClick={() => setPendingImages(prev => prev.filter((_, j) => j !== i))}
+                className="absolute -top-1.5 -right-1.5 w-4 h-4 rounded-full bg-foreground text-background grid place-items-center text-[10px] shadow"
+                aria-label="Remover foto"
+              >×</button>
+            </div>
+          ))}
+          {uploadingImages && <div className="w-12 h-12 rounded-md border border-dashed border-border grid place-items-center"><Loader2 className="w-4 h-4 animate-spin text-muted-foreground" /></div>}
+          {pendingImages.length > 0 && (
+            <span className="text-[11px] text-muted-foreground">{pendingImages.length} foto(s) anexada(s) — peça um <b>carrossel</b> que eu monto com elas + sua marca</span>
+          )}
+        </div>
+      )}
+
       <ChatInput
         onSend={handleSend}
         onFilesSelected={handleBrandImageUpload}
         disabled={isSending}
-        showImageUpload={brandCreationStep === 1 || brandCreationStep === 3}
+        showImageUpload={true}
         userId={userId || undefined}
         onNewChat={handleNewChat}
         hasMessages={messages.length > 0}
