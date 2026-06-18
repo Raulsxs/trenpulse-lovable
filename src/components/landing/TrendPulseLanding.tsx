@@ -540,7 +540,9 @@ export default function TrendPulseLanding({ onSignup, onLogin }: Props) {
   return (
     <>
       <style dangerouslySetInnerHTML={{ __html: STYLE }} />
-      <div ref={rootRef} className="tp-landing" dangerouslySetInnerHTML={{ __html: BODY }} />
+      {/* min-h-screen é necessário: o index.css só libera scroll no body via
+          `body:has(> #root > .min-h-screen)` — sem essa classe o body fica overflow:hidden. */}
+      <div ref={rootRef} className="tp-landing min-h-screen" dangerouslySetInnerHTML={{ __html: BODY }} />
     </>
   );
 }
