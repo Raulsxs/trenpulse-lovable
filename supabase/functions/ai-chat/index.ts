@@ -562,6 +562,14 @@ Mensagem: "${message}"`;
       detectedIntent = "GENERATE_EDITORIAL_CAROUSEL";
     }
 
+    // Fotos enviadas + pedido de carrossel → carrossel editorial COM as fotos do usuário.
+    // Insight do Maikon: "estive no congresso X → carrossel pronto com minhas fotos do evento".
+    const uploadedPhotoCount = (imageUrls || []).filter((u: string) => typeof u === "string" && u.startsWith("http")).length;
+    if (uploadedPhotoCount >= 2 && /\b(carross\S*|carrocel|slides?|stories|recap|resumo|recapitul\S*|p[óo]s[\s-]*evento)\b/i.test(message)) {
+      console.log(`[ai-chat] ${uploadedPhotoCount} fotos enviadas + pedido de carrossel → EDITORIAL com fotos do usuário`);
+      detectedIntent = "GENERATE_EDITORIAL_CAROUSEL";
+    }
+
     // Geração livre — imagem crua (estilo "chamar o Gemini"). Só quando pede explicitamente
     // imagem/foto/desenho e NÃO menciona post/story/carrossel/conteúdo (esses são GENERATE).
     if (
@@ -1631,11 +1639,28 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
         // 2. Perfil (handle pra moldura)
         const { data: edProf } = await svc.from("profiles").select("instagram_handle").eq("user_id", userId).maybeSingle();
         const edHandle = ((edProf?.instagram_handle as string) || "voce").replace(/^@+/, "");
-        const edHighlight = "#19E5C5"; // TODO: puxar da paleta da marca quando houver
+
+        // MODO FOTOS DO USUÁRIO: se enviou fotos (ex.: do congresso), elas viram os fundos dos
+        // slides — pulamos a geração por IA. Celeridade: "estive no evento X → carrossel pronto".
+        const userPhotos = (imageUrls || []).filter((u: string) => typeof u === "string" && u.startsWith("http"));
+        const photoMode = userPhotos.length >= 2;
+
+        // Cor de destaque vem da paleta da marca quando houver (senão o teal padrão).
+        let edHighlight = "#19E5C5";
+        if (requestBrandId) {
+          const { data: edBrand } = await svc.from("brands").select("palette").eq("id", requestBrandId).maybeSingle();
+          const pal = (edBrand as any)?.palette;
+          const first = Array.isArray(pal) ? pal[0] : null;
+          const hex = typeof first === "string" ? first : (first?.hex || first?.color);
+          if (hex && /^#?[0-9a-fA-F]{6}$/.test(String(hex))) edHighlight = String(hex).startsWith("#") ? String(hex) : `#${hex}`;
+        }
 
         // 3. minimax estrutura o carrossel editorial (JSON)
-        const edPrompt = `Você é um diretor de conteúdo viral. A partir do conteúdo abaixo, monte um CARROSSEL EDITORIAL de 4 a 6 slides em português brasileiro, estilo "mini-revista de gancho".
-
+        const photoModeRule = photoMode
+          ? `\nMODO FOTOS DO EVENTO: o usuário enviou ${userPhotos.length} fotos reais de um evento/lugar. Gere EXATAMENTE ${userPhotos.length} slides (um por foto, na ordem). As headlines devem narrar a experiência/aprendizados do evento descrito — NÃO descreva as fotos. NÃO inclua "photo_prompt" (as fotos já existem). 1º slide = capa que situa o evento; último = CTA.`
+          : "";
+        const edPrompt = `Você é um diretor de conteúdo viral. A partir do conteúdo abaixo, monte um CARROSSEL EDITORIAL de ${photoMode ? `EXATAMENTE ${userPhotos.length}` : "4 a 6"} slides em português brasileiro, estilo "mini-revista de gancho".
+${photoModeRule}
 CONTEÚDO: ${sourceContent}
 ${userCtx?.business_niche ? `NICHO: ${userCtx.business_niche}` : ""}
 ${userCtx?.brand_voice ? `TOM: ${userCtx.brand_voice}` : ""}
@@ -1661,13 +1686,17 @@ Responda APENAS em JSON:
           }
         } catch (e: any) { console.error("[ai-chat] EDITORIAL: struct failed:", e?.message); }
 
-        const edSlides: any[] = Array.isArray(edStruct?.slides) ? edStruct.slides.slice(0, 8) : [];
+        let edSlides: any[] = Array.isArray(edStruct?.slides) ? edStruct.slides.slice(0, 8) : [];
+        // No modo fotos, alinha 1 slide por foto (não renderiza foto sem headline nem vice-versa).
+        if (photoMode) edSlides = edSlides.slice(0, userPhotos.length);
         if (edSlides.length === 0) { replyOverride = "Não consegui montar o carrossel editorial. Tenta de novo com um tema ou link."; break; }
         const edKicker = edStruct?.kicker || (userCtx?.business_niche ? String(userCtx.business_niche).toUpperCase().slice(0, 16) : "DESTAQUE");
         const edBadge = edStruct?.badge || `#${edHandle}`;
 
-        // 4. Gera as FOTOS (sem texto) em PARALELO
-        const edPhotos: (string | null)[] = await Promise.all(edSlides.map(async (s: any, i: number) => {
+        // 4. Fotos de fundo: no modo fotos usa as do usuário; senão gera por IA (sem texto) em PARALELO.
+        const edPhotos: (string | null)[] = photoMode
+          ? edSlides.map((_: any, i: number) => userPhotos[i] || null)
+          : await Promise.all(edSlides.map(async (s: any, i: number) => {
           const headlineText = (s.headline_tokens || []).map((t: any) => t.t).join(" ");
           const pPrompt = `Foto cinematográfica fotorrealista vertical: ${s.photo_prompt || headlineText || "cena dramática"}. Composição nítida, atmosfera dramática, profundidade de campo rasa. SEM TEXTO, SEM LETRAS, SEM TIPOGRAFIA, SEM MARCA D'ÁGUA, SEM LEGENDA.`;
           try {
