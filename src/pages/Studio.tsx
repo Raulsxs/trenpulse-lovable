@@ -20,6 +20,7 @@ import { toast } from "sonner";
 import {
   Sparkles, Loader2, ImageIcon, GalleryHorizontalEnd, Smartphone, Wand2,
   Zap, Crown, Gauge, Film, Lock, Palette, Check, MessageSquareQuote, ChevronDown, Camera, X, Type,
+  Rocket, PenTool, Layers, Aperture,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,16 +36,20 @@ const FORMATS: { id: FormatId; label: string; icon: any; intent: string; format:
 ];
 
 // ── Estante de modelos (custo = credit_pricing img_<model>; specs validados na F0) ──
-type ModelId = "seedream" | "gpt-image-2" | "nano-banana" | "qwen" | "reve";
+type ModelId = "seedream" | "gpt-image-2" | "nano-banana" | "qwen" | "reve" | "imagen-fast" | "ideogram" | "recraft" | "flux-pro";
 const MODELS: {
   id: ModelId; name: string; forte: string; cost: number; speed: string;
   icon: any; tag?: string; tone: string; sample: string; noText?: boolean;
 }[] = [
-  { id: "gpt-image-2", name: "GPT-Image 2", forte: "Texto pt-BR perfeito, design gráfico", cost: 8, speed: "~20s", icon: Crown, tag: "Recomendado", tone: "text-primary", sample: "/showcase/gpt_post.jpg" },
-  { id: "seedream", name: "Seedream 4.0", forte: "5x mais rápido, texto bom", cost: 4, speed: "~15s", icon: Zap, tone: "text-[hsl(var(--credit))]", sample: "/showcase/seedream_post.jpg" },
-  { id: "nano-banana", name: "Nano Banana Pro", forte: "Premium, melhor pra 9:16", cost: 20, speed: "~80s", icon: Gauge, tone: "text-accent", sample: "/showcase/nano_story.jpg" },
-  { id: "qwen", name: "Qwen", forte: "Fotos e cenas realistas (sem texto)", cost: 5, speed: "~25s", icon: Camera, tone: "text-emerald-600", sample: "/showcase/qwen_photo.jpg", noText: true },
-  { id: "reve", name: "Reve", forte: "Texto pt-BR impecável, estilo minimalista", cost: 3, speed: "~20s", icon: Type, tone: "text-sky-600", sample: "/showcase/reve_post.jpg" },
+  { id: "gpt-image-2", name: "GPT-Image 2", forte: "Texto pt-BR perfeito, design gráfico", cost: 8, speed: "~30s", icon: Crown, tag: "Recomendado", tone: "text-primary", sample: "/showcase/gpt_post.jpg" },
+  { id: "imagen-fast", name: "Imagen 4 Fast", forte: "Google — pronto em segundos, acentos certos", cost: 3, speed: "~5s", icon: Rocket, tag: "Mais rápido", tone: "text-blue-600", sample: "/showcase/imagen_post.jpg" },
+  { id: "ideogram", name: "Ideogram v3", forte: "Design gráfico + copiar estilo da marca", cost: 4, speed: "~10s", icon: PenTool, tone: "text-fuchsia-600", sample: "/showcase/ideogram_post.jpg" },
+  { id: "recraft", name: "Recraft v3", forte: "Tipografia e design SOTA, card limpo", cost: 5, speed: "~10s", icon: Layers, tone: "text-orange-600", sample: "/showcase/recraft_post.jpg" },
+  { id: "flux-pro", name: "Flux 1.1 Pro", forte: "Fotorrealismo premium (Black Forest Labs)", cost: 5, speed: "~5s", icon: Aperture, tone: "text-violet-600", sample: "/showcase/flux_post.jpg" },
+  { id: "seedream", name: "Seedream 4.0", forte: "Rápido e barato, texto bom", cost: 4, speed: "~10s", icon: Zap, tone: "text-[hsl(var(--credit))]", sample: "/showcase/seedream_post.jpg" },
+  { id: "nano-banana", name: "Nano Banana Pro", forte: "Premium, melhor pra 9:16", cost: 20, speed: "~40s", icon: Gauge, tone: "text-accent", sample: "/showcase/nano_story.jpg" },
+  { id: "qwen", name: "Qwen", forte: "Fotos e cenas realistas (sem texto)", cost: 5, speed: "~10s", icon: Camera, tone: "text-emerald-600", sample: "/showcase/qwen_photo.jpg", noText: true },
+  { id: "reve", name: "Reve", forte: "Texto pt-BR impecável, estilo minimalista", cost: 3, speed: "~10s", icon: Type, tone: "text-sky-600", sample: "/showcase/reve_post.jpg" },
 ];
 
 const DIAL: { id: string; label: string; hint: string }[] = [
@@ -311,7 +316,7 @@ export default function Studio() {
                 <span className="text-[11px] text-[hsl(var(--credit))] font-medium">⚠ Qwen é pra fotos/cenas — não renderiza texto. Ideal em "Imagem livre".</span>
               )}
             </div>
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 stagger-children">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 stagger-children">
               {MODELS.map((m) => {
                 const active = effectiveModel === m.id;
                 const locked = formatId === "story" && m.id !== "nano-banana";

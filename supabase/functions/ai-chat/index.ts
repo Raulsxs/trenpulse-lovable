@@ -320,6 +320,10 @@ serve(async (req) => {
       "nano-banana": "img_nano",
       "qwen": "img_qwen",
       "reve": "img_reve",
+      "imagen-fast": "img_imagen",
+      "ideogram": "img_ideogram",
+      "recraft": "img_recraft",
+      "flux-pro": "img_flux",
     };
     const modelCostAction: string | null = requestModel && MODEL_COST_ACTION[requestModel] ? MODEL_COST_ACTION[requestModel] : null;
 

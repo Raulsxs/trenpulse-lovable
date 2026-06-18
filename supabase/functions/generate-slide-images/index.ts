@@ -32,10 +32,11 @@ A imagem gerada É o conteúdo final — uma ARTE GRÁFICA CHAPADA (flat design)
 // ══════ MODEL REGISTRY (estante de modelos do Studio) ══════
 // Cada modelo de imagem do inference.sh com seu builder de body. O Studio passa `model`;
 // sem `model`, o roteamento cai no hybrid por aspect (default histórico).
-type ImageModelId = "gpt-image-2" | "nano-banana" | "seedream" | "qwen" | "reve";
+type ImageModelId = "gpt-image-2" | "nano-banana" | "seedream" | "qwen" | "reve" | "imagen-fast" | "ideogram" | "recraft" | "flux-pro";
 
+const ALL_MODEL_IDS = ["gpt-image-2", "nano-banana", "seedream", "qwen", "reve", "imagen-fast", "ideogram", "recraft", "flux-pro"];
 function isImageModelId(m: unknown): m is ImageModelId {
-  return m === "gpt-image-2" || m === "nano-banana" || m === "seedream" || m === "qwen" || m === "reve";
+  return typeof m === "string" && ALL_MODEL_IDS.includes(m);
 }
 
 /** Resolve o modelo: respeita o pedido do Studio; senão hybrid (9:16 → Nano Banana, resto → gpt-image-2). */
@@ -84,6 +85,82 @@ function buildInferenceBody(model: ImageModelId, promptText: string, aspectRatio
         wait: true,
         input: { prompt: promptText, quality: "medium", n: 1, width: 1024, height: aspectRatio === "4:5" ? 1536 : 1024, ...(refImages.length > 0 ? { images: refImages } : {}) },
       };
+  }
+}
+
+// ════════════ REPLICATE — provider primário (migração 2026-06-18) ════════════
+// Replicate vira a espinha dorsal da estante "escolha seu modelo": catálogo único + async-capável.
+// inference.sh fica como FALLBACK (segurança — se Replicate falhar, o fluxo antigo assume).
+// Cada modelo tem builder próprio (schemas diferentes, validados via API). gpt-image-2 só aceita
+// aspect_ratio 1:1|3:2|2:3; recraft usa `size`; ideogram aceita style_reference_images (3 refs).
+const REPLICATE_REGISTRY: Record<string, { slug: string; build: (p: string, ar: string, refs: string[]) => Record<string, unknown> }> = {
+  "gpt-image-2": {
+    slug: "openai/gpt-image-2",
+    // quality "low" ≈ "medium" em qualidade pt-BR (comprovado A/B) e 2x mais rápido. ar limitado.
+    build: (p, ar, refs) => ({ prompt: p, quality: "low", output_format: "png", aspect_ratio: ar === "1:1" ? "1:1" : "2:3", ...(refs.length ? { input_images: refs } : {}) }),
+  },
+  "imagen-fast": {
+    slug: "google/imagen-4-fast",
+    build: (p, ar) => ({ prompt: p, aspect_ratio: ar === "4:5" ? "3:4" : ar, output_format: "png" }),
+  },
+  "ideogram": {
+    slug: "ideogram-ai/ideogram-v3-turbo",
+    build: (p, ar, refs) => ({ prompt: p, aspect_ratio: ar, magic_prompt_option: "On", ...(refs.length ? { style_reference_images: refs.slice(0, 3) } : {}) }),
+  },
+  "recraft": {
+    slug: "recraft-ai/recraft-v3",
+    build: (p, ar) => ({ prompt: p, size: ar === "9:16" ? "1024x1820" : ar === "4:5" ? "1024x1280" : "1024x1024" }),
+  },
+  "flux-pro": {
+    slug: "black-forest-labs/flux-1.1-pro",
+    build: (p, ar) => ({ prompt: p, aspect_ratio: ar, output_format: "png" }),
+  },
+  "seedream": {
+    slug: "bytedance/seedream-4",
+    build: (p, ar, refs) => ({ prompt: p, aspect_ratio: ar, ...(refs.length ? { image_input: refs } : {}) }),
+  },
+  "qwen": {
+    slug: "qwen/qwen-image-2",
+    build: (p, ar, refs) => ({ prompt: p, aspect_ratio: ar, ...(refs.length ? { image: refs[0] } : {}) }),
+  },
+  "reve": {
+    slug: "reve/create",
+    build: (p, ar) => ({ prompt: p, aspect_ratio: ar }),
+  },
+  "nano-banana": {
+    slug: "google/nano-banana-pro",
+    build: (p, ar, refs) => ({ prompt: p, aspect_ratio: ar, output_format: "png", ...(refs.length ? { image_input: refs } : {}) }),
+  },
+};
+
+/** Chama o Replicate (Prefer:wait + poll p/ modelos lentos). Retorna URL da imagem ou null. */
+async function callReplicate(modelId: string, prompt: string, aspectRatio: string, refImages: string[]): Promise<string | null> {
+  const token = Deno.env.get("REPLICATE_API_TOKEN");
+  const entry = REPLICATE_REGISTRY[modelId];
+  if (!token || !entry) return null;
+  try {
+    const input = entry.build(prompt, aspectRatio, refImages);
+    const res = await fetch(`https://api.replicate.com/v1/models/${entry.slug}/predictions`, {
+      method: "POST",
+      headers: { Authorization: `Token ${token}`, "Content-Type": "application/json", Prefer: "wait" },
+      body: JSON.stringify({ input }),
+    });
+    if (!res.ok) { console.warn(`[replicate] ${entry.slug} HTTP ${res.status}: ${(await res.text()).substring(0, 200)}`); return null; }
+    let pred = await res.json();
+    // Prefer:wait bloqueia até ~60s; modelos lentos (gpt medium) voltam "processing" → poll até ~115s.
+    const start = Date.now();
+    while (pred.status && !["succeeded", "failed", "canceled"].includes(pred.status) && Date.now() - start < 115000) {
+      await new Promise((r) => setTimeout(r, 2000));
+      const pr = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, { headers: { Authorization: `Token ${token}` } });
+      if (!pr.ok) break;
+      pred = await pr.json();
+    }
+    if (pred.status !== "succeeded") { console.warn(`[replicate] ${entry.slug} status=${pred.status}`); return null; }
+    const out = Array.isArray(pred.output) ? pred.output[0] : pred.output;
+    return typeof out === "string" ? out : (out?.url || null);
+  } catch (e: any) {
+    console.warn(`[replicate] ${modelId} exception: ${e?.message}`);
+    return null;
   }
 }
 
@@ -475,10 +552,32 @@ ${brandColorHint}
         .filter(Boolean)
         .slice(0, 6);
 
-      // ── Tier 1: inference.sh (shared credit pool) ──
-      // gpt-image-2 (1:1/4:5) é o melhor DESIGN + texto pt-BR — é o path primário do Maikon.
-      // NÃO rotear pro Gemini nativo primeiro: gemini-3-pro-image conserta garble mas faz
-      // design pior. O Gemini do user é só FALLBACK (Tier-2 abaixo) quando o inference.sh falha.
+      // ── Tier 1: Replicate (provider primário da estante) ──
+      // Migração 2026-06-18. Exceção de segurança: quando há foto pessoal de referência E o user
+      // tem key Gemini própria (modo photo_backgrounds do Maikon), pulamos o Replicate e deixamos
+      // o fluxo Gemini/inference.sh provado assumir — preserva melhor a pessoa na imagem.
+      const isPersonalPhotoMode = !!userGeminiKey && refImages.length > 0;
+      if (!base64Image && Deno.env.get("REPLICATE_API_TOKEN") && !isPersonalPhotoMode) {
+        const resolvedModelRep = resolveImageModel(requestModel, aspectRatio);
+        console.log(`[generate-slide-images] Tier-1 Replicate: model=${resolvedModelRep}, aspect=${aspectRatio}, refs=${refImages.length}`);
+        const repUrl = await callReplicate(resolvedModelRep, promptText, aspectRatio, refImages);
+        if (repUrl) {
+          try {
+            const imgRes = await fetch(repUrl);
+            if (imgRes.ok) {
+              const imgBytes = new Uint8Array(await imgRes.arrayBuffer());
+              let binary = "";
+              for (let i = 0; i < imgBytes.length; i++) binary += String.fromCharCode(imgBytes[i]);
+              base64Image = `data:image/png;base64,${btoa(binary)}`;
+              console.log(`[generate-slide-images] Replicate OK: ${imgBytes.length} bytes (model=${resolvedModelRep})`);
+            }
+          } catch (e: any) { console.warn(`[generate-slide-images] Replicate download failed: ${e?.message}`); }
+        }
+        if (!base64Image) console.warn("[generate-slide-images] Replicate falhou — caindo p/ inference.sh");
+      }
+
+      // ── Tier 2: inference.sh (fallback) ──
+      // gpt-image-2 (1:1/4:5) é o melhor DESIGN + texto pt-BR. O Gemini do user é só Tier-3 fallback.
       const INFERENCE_SH_KEY = !base64Image && Deno.env.get("INFERENCE_SH_API_KEY");
       if (INFERENCE_SH_KEY) {
         console.log(`[generate-slide-images] Using inference.sh for ${mode}: platform=${platform}, contentFormat=${contentFormat}, aspect=${aspectRatio}`);
