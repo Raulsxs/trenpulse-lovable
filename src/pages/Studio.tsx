@@ -237,8 +237,8 @@ export default function Studio() {
           </div>
         )}
 
-        {/* Marca — dropdown limpo (swatch + nome), em vez de chips espremidos */}
-        <div className="order-2 flex items-center gap-2">
+        {/* Marca — alto (identidade = valor central, "seu conteúdo com a sua cara") */}
+        <div className="order-1 flex items-center gap-2">
           <span className="text-xs font-semibold text-muted-foreground inline-flex items-center gap-1.5 shrink-0">
             <Palette className="w-3.5 h-3.5" /> Marca
           </span>
@@ -291,7 +291,7 @@ export default function Studio() {
         </div>
 
         {selectedBrand && !isSatori && (
-          <div className="order-3 flex gap-2">
+          <div className="order-2 flex gap-2">
             {DIAL.map((d) => (
               <button
                 key={d.id}
@@ -310,7 +310,7 @@ export default function Studio() {
 
         {/* Estante de modelos — não se aplica ao Tweet card (motor Satori próprio) */}
         {!isSatori && (
-          <div className="order-1">
+          <div className="order-3">
             <div className="flex items-baseline gap-2 mb-2 flex-wrap">
               <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Modelo</h2>
               {formatId === "story" && <span className="text-[11px] text-muted-foreground">story usa Nano Banana (9:16 nativo)</span>}
@@ -367,7 +367,7 @@ export default function Studio() {
         )}
 
         {isSatori && (
-          <div className="order-1 rounded-xl border border-border bg-muted/30 p-3 flex items-center gap-2.5 text-xs text-muted-foreground">
+          <div className="order-3 rounded-xl border border-border bg-muted/30 p-3 flex items-center gap-2.5 text-xs text-muted-foreground">
             <MessageSquareQuote className="w-4 h-4 text-primary shrink-0" />
             <span>O <b className="text-foreground">Tweet card</b> usa nosso motor próprio (tipografia fiel ao X), com a sua foto e @ de perfil. Sem escolha de modelo.</span>
           </div>
