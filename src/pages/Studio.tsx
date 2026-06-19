@@ -4,7 +4,7 @@
  * clique. Reusa o pipeline do ai-chat (param `model` cobra pela estante) e renderiza o
  * resultado no ActionCard (publicar/agendar/baixar/refazer). Chat segue como modo assistido.
  */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import ActionCard from "@/components/chat/ActionCard";
@@ -20,7 +20,7 @@ import { toast } from "sonner";
 import {
   Sparkles, Loader2, ImageIcon, GalleryHorizontalEnd, Smartphone, Wand2,
   Zap, Crown, Gauge, Film, Lock, Palette, Check, MessageSquareQuote, ChevronDown, Camera, X, Type,
-  Rocket, PenTool, Layers, Aperture,
+  Rocket, PenTool, Layers, Aperture, Copy, ImagePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -96,6 +96,23 @@ export default function Studio() {
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<{ contentId: string; contentType: any; platform?: string } | null>(null);
   const [recents, setRecents] = useState<{ id: string; img: string }[]>([]);
+  // "Replicar um post": referência anexada (print/upload) → IA recria parecido com a sua marca.
+  const [refPostUrl, setRefPostUrl] = useState<string | null>(null);
+  const [uploadingRef, setUploadingRef] = useState(false);
+  const brandPreselected = useRef(false);
+
+  // Postura adaptativa: usuário ATIVADO (tem marca) abre com a última marca pré-selecionada —
+  // pra ele o valor é a fidelidade, não faz re-escolher. Usuário NOVO (0 marcas) fica sem marca
+  // (velocidade primeiro) e vê o pitch de marca. Roda uma vez quando as marcas chegam.
+  useEffect(() => {
+    if (brandPreselected.current || !brands || brandId) return;
+    if (brands.length === 0) { brandPreselected.current = true; return; }
+    let last: string | null = null;
+    try { last = localStorage.getItem("tp_last_brand"); } catch { /* ignore */ }
+    const pick = (last && brands.find((b: any) => b.id === last)) ? last : brands[0].id;
+    setBrandId(pick);
+    brandPreselected.current = true;
+  }, [brands, brandId]);
 
   const format = FORMATS.find((f) => f.id === formatId)!;
   const model = MODELS.find((m) => m.id === modelId)!;
@@ -129,6 +146,27 @@ export default function Studio() {
     })();
   }, [result]);
 
+  async function handleRefUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) e.target.value = "";
+    if (!file) return;
+    setUploadingRef(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Não autenticado");
+      const ext = file.name.split(".").pop() || "png";
+      const path = `${user.id}/ref/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("content-images").upload(path, file, { contentType: file.type, upsert: true });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from("content-images").getPublicUrl(path);
+      setRefPostUrl(urlData.publicUrl);
+    } catch (err: any) {
+      toast.error("Erro ao anexar referência: " + (err.message || "tente de novo"));
+    } finally {
+      setUploadingRef(false);
+    }
+  }
+
   async function generate() {
     if (!prompt.trim() || generating) return;
     setGenerating(true);
@@ -144,6 +182,9 @@ export default function Studio() {
           // Tweet card é Satori (custo fixo 2cr) — NÃO mandar model, senão cobraria por img_<model>.
           model: isSatori ? undefined : effectiveModel,
           creationModeOverride: brandId && !isSatori ? dial : undefined,
+          // "Replicar um post": a referência anexada vai como imagem de referência (image-to-image).
+          imageUrls: refPostUrl && !isSatori ? [refPostUrl] : undefined,
+          replicateRef: refPostUrl && !isSatori ? true : undefined,
           generationParams: format.slides > 1 ? { slideCount: format.slides } : undefined,
         },
       });
@@ -198,12 +239,34 @@ export default function Studio() {
                 {f.label}
               </button>
             ))}
+            {/* Replicar um post: anexa uma referência → IA recria parecido (com a marca, se houver) */}
+            {!isSatori && (
+              <label
+                title="Anexe um post de referência (print/imagem) e a IA recria um parecido com a sua marca"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border cursor-pointer transition-colors",
+                  refPostUrl ? "bg-accent/10 text-accent border-accent/40" : "bg-background text-muted-foreground border-border hover:border-accent/40",
+                )}
+              >
+                {uploadingRef ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Copy className="w-3.5 h-3.5" />}
+                {refPostUrl ? "Replicando" : "Replicar um post"}
+                <input type="file" accept="image/*" className="hidden" onChange={handleRefUpload} disabled={uploadingRef} />
+              </label>
+            )}
             <Button onClick={generate} disabled={generating || !prompt.trim()} className="ml-auto h-9 gap-2">
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {generating ? "Gerando…" : "Gerar"}
               {!generating && <CostChip cost={effectiveCost} className="bg-primary-foreground/15 border-primary-foreground/25 text-primary-foreground" />}
             </Button>
           </div>
+          {/* Chip da referência anexada (replicar post) */}
+          {refPostUrl && (
+            <div className="flex items-center gap-2 px-3 py-2 border-t border-border/60 bg-accent/5">
+              <img src={refPostUrl} alt="" className="w-8 h-8 rounded object-cover border border-border" />
+              <span className="text-xs text-foreground/80 flex-1 min-w-0">Replicando este post — a IA vai recriar um parecido{brandId ? ", com a sua marca" : ""}.</span>
+              <button onClick={() => setRefPostUrl(null)} className="text-muted-foreground hover:text-foreground shrink-0" title="Remover referência"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          )}
         </div>
 
         {/* ── ZONA DE RESULTADO — aparece logo abaixo do prompt, empurrando o resto pra
@@ -276,7 +339,7 @@ export default function Studio() {
                 {brands?.map((b: any) => (
                   <button
                     key={b.id}
-                    onClick={() => setBrandId(b.id)}
+                    onClick={() => { setBrandId(b.id); try { localStorage.setItem("tp_last_brand", b.id); } catch { /* ignore */ } }}
                     className={cn("w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-xs hover:bg-muted/80 transition-colors", brandId === b.id && "bg-primary/5 text-primary font-medium")}
                   >
                     <span className="w-3 h-3 rounded-full border border-border/50 shrink-0" style={{ backgroundColor: brandSwatch(b) }} />

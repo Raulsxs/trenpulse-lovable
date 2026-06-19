@@ -310,6 +310,7 @@ serve(async (req) => {
       editInstruction,
       model: requestModel, // Studio: modelo escolhido na estante (gpt-image-2|nano-banana|seedream). Define rota + custo.
       creationModeOverride, // Studio: dial de fidelidade ("copy"|"inspire"|"free") sobrescreve o da marca nesta geração
+      replicateRef, // Studio "Replicar um post": imageUrls[0] é um post de referência pra recriar (image-to-image)
     } = await req.json();
 
     // Custo por modelo (Studio cobra pelo modelo escolhido, não só pelo formato).
@@ -687,6 +688,18 @@ Mensagem: "${message}"`;
               if (refs?.length) referenceImageUrls = refs.map((r: any) => r.image_url);
             }
           }
+        }
+
+        // "Replicar um post" (Studio): a referência anexada pelo usuário vira a PRINCIPAL imagem
+        // de referência (image-to-image) — a IA recria a composição/estilo dela. Combina com as
+        // refs da marca quando houver. O referencesInstruction + dial "copy" já mandam copiar
+        // layout/cores/tipografia fielmente.
+        const replicateRefUrls = (replicateRef && Array.isArray(imageUrls))
+          ? imageUrls.filter((u: any) => typeof u === "string" && u.startsWith("http"))
+          : [];
+        if (replicateRefUrls.length > 0 && !isPhotoBackground) {
+          referenceImageUrls = [...replicateRefUrls, ...referenceImageUrls].slice(0, 6);
+          console.log(`[ai-chat] GENERATE: replicar post — ${replicateRefUrls.length} ref do usuário`);
         }
 
         // 3. If message contains URL, fetch article content
