@@ -703,9 +703,33 @@ Mensagem: "${message}"`;
         // subject = mensagem sem o boilerplate do atalho ("Crie um post sobre: X" → "X"), senão a
         // instrução vaza pro prompt e o modelo renderiza o texto da instrução na imagem.
         const subject = stripGenerationBoilerplate(message);
-        const userTopic = articleContent
+        let userTopic = articleContent
           ? `Baseado neste artigo: ${articleContent.substring(0, 2000)}`
           : subject;
+
+        // Link-post: a IMAGEM precisa de um BRIEF conciso (manchete + pontos do ASSUNTO), não do
+        // artigo cru. Sem isso o modelo pega o boilerplate da fonte ("conteúdo/análises/curadoria")
+        // e faz um ANÚNCIO GENÉRICO de plataforma em vez de um infográfico do tema. Corrigido 2026-06-19.
+        if (articleContent) {
+          try {
+            const briefResp = await aiGatewayFetch({
+              model: "openrouter/minimax-m-25",
+              messages: [{ role: "user", content: `Resuma o artigo abaixo num BRIEF pra um infográfico de Instagram em português brasileiro. Foque no ASSUNTO do artigo — NUNCA na fonte/jornal nem em "acesse/assine conteúdo". Responda SOMENTE JSON, sem texto antes ou depois: {"headline":"manchete forte, máx 8 palavras, sobre o tema","points":["3 pontos-chave bem curtos, cada um máx 8 palavras"]}\n\nARTIGO:\n${articleContent.substring(0, 2000)}` }],
+            });
+            if (briefResp.ok) {
+              const bd = await briefResp.json();
+              const jm = extractJsonObject(bd.choices?.[0]?.message?.content || "");
+              if (jm) {
+                const b = JSON.parse(jm);
+                if (b.headline) {
+                  const pts = Array.isArray(b.points) ? b.points.filter(Boolean).slice(0, 3) : [];
+                  userTopic = `${b.headline}${pts.length ? `\nPontos principais: ${pts.join(" · ")}` : ""}`;
+                  console.log(`[ai-chat] GENERATE: brief da imagem -> "${b.headline}"`);
+                }
+              }
+            }
+          } catch (e: any) { console.warn("[ai-chat] GENERATE: brief da imagem falhou, usando resumo cru:", e?.message); }
+        }
 
         const platformLabel = platform === "linkedin" ? "LinkedIn" : "Instagram";
         const formatLabel = format === "story" ? "story" : format === "carousel" ? "carrossel" : "post";
@@ -811,6 +835,7 @@ TEMA: ${userTopic}
 ${referencesInstruction}${brandContext ? `IDENTIDADE VISUAL:\n${brandContext}\n` : ""}${userCtx?.business_niche ? `Nicho do criador: ${userCtx.business_niche}. ` : ""}${userCtx?.brand_voice ? `Tom de voz: ${userCtx.brand_voice}. ` : ""}
 
 REGRAS:
+- A imagem é um INFOGRÁFICO sobre o ASSUNTO acima. PROIBIDO fazer um anúncio genérico de plataforma de conteúdo ("acesse o melhor conteúdo", "assine", "informação confiável") ou promover a fonte/jornal de onde veio o tema. O conteúdo visual é sobre o TEMA, não sobre "consumir conteúdo".
 - A imagem deve ter texto integrado visível e legível sobre o tema acima, SEMPRE em pt-BR.
 - Use tipografia profissional, hierarquia visual clara, cores harmônicas.
 ${hasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas (mas TRADUZA qualquer texto delas para pt-BR).\n" : ""}- NÃO inclua URLs, QR codes ou logotipos de terceiros.

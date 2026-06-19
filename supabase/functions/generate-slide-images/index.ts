@@ -96,8 +96,9 @@ function buildInferenceBody(model: ImageModelId, promptText: string, aspectRatio
 const REPLICATE_REGISTRY: Record<string, { slug: string; build: (p: string, ar: string, refs: string[]) => Record<string, unknown> }> = {
   "gpt-image-2": {
     slug: "openai/gpt-image-2",
-    // quality "low" ≈ "medium" em qualidade pt-BR (comprovado A/B) e 2x mais rápido. ar limitado.
-    build: (p, ar, refs) => ({ prompt: p, quality: "low", output_format: "png", aspect_ratio: ar === "1:1" ? "1:1" : "2:3", ...(refs.length ? { input_images: refs } : {}) }),
+    // quality "medium": default (Raul preferiu sobre low). ~79s mas melhor design/detalhe; custo
+    // $0.0625 ≈ 8cr (img_gpt). aspect_ratio gpt-image só aceita 1:1|3:2|2:3.
+    build: (p, ar, refs) => ({ prompt: p, quality: "medium", output_format: "png", aspect_ratio: ar === "1:1" ? "1:1" : "2:3", ...(refs.length ? { input_images: refs } : {}) }),
   },
   "imagen-fast": {
     slug: "google/imagen-4-fast",
