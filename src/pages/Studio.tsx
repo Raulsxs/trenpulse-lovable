@@ -31,7 +31,7 @@ const FORMATS: { id: FormatId; label: string; icon: any; intent: string; format:
   { id: "post", label: "Post 1:1", icon: ImageIcon, intent: "GENERATE", format: "post", slides: 1 },
   { id: "carousel", label: "Carrossel", icon: GalleryHorizontalEnd, intent: "GENERATE_CAROUSEL", format: "carousel", slides: 5 },
   { id: "story", label: "Story 9:16", icon: Smartphone, intent: "GENERATE", format: "story", slides: 1 },
-  { id: "tweet", label: "Tweet card", icon: MessageSquareQuote, intent: "GENERATE_TWEET_CARD", format: "post", slides: 1, fixedCost: 2, satori: true },
+  { id: "tweet", label: "Tweet card", icon: MessageSquareQuote, intent: "GENERATE_TWEET_CARD", format: "post", slides: 1, fixedCost: 5, satori: true },
   { id: "free", label: "Imagem livre", icon: Wand2, intent: "FREE_IMAGE", format: "post", slides: 1 },
 ];
 

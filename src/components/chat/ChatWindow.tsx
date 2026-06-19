@@ -83,7 +83,7 @@ const QUICK_ACTIONS = [
   { icon: GalleryHorizontalEnd, label: "Carrossel", cost: 40, template: "Crie um carrossel de 5 slides educativos e visualmente impactantes para Instagram sobre: " },
   { icon: Newspaper, label: "Editorial", cost: 16, template: "Crie um carrossel editorial cinematográfico sobre: " },
   { icon: Smartphone, label: "Story", cost: 20, template: "Crie um story para Instagram sobre: " },
-  { icon: MessageSquareQuote, label: "Tweet", cost: 2, template: "Crie um tweet card visual sobre: " },
+  { icon: MessageSquareQuote, label: "Tweet", cost: 5, template: "Crie um tweet card visual sobre: " },
   { icon: Linkedin, label: "LinkedIn", cost: 8, template: "Crie um post para LinkedIn sobre: " },
 ];
 

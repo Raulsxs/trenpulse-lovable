@@ -1089,7 +1089,7 @@ const ContentPreview = () => {
             </div>
 
             {(() => {
-              const currentSlideData = slides[currentSlide];
+              const currentSlideData = slides[currentSlide] || {};
               const hasBgOverlay = !!currentSlideData?.background_image_url;
               const currentSlideSrc = currentSlideData?.image_url;
               const hasText = !!(currentSlideData?.headline || currentSlideData?.body);
@@ -1391,7 +1391,7 @@ const ContentPreview = () => {
 
             {/* Text editing controls — always visible for overlay mode */}
             {(() => {
-              const currentSlideData = slides[currentSlide];
+              const currentSlideData = slides[currentSlide] || {};
               const hasBgOverlay = !!(currentSlideData?.background_image_url || currentSlideData?.render_mode === "ai_bg_overlay");
               const hasText = !!(currentSlideData?.headline || currentSlideData?.body);
 
@@ -1817,7 +1817,7 @@ const ContentPreview = () => {
           open={uploadDialogOpen}
           onClose={() => setUploadDialogOpen(false)}
           onUploadComplete={(imageUrl) => {
-            const currentSlideData = slides[currentSlide];
+            const currentSlideData = slides[currentSlide] || {};
             const isOverlayMode = ENABLE_BG_OVERLAY || !!currentSlideData?.background_image_url || currentSlideData?.render_mode === "ai_bg_overlay";
             const updatedSlides = [...slides];
             if (isOverlayMode) {

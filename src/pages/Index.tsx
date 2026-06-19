@@ -13,9 +13,10 @@ const Index = () => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        // Routing fork: self_serve → Discover (template-first); white_glove (default) → chat.
+        // Routing fork: self_serve → Studio (multigeração); white_glove (default) → chat.
+        // (Rota /discover não existe → causava 404; Studio é a experiência self-serve atual.)
         const accountType = (session.user.app_metadata?.account_type as string) ?? "white_glove";
-        navigate(accountType === "self_serve" ? "/discover" : "/chat");
+        navigate(accountType === "self_serve" ? "/studio" : "/chat");
       }
       setIsLoading(false);
     };
