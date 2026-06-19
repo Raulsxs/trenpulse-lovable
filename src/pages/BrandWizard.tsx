@@ -55,9 +55,11 @@ export default function BrandWizard() {
   });
 
   const handleCreateBrand = async () => {
-    if (!formData.name) { toast.error("Nome Ã© obrigatÃ³rio"); return; }
+    if (!formData.name) { toast.error("Nome é obrigatório"); return; }
     try {
-      const result = await createBrand.mutateAsync(formData);
+      // O wizard é um fluxo de "copiar estilo" (sobe exemplos → gera style guide). Setar o
+      // creation_mode evita que a marca nasça "sem modo" (a geração depende dele). Bug corrigido 2026-06-19.
+      const result = await createBrand.mutateAsync({ ...formData, creation_mode: "style_copy", default_visual_style: "ai_background" } as any);
       setBrandId(result.id);
       toast.success("Marca criada!");
       setStep(2);

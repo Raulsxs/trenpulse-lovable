@@ -33,6 +33,28 @@ export default function BrandEdit() {
   const { data: brands, isLoading, refetch } = useBrands();
   const updateBrand = useUpdateBrand();
   const [analyzingStyle, setAnalyzingStyle] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) e.target.value = "";
+    if (!file) return;
+    setUploadingLogo(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Não autenticado");
+      const ext = file.name.split(".").pop() || "png";
+      const path = `${user.id}/logos/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("content-images").upload(path, file, { upsert: true });
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from("content-images").getPublicUrl(path);
+      setFormData((prev) => ({ ...prev, logo_url: urlData.publicUrl }));
+    } catch (err: any) {
+      toast.error("Erro ao subir logo: " + (err.message || "tente novamente"));
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
 
   const brand = brands?.find((b) => b.id === id);
 
@@ -45,6 +67,7 @@ export default function BrandEdit() {
     dont_rules: "",
     default_visual_style: null as string | null,
     creation_mode: null as string | null,
+    logo_url: "" as string,
     visual_preferences: {
       phone_mockup: null as boolean | null,
       body_in_card: null as boolean | null,
@@ -68,6 +91,7 @@ export default function BrandEdit() {
         dont_rules: brand.dont_rules || "",
         default_visual_style: (brand as any).default_visual_style || null,
         creation_mode: (brand as any).creation_mode || null,
+        logo_url: (brand as any).logo_url || "",
         visual_preferences: {
           phone_mockup: vp.phone_mockup ?? null,
           body_in_card: vp.body_in_card ?? null,
@@ -164,6 +188,32 @@ export default function BrandEdit() {
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     placeholder="Ex: Minha Empresa"
                   />
+                </div>
+
+                <div className="space-y-2">
+                  <Label>Logo</Label>
+                  <div className="flex items-center gap-3">
+                    {formData.logo_url ? (
+                      <img src={formData.logo_url} alt="Logo" className="w-16 h-16 object-contain rounded-lg border border-border bg-muted/30" />
+                    ) : (
+                      <div className="w-16 h-16 rounded-lg border border-dashed border-border grid place-items-center text-muted-foreground">
+                        <Plus className="w-5 h-5" />
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <label className="inline-flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-md border border-border bg-background hover:bg-muted cursor-pointer">
+                        {uploadingLogo ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                        {formData.logo_url ? "Trocar logo" : "Subir logo"}
+                        <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} disabled={uploadingLogo} />
+                      </label>
+                      {formData.logo_url && (
+                        <Button variant="ghost" size="sm" onClick={() => setFormData({ ...formData, logo_url: "" })}>
+                          <X className="w-4 h-4" />
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">PNG/JPG, fundo transparente recomendado. Máx ~5MB.</p>
                 </div>
 
                 <div className="space-y-2">
