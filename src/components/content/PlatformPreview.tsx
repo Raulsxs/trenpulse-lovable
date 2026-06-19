@@ -34,6 +34,12 @@ export default function PlatformPreview({ open, onOpenChange, images, caption, h
 
   useEffect(() => { if (open) { setFrame(defaultFrame); setSlide(0); } }, [open, defaultFrame]);
 
+  // Pré-carrega todos os slides ao abrir → trocar de slide é instantâneo (sem baixar na hora).
+  useEffect(() => {
+    if (!open) return;
+    images.forEach((u) => { if (u) { const img = new Image(); img.src = u; } });
+  }, [open, images]);
+
   useEffect(() => {
     (async () => {
       const { data: { user } } = await supabase.auth.getUser();

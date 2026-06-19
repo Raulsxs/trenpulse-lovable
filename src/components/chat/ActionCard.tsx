@@ -220,6 +220,33 @@ export default function ActionCard({
   const [brandSnapshot, setBrandSnapshot] = useState<any>(null);
   const [generationMetadata, setGenerationMetadata] = useState<any>(null);
   const [composedImageUrls, setComposedImageUrls] = useState<string[] | null>(null);
+
+  // ── Carrossel fluido ──
+  // Pré-carrega TODAS as imagens dos slides assim que prontas → navegação instantânea.
+  // Sem isso, cada slide só baixa ao clicar (PNG ~1MB no storage) e parece travado/bugado.
+  useEffect(() => {
+    const src = allSlides.length > 0 ? allSlides : (slideData ? [slideData] : []);
+    const urls = src
+      .map((s: any, i: number) => composedImageUrls?.[i] || s?.background_image_url || s?.image_url)
+      .filter(Boolean) as string[];
+    urls.forEach((u) => { const img = new Image(); img.src = u; });
+  }, [allSlides, composedImageUrls, slideData]);
+
+  // Swipe/arrastar pra trocar de slide (mouse + touch via pointer events) — mais intuitivo que só setas.
+  const dragStartXRef = useRef<number | null>(null);
+  const didDragRef = useRef(false);
+  const goToSlide = (i: number) => setCurrentSlideIndex(Math.max(0, Math.min(i, allSlides.length - 1)));
+  const onSlidePointerDown = (e: React.PointerEvent) => { dragStartXRef.current = e.clientX; didDragRef.current = false; };
+  const onSlidePointerMove = (e: React.PointerEvent) => {
+    if (dragStartXRef.current != null && Math.abs(e.clientX - dragStartXRef.current) > 8) didDragRef.current = true;
+  };
+  const onSlidePointerUp = (e: React.PointerEvent) => {
+    if (dragStartXRef.current == null) return;
+    const dx = e.clientX - dragStartXRef.current;
+    dragStartXRef.current = null;
+    if (allSlides.length > 1 && Math.abs(dx) > 40) goToSlide(currentSlideIndex + (dx < 0 ? 1 : -1));
+  };
+
   const [isPolling, setIsPolling] = useState(false);
   const [pollingTimedOut, setPollingTimedOut] = useState(false);
   const [generationFailed, setGenerationFailed] = useState(false);
@@ -826,8 +853,12 @@ export default function ActionCard({
         {/* Client-side preview — SAME renderer as Studio for pixel-perfect match */}
         <div className="p-3 pb-0" ref={previewContainerRef}>
           <div
-            className="overflow-hidden rounded-lg bg-muted relative group cursor-pointer transition-all max-h-[440px] flex items-center justify-center"
-            onClick={() => setPreviewOpen(true)}
+            className={`overflow-hidden rounded-lg bg-muted relative group transition-all max-h-[440px] flex items-center justify-center ${allSlides.length > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"}`}
+            style={{ touchAction: "pan-y" }}
+            onPointerDown={onSlidePointerDown}
+            onPointerMove={onSlidePointerMove}
+            onPointerUp={onSlidePointerUp}
+            onClick={() => { if (!didDragRef.current) setPreviewOpen(true); }}
           >
             {/* Overlay "Ver no preview" — fidelização: ver no contexto da rede */}
             <div className="absolute inset-0 z-20 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
