@@ -159,11 +159,14 @@
     @apply border-border;
   }
 
+  /* NÃO travar overflow/height no body globalmente: o DashboardLayout já clipa o
+     próprio scroll (h-screen overflow-hidden + <main> overflow-y-auto). Travar aqui
+     obrigava uma exceção `body:has(> #root > .min-h-screen)` pra liberar a landing —
+     e `:has()` não existe em navegadores antigos, então a landing ficava sem scroll
+     e desconfigurada em notebooks com browser desatualizado. Deixe o body fluir. */
   html, body {
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, sans-serif;
-    overflow: hidden;
-    height: 100%;
   }
 
   /* Densidade (Onda 1): root 15px encolhe toda a escala rem ~6% — o app parecia
@@ -171,12 +174,6 @@
      são pontuais por componente, não globais. */
   html {
     font-size: 15px;
-  }
-
-  /* Allow scroll on landing page (no DashboardLayout) */
-  body:has(> #root > .min-h-screen) {
-    overflow: auto;
-    height: auto;
   }
 
   h1, h2, h3, h4, h5, h6 {
