@@ -157,7 +157,9 @@ export default function Studio() {
 
   return (
     <DashboardLayout>
-      <div className="max-w-3xl mx-auto px-4 py-6 space-y-5 animate-fade-in">
+      {/* flex-col + order: reordena visualmente (modelo logo após o prompt → marca → dial)
+          sem mover blocos de JSX. Ordem de decisão: formato → modelo → marca → gerar. */}
+      <div className="max-w-3xl mx-auto px-4 py-6 flex flex-col gap-5 animate-fade-in">
         <div className="flex items-baseline justify-between">
           <div>
             <h1 className="text-lg font-bold tracking-tight">Studio</h1>
@@ -236,7 +238,7 @@ export default function Studio() {
         )}
 
         {/* Marca — dropdown limpo (swatch + nome), em vez de chips espremidos */}
-        <div className="flex items-center gap-2">
+        <div className="order-2 flex items-center gap-2">
           <span className="text-xs font-semibold text-muted-foreground inline-flex items-center gap-1.5 shrink-0">
             <Palette className="w-3.5 h-3.5" /> Marca
           </span>
@@ -289,7 +291,7 @@ export default function Studio() {
         </div>
 
         {selectedBrand && !isSatori && (
-          <div className="flex gap-2">
+          <div className="order-3 flex gap-2">
             {DIAL.map((d) => (
               <button
                 key={d.id}
@@ -308,7 +310,7 @@ export default function Studio() {
 
         {/* Estante de modelos — não se aplica ao Tweet card (motor Satori próprio) */}
         {!isSatori && (
-          <div>
+          <div className="order-1">
             <div className="flex items-baseline gap-2 mb-2 flex-wrap">
               <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Modelo</h2>
               {formatId === "story" && <span className="text-[11px] text-muted-foreground">story usa Nano Banana (9:16 nativo)</span>}
@@ -365,7 +367,7 @@ export default function Studio() {
         )}
 
         {isSatori && (
-          <div className="rounded-xl border border-border bg-muted/30 p-3 flex items-center gap-2.5 text-xs text-muted-foreground">
+          <div className="order-1 rounded-xl border border-border bg-muted/30 p-3 flex items-center gap-2.5 text-xs text-muted-foreground">
             <MessageSquareQuote className="w-4 h-4 text-primary shrink-0" />
             <span>O <b className="text-foreground">Tweet card</b> usa nosso motor próprio (tipografia fiel ao X), com a sua foto e @ de perfil. Sem escolha de modelo.</span>
           </div>
@@ -374,7 +376,7 @@ export default function Studio() {
         {/* Galeria: suas últimas criações (real, pessoal). Estático só no 1º acesso sem conteúdo.
             Some quando há resultado/gerando — a tela já está cheia de valor em cima. */}
         {!result && !generating && (
-          <div className="pt-1 animate-fade-in">
+          <div className="order-4 pt-1 animate-fade-in">
             {recents.length > 0 ? (
               <>
                 <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground mb-2.5">Suas últimas criações</h2>
