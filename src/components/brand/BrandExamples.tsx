@@ -59,6 +59,9 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
   const [carouselGroup, setCarouselGroup] = useState<any[]>([]);
   const [showCarouselOrganizer, setShowCarouselOrganizer] = useState(false);
 
+  // Visualizador (lightbox): ver o exemplo em tamanho grande + metadados + editar/excluir.
+  const [viewerIndex, setViewerIndex] = useState<number | null>(null);
+
   // Edit dialog state
   const [editingExample, setEditingExample] = useState<any>(null);
   const [editType, setEditType] = useState("post");
@@ -392,12 +395,13 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
         </div>
       ) : examples && examples.length > 0 ? (
         <div className="grid grid-cols-3 gap-3">
-          {examples.map((example: any) => (
+          {examples.map((example: any, idx: number) => (
             <div key={example.id} className="relative group aspect-square">
               <img
                 src={example.image_url}
                 alt={example.description || "Exemplo"}
-                className="w-full h-full object-cover rounded-lg border border-border"
+                onClick={() => setViewerIndex(idx)}
+                className="w-full h-full object-cover rounded-lg border border-border cursor-zoom-in hover:brightness-95 transition"
               />
               {/* Action buttons */}
               <div className="absolute top-1 right-1 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -449,6 +453,54 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
           <p className="text-xs">Nenhum exemplo ainda</p>
         </div>
       )}
+
+      {/* Visualizador (lightbox) — ver o exemplo grande + metadados + editar/excluir */}
+      {viewerIndex !== null && examples?.[viewerIndex] && (() => {
+        const vi = viewerIndex as number;
+        const ex = examples[vi];
+        const total = examples.length;
+        return (
+          <Dialog open onOpenChange={(o) => { if (!o) setViewerIndex(null); }}>
+            <DialogContent className="max-w-3xl p-0 gap-0 overflow-hidden">
+              <DialogTitle className="sr-only">Exemplo da marca</DialogTitle>
+              <div className="flex flex-col sm:flex-row">
+                <div className="relative flex-1 bg-black/90 flex items-center justify-center min-h-[300px] sm:min-h-[440px]">
+                  <img src={ex.image_url} alt="" className="max-w-full max-h-[70vh] object-contain" />
+                  {total > 1 && (
+                    <>
+                      <button onClick={() => setViewerIndex((vi - 1 + total) % total)} className="absolute left-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 hover:bg-black/70 text-white grid place-items-center text-xl">‹</button>
+                      <button onClick={() => setViewerIndex((vi + 1) % total)} className="absolute right-2 top-1/2 -translate-y-1/2 w-9 h-9 rounded-full bg-black/50 hover:bg-black/70 text-white grid place-items-center text-xl">›</button>
+                      <span className="absolute top-2 left-1/2 -translate-x-1/2 text-[11px] text-white/85 bg-black/50 px-2 py-0.5 rounded-full tabular-nums">{vi + 1} / {total}</span>
+                    </>
+                  )}
+                </div>
+                <div className="w-full sm:w-56 p-4 flex flex-col gap-3 border-t sm:border-t-0 sm:border-l border-border">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge variant="secondary" className="text-[10px]">{typeLabel(ex.type || ex.content_type || "post")}</Badge>
+                      {ex.subtype && <Badge variant="outline" className="text-[10px]">{subtypeLabel(ex.subtype)}</Badge>}
+                      {ex.category_mode === "manual" && ex.category_id
+                        ? <Badge className="text-[10px]">{categoryName(ex.category_id)}</Badge>
+                        : <Badge variant="outline" className="text-[10px] opacity-70">Auto</Badge>}
+                    </div>
+                    {ex.description
+                      ? <p className="text-xs text-muted-foreground">{ex.description}</p>
+                      : <p className="text-xs text-muted-foreground/60 italic">Sem descrição</p>}
+                  </div>
+                  <div className="mt-auto flex flex-col gap-2">
+                    <Button size="sm" variant="outline" onClick={() => { openEdit(ex); setViewerIndex(null); }}>
+                      <Edit className="w-3.5 h-3.5 mr-1.5" /> Editar dados
+                    </Button>
+                    <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive" onClick={() => { handleDelete(ex.id); setViewerIndex(null); }}>
+                      <X className="w-3.5 h-3.5 mr-1.5" /> Excluir
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
+        );
+      })()}
 
       {/* New Category Dialog */}
       <Dialog open={showNewCategory} onOpenChange={setShowNewCategory}>

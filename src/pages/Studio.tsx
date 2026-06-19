@@ -40,16 +40,19 @@ type ModelId = "seedream" | "gpt-image-2" | "nano-banana" | "qwen" | "reve" | "i
 const MODELS: {
   id: ModelId; name: string; forte: string; cost: number; speed: string;
   icon: any; tag?: string; tone: string; sample: string; noText?: boolean;
+  // acceptsRefs: o modelo recebe imagens de referência da marca (cópia fiel de estilo).
+  // Os que NÃO recebem (imagen/recraft/flux/reve) não conseguem copiar o estilo 1:1.
+  acceptsRefs: boolean;
 }[] = [
-  { id: "gpt-image-2", name: "GPT-Image 2", forte: "Texto pt-BR perfeito, design gráfico", cost: 8, speed: "~30s", icon: Crown, tag: "Recomendado", tone: "text-primary", sample: "/showcase/gpt_post.jpg" },
-  { id: "imagen-fast", name: "Imagen 4 Fast", forte: "Google — pronto em segundos, acentos certos", cost: 3, speed: "~5s", icon: Rocket, tag: "Mais rápido", tone: "text-blue-600", sample: "/showcase/imagen_post.jpg" },
-  { id: "ideogram", name: "Ideogram v3", forte: "Design gráfico + copiar estilo da marca", cost: 4, speed: "~10s", icon: PenTool, tone: "text-fuchsia-600", sample: "/showcase/ideogram_post.jpg" },
-  { id: "recraft", name: "Recraft v3", forte: "Tipografia e design SOTA, card limpo", cost: 5, speed: "~10s", icon: Layers, tone: "text-orange-600", sample: "/showcase/recraft_post.jpg" },
-  { id: "flux-pro", name: "Flux 1.1 Pro", forte: "Fotorrealismo premium (Black Forest Labs)", cost: 5, speed: "~5s", icon: Aperture, tone: "text-violet-600", sample: "/showcase/flux_post.jpg" },
-  { id: "seedream", name: "Seedream 4.0", forte: "Rápido e barato, texto bom", cost: 4, speed: "~10s", icon: Zap, tone: "text-[hsl(var(--credit))]", sample: "/showcase/seedream_post.jpg" },
-  { id: "nano-banana", name: "Nano Banana Pro", forte: "Premium, melhor pra 9:16", cost: 20, speed: "~40s", icon: Gauge, tone: "text-accent", sample: "/showcase/nano_story.jpg" },
-  { id: "qwen", name: "Qwen", forte: "Fotos e cenas realistas (sem texto)", cost: 5, speed: "~10s", icon: Camera, tone: "text-emerald-600", sample: "/showcase/qwen_photo.jpg", noText: true },
-  { id: "reve", name: "Reve", forte: "Texto pt-BR impecável, estilo minimalista", cost: 3, speed: "~10s", icon: Type, tone: "text-sky-600", sample: "/showcase/reve_post.jpg" },
+  { id: "gpt-image-2", name: "GPT-Image 2", forte: "Texto pt-BR perfeito, design gráfico", cost: 8, speed: "~30s", icon: Crown, tag: "Recomendado", tone: "text-primary", sample: "/showcase/gpt_post.jpg", acceptsRefs: true },
+  { id: "imagen-fast", name: "Imagen 4 Fast", forte: "Google — pronto em segundos, acentos certos", cost: 3, speed: "~5s", icon: Rocket, tag: "Mais rápido", tone: "text-blue-600", sample: "/showcase/imagen_post.jpg", acceptsRefs: false },
+  { id: "ideogram", name: "Ideogram v3", forte: "Design gráfico + copiar estilo da marca", cost: 4, speed: "~10s", icon: PenTool, tone: "text-fuchsia-600", sample: "/showcase/ideogram_post.jpg", acceptsRefs: true },
+  { id: "recraft", name: "Recraft v3", forte: "Tipografia e design SOTA, card limpo", cost: 5, speed: "~10s", icon: Layers, tone: "text-orange-600", sample: "/showcase/recraft_post.jpg", acceptsRefs: false },
+  { id: "flux-pro", name: "Flux 1.1 Pro", forte: "Fotorrealismo premium (Black Forest Labs)", cost: 5, speed: "~5s", icon: Aperture, tone: "text-violet-600", sample: "/showcase/flux_post.jpg", acceptsRefs: false },
+  { id: "seedream", name: "Seedream 4.0", forte: "Rápido e barato, texto bom", cost: 4, speed: "~10s", icon: Zap, tone: "text-[hsl(var(--credit))]", sample: "/showcase/seedream_post.jpg", acceptsRefs: true },
+  { id: "nano-banana", name: "Nano Banana Pro", forte: "Premium, melhor pra 9:16", cost: 20, speed: "~40s", icon: Gauge, tone: "text-accent", sample: "/showcase/nano_story.jpg", acceptsRefs: true },
+  { id: "qwen", name: "Qwen", forte: "Fotos e cenas realistas (sem texto)", cost: 5, speed: "~10s", icon: Camera, tone: "text-emerald-600", sample: "/showcase/qwen_photo.jpg", noText: true, acceptsRefs: true },
+  { id: "reve", name: "Reve", forte: "Texto pt-BR impecável, estilo minimalista", cost: 3, speed: "~10s", icon: Type, tone: "text-sky-600", sample: "/showcase/reve_post.jpg", acceptsRefs: false },
 ];
 
 const DIAL: { id: string; label: string; hint: string }[] = [
@@ -102,6 +105,10 @@ export default function Studio() {
   const effectiveCost = format.fixedCost ?? (MODELS.find((m) => m.id === effectiveModel)?.cost ?? model.cost) * format.slides;
   const selectedBrand = brands?.find((b: any) => b.id === brandId);
   const brandSwatch = (b: any) => (b?.palette?.[0] && (typeof b.palette[0] === "string" ? b.palette[0] : b.palette[0]?.hex)) || "#94a3b8";
+  // Quer copiar o estilo da marca? (marca de referência + dial não-livre). Se sim, modelos que
+  // NÃO aceitam referência (acceptsRefs:false) não conseguem copiar o estilo 1:1 → avisar.
+  const brandMode = (selectedBrand as any)?.creation_mode;
+  const wantsStyleFidelity = !!selectedBrand && (brandMode === "style_copy" || brandMode === "inspired") && dial !== "free";
 
   // Últimas geradas do usuário — viram a galeria (real, pessoal). Estático só se não houver nenhuma.
   useEffect(() => {
@@ -313,6 +320,9 @@ export default function Studio() {
           <div className="order-3">
             <div className="flex items-baseline gap-2 mb-2 flex-wrap">
               <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Modelo</h2>
+              {wantsStyleFidelity && (
+                <span className="text-[11px] text-accent font-medium">Pra copiar o estilo da {(selectedBrand as any)?.name || "marca"}: GPT-Image 2, Ideogram ou Nano Banana.</span>
+              )}
               {formatId === "story" && <span className="text-[11px] text-muted-foreground">story usa Nano Banana (9:16 nativo)</span>}
               {modelId === "qwen" && formatId !== "free" && (
                 <span className="text-[11px] text-[hsl(var(--credit))] font-medium">⚠ Qwen é pra fotos/cenas — não renderiza texto. Ideal em "Imagem livre".</span>
@@ -322,20 +332,24 @@ export default function Studio() {
               {MODELS.map((m) => {
                 const active = effectiveModel === m.id;
                 const locked = formatId === "story" && m.id !== "nano-banana";
+                const noRefWarn = wantsStyleFidelity && !m.acceptsRefs; // não copia o estilo da marca
                 return (
                   <button
                     key={m.id}
                     onClick={() => !locked && setModelId(m.id)}
                     disabled={locked}
+                    title={noRefWarn ? "Este modelo não copia o estilo da sua marca — use GPT-Image 2, Ideogram ou Nano Banana pra fidelidade." : undefined}
                     className={cn(
                       "group text-left rounded-xl border overflow-hidden transition-all duration-200 relative",
                       active ? "border-primary ring-2 ring-primary/30 shadow-sm" : "border-border hover:border-primary/40 hover:shadow-sm",
                       locked && "opacity-40 cursor-not-allowed",
+                      noRefWarn && !active && "opacity-60",
                     )}
                   >
                     <div className="relative h-20 overflow-hidden bg-muted">
                       <img src={m.sample} alt={`Exemplo ${m.name}`} loading="lazy" className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
-                      {m.tag && !locked && <span className="absolute top-1.5 left-1.5 text-[8px] font-bold uppercase tracking-wide bg-primary text-primary-foreground px-1.5 py-0.5 rounded shadow">{m.tag}</span>}
+                      {m.tag && !locked && !noRefWarn && <span className="absolute top-1.5 left-1.5 text-[8px] font-bold uppercase tracking-wide bg-primary text-primary-foreground px-1.5 py-0.5 rounded shadow">{m.tag}</span>}
+                      {noRefWarn && <span className="absolute top-1.5 left-1.5 text-[8px] font-bold uppercase tracking-wide bg-[hsl(var(--credit))] text-white px-1.5 py-0.5 rounded shadow">não copia o estilo</span>}
                       {active && <span className="absolute top-1.5 right-1.5 w-5 h-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center"><Check className="w-3 h-3" /></span>}
                     </div>
                     <div className="p-2.5">
