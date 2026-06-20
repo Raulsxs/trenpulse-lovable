@@ -11,7 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBrands, useUpdateBrand } from "@/hooks/useStudio";
 import { VISUAL_TONES } from "@/types/studio";
-import { ArrowLeft, Plus, X, Save, Loader2 } from "lucide-react";
+import { ArrowLeft, Plus, X, Save, Loader2, Star, Eye } from "lucide-react";
 import BrandExamples from "@/components/brand/BrandExamples";
 // TemplateSetsSection and SavedBackgroundTemplates removed in simplification
 import BrandPhotoBackgrounds from "@/components/brand/BrandPhotoBackgrounds";
@@ -57,6 +57,8 @@ export default function BrandEdit() {
   };
 
   const brand = brands?.find((b) => b.id === id);
+  // Marca padrão (mesma chave usada em /brands e no preselect do Studio).
+  const isDefault = (() => { try { return localStorage.getItem("tp_default_brand") === id; } catch { return false; } })();
 
   const [formData, setFormData] = useState({
     name: "",
@@ -160,8 +162,15 @@ export default function BrandEdit() {
               <ArrowLeft className="w-5 h-5" />
             </Button>
             <div>
-              <h1 className="text-3xl font-heading font-bold text-foreground">Editar Marca</h1>
-              <p className="text-muted-foreground">{brand.name}</p>
+              <div className="flex items-center gap-2">
+                <h1 className="text-3xl font-heading font-bold text-foreground">{brand.name}</h1>
+                {isDefault && (
+                  <Badge variant="outline" className="text-[10px] gap-1 bg-primary/10 text-primary border-primary/20">
+                    <Star className="w-2.5 h-2.5 fill-current" /> PADRÃO
+                  </Badge>
+                )}
+              </div>
+              <p className="text-muted-foreground">Edite a identidade — a prévia à direita atualiza ao vivo.</p>
             </div>
           </div>
           <Button onClick={handleSave} disabled={!formData.name || updateBrand.isPending}>
@@ -170,7 +179,8 @@ export default function BrandEdit() {
           </Button>
         </div>
 
-        <Tabs defaultValue="identity" className="w-full">
+        <div className="grid lg:grid-cols-[1fr_360px] gap-6 items-start">
+          <Tabs defaultValue="identity" className="w-full">
           <TabsList className="flex-wrap">
             <TabsTrigger value="identity">Identidade</TabsTrigger>
             <TabsTrigger value="generation">Regras para IA</TabsTrigger>
@@ -420,9 +430,85 @@ export default function BrandEdit() {
             </div>
           </TabsContent>
 
-        </Tabs>
+          </Tabs>
+
+          {/* ── Espelho ao vivo: o Replicador vê o efeito das regras de identidade antes de
+              sair da tela. Frontend-only (custo zero) — reflete paleta, fontes, logo e nome.
+              O resultado real continua saindo do Studio (geração paga). ── */}
+          <div className="hidden lg:block">
+            <div className="sticky top-6 space-y-2">
+              <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                <Eye className="w-3.5 h-3.5" /> Preview ao vivo
+              </div>
+              <BrandPreview formData={formData} />
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Prévia ilustrativa da identidade (paleta, fontes, logo). O resultado final sai no Studio.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </DashboardLayout>
+  );
+}
+
+// Mock de post que reflete a identidade da marca em tempo real (sem geração).
+function pickTextColor(hex: string): string {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
+  if (!m) return "#ffffff";
+  const n = parseInt(m[1], 16);
+  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  // Luminância relativa (WCAG) → escolhe texto claro ou escuro pra contraste.
+  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return lum > 0.6 ? "#16202c" : "#ffffff";
+}
+
+function BrandPreview({ formData }: { formData: any }) {
+  const palette: string[] = (formData.palette || []).filter(Boolean);
+  const c0 = palette[0] || "#1f2a37";
+  const c1 = palette[1] || c0;
+  const accent = palette[palette.length - 1] || c1;
+  const fg = pickTextColor(c0);
+  const headingFont = `'${formData.fonts?.headings || "Inter"}', system-ui, sans-serif`;
+  const bodyFont = `'${formData.fonts?.body || "Inter"}', system-ui, sans-serif`;
+  return (
+    <div
+      className="rounded-2xl overflow-hidden border border-border shadow-sm aspect-[4/5] flex flex-col justify-between p-5 relative animate-scale-in"
+      style={{ background: `linear-gradient(150deg, ${c0} 0%, ${c1} 100%)`, color: fg }}
+    >
+      {/* topo: logo ou nome */}
+      <div className="flex items-center gap-2">
+        {formData.logo_url ? (
+          <img src={formData.logo_url} alt="" className="w-8 h-8 rounded-lg object-contain bg-white/15 p-0.5" />
+        ) : null}
+        <span className="text-[11px] font-semibold tracking-wide" style={{ opacity: 0.85, fontFamily: bodyFont }}>
+          {formData.name || "Sua marca"}
+        </span>
+      </div>
+      {/* headline de exemplo na fonte de títulos */}
+      <div>
+        <div className="text-[22px] font-extrabold leading-tight" style={{ fontFamily: headingFont }}>
+          5 sinais de hipertensão que seus pacientes ignoram
+        </div>
+        <div className="text-[12px] mt-2" style={{ fontFamily: bodyFont, opacity: 0.85 }}>
+          Conteúdo gerado com o estilo da sua marca.
+        </div>
+      </div>
+      {/* rodapé: chip de acento + swatches */}
+      <div className="flex items-center justify-between">
+        <span
+          className="text-[10px] font-bold px-2.5 py-1 rounded-full"
+          style={{ background: accent, color: pickTextColor(accent) }}
+        >
+          Saiba mais →
+        </span>
+        <div className="flex gap-1">
+          {palette.slice(0, 4).map((hex, i) => (
+            <span key={i} className="w-3 h-3 rounded-full border border-white/40" style={{ background: hex }} />
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 

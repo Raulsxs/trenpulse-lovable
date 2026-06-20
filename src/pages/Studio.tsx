@@ -19,7 +19,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import {
   Sparkles, Loader2, ImageIcon, GalleryHorizontalEnd, Smartphone, Wand2,
-  Zap, Crown, Gauge, Film, Lock, Palette, Check, MessageSquareQuote, ChevronDown, Camera, X, Type,
+  Zap, Crown, Gauge, Film, Lock, Palette, Check, MessageSquareQuote, ChevronDown, ChevronUp, Camera, X, Type,
   Rocket, PenTool, Layers, Aperture, Copy, ImagePlus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -61,11 +61,24 @@ const DIAL: { id: string; label: string; hint: string }[] = [
   { id: "free", label: "Criar livre", hint: "só paleta e tom" },
 ];
 
+// ── Porta por intenção: a 1ª pergunta da tela. Três perfis entram pela mesma porta e
+// o que os separa é o papel da marca (ver doc "Análise & Redesign"). Cada intenção
+// revela primeiro o que importa pra ela e esconde a complexidade até ser pedida. ──
+type Intent = "replicar" | "criar" | "editar";
+const INTENTS: { id: Intent; label: string; sub: string; icon: any; accent: string }[] = [
+  { id: "replicar", label: "Replicar", sub: "meu estilo", icon: Copy, accent: "text-primary" },
+  { id: "criar", label: "Criar", sub: "do zero com IA", icon: Wand2, accent: "text-accent" },
+  { id: "editar", label: "Editar", sub: "subir foto + pedir", icon: ImagePlus, accent: "text-violet-600" },
+];
+
 // Galeria de inspiração (empty-state): mostra o que dá pra criar — "show, don't tell".
 const SHOWCASE = [
   { src: "/showcase/gpt_post.jpg", label: "Post" },
   { src: "/showcase/nano_story.jpg", label: "Story" },
   { src: "/showcase/seedream_post.jpg", label: "Post" },
+  { src: "/showcase/ideogram_post.jpg", label: "Post" },
+  { src: "/showcase/recraft_post.jpg", label: "Post" },
+  { src: "/showcase/flux_post.jpg", label: "Post" },
 ];
 
 // Prompts-exemplo clicáveis (empty-state): tira a pessoa da tela em branco.
@@ -93,6 +106,10 @@ export default function Studio() {
   const [modelId, setModelId] = useState<ModelId>("gpt-image-2");
   const [brandId, setBrandId] = useState<string | null>(null);
   const [dial, setDial] = useState("copy");
+  // Intenção (porta) + estante recolhida: a grade de 9 modelos vira uma linha com o
+  // recomendado; "Trocar" abre a grade pra quem quer escolher (perfil Criador).
+  const [intent, setIntent] = useState<Intent>("criar");
+  const [showModels, setShowModels] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [result, setResult] = useState<{ contentId: string; contentType: any; platform?: string } | null>(null);
   const [recents, setRecents] = useState<{ id: string; img: string }[]>([]);
@@ -100,19 +117,43 @@ export default function Studio() {
   const [refPostUrl, setRefPostUrl] = useState<string | null>(null);
   const [uploadingRef, setUploadingRef] = useState(false);
   const brandPreselected = useRef(false);
+  const intentTouched = useRef(false); // não sobrescrever a escolha do usuário
 
-  // Postura adaptativa: usuário ATIVADO (tem marca) abre com a última marca pré-selecionada —
-  // pra ele o valor é a fidelidade, não faz re-escolher. Usuário NOVO (0 marcas) fica sem marca
-  // (velocidade primeiro) e vê o pitch de marca. Roda uma vez quando as marcas chegam.
+  // Postura adaptativa: usuário ATIVADO (tem marca) abre em "Replicar" com a última marca
+  // pré-selecionada — pra ele o valor é a fidelidade. Usuário NOVO (0 marcas) abre em "Criar"
+  // (a estante é o herói) sem marca. Roda uma vez quando as marcas chegam.
   useEffect(() => {
     if (brandPreselected.current || !brands || brandId) return;
-    if (brands.length === 0) { brandPreselected.current = true; return; }
-    let last: string | null = null;
-    try { last = localStorage.getItem("tp_last_brand"); } catch { /* ignore */ }
-    const pick = (last && brands.find((b: any) => b.id === last)) ? last : brands[0].id;
+    if (brands.length === 0) {
+      brandPreselected.current = true;
+      if (!intentTouched.current) setIntent("criar");
+      return;
+    }
+    // Prefere a marca PADRÃO definida em /brands (tp_default_brand); cai pra última usada.
+    let pref: string | null = null;
+    try { pref = localStorage.getItem("tp_default_brand") || localStorage.getItem("tp_last_brand"); } catch { /* ignore */ }
+    const pick = (pref && brands.find((b: any) => b.id === pref)) ? pref : brands[0].id;
     setBrandId(pick);
     brandPreselected.current = true;
+    if (!intentTouched.current) { setIntent("replicar"); setDial("copy"); }
   }, [brands, brandId]);
+
+  // Troca de intenção ajusta os defaults pra cada perfil (mas tudo segue acessível).
+  function pickIntent(id: Intent) {
+    intentTouched.current = true;
+    setIntent(id);
+    setShowModels(false);
+    if (id === "replicar") {
+      setDial("copy");
+      setRefPostUrl(null);
+      if (!brandId && brands?.length) {
+        setBrandId(brands[0].id);
+        try { localStorage.setItem("tp_last_brand", brands[0].id); } catch { /* ignore */ }
+      }
+    } else if (id === "criar") {
+      setRefPostUrl(null);
+    }
+  }
 
   const format = FORMATS.find((f) => f.id === formatId)!;
   const model = MODELS.find((m) => m.id === modelId)!;
@@ -126,6 +167,14 @@ export default function Studio() {
   // NÃO aceitam referência (acceptsRefs:false) não conseguem copiar o estilo 1:1 → avisar.
   const brandMode = (selectedBrand as any)?.creation_mode;
   const wantsStyleFidelity = !!selectedBrand && (brandMode === "style_copy" || brandMode === "inspired") && dial !== "free";
+  // Modelo efetivo (story força Nano Banana) — alimenta a linha recolhida da estante.
+  const effModel = MODELS.find((m) => m.id === effectiveModel) ?? model;
+  const isEditing = intent === "editar"; // "subir foto + pedir" — estante não se aplica
+  const promptPlaceholder = isEditing
+    ? "O que fazer com a imagem? (ex: deixe mais nítida, troque o fundo por um consultório)"
+    : intent === "replicar"
+      ? `Descreva o post — sai com o estilo da ${(selectedBrand as any)?.name || "sua marca"}`
+      : "Descreva o que você quer criar… (ex: 5 sinais de hipertensão que seus pacientes ignoram)";
 
   // Últimas geradas do usuário — viram a galeria (real, pessoal). Estático só se não houver nenhuma.
   useEffect(() => {
@@ -211,17 +260,50 @@ export default function Studio() {
         <div className="flex items-baseline justify-between">
           <div>
             <h1 className="text-lg font-bold tracking-tight">Studio</h1>
-            <p className="text-xs text-muted-foreground">Escolha o modelo, aplique sua marca, publique sem sair da tela.</p>
+            <p className="text-xs text-muted-foreground">O que você quer fazer hoje?</p>
           </div>
           <span className="text-xs text-muted-foreground tabular-nums">{balance ?? "—"} créditos</span>
         </div>
+
+        {/* ── PORTA POR INTENÇÃO — a primeira escolha da tela. Cada perfil entra no caminho certo. ── */}
+        <div className="grid grid-cols-3 gap-2">
+          {INTENTS.map((it) => {
+            const active = intent === it.id;
+            return (
+              <button
+                key={it.id}
+                onClick={() => pickIntent(it.id)}
+                className={cn(
+                  "text-left rounded-xl border px-3 py-2.5 transition-all duration-300 ease-expo active:scale-[.98]",
+                  active ? "border-primary bg-primary/5 ring-1 ring-primary/30 shadow-sm" : "border-border hover:border-primary/40",
+                )}
+              >
+                <span className="flex items-center gap-1.5 text-[13px] font-bold">
+                  <it.icon className={cn("w-4 h-4", active ? it.accent : "text-muted-foreground")} />
+                  {it.label}
+                </span>
+                <span className="block text-[11px] text-muted-foreground mt-0.5 leading-tight">{it.sub}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* "Editar": subir foto é o ato principal — dropzone antes do prompt (reusa handleRefUpload) */}
+        {isEditing && !refPostUrl && (
+          <label className="flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 border-dashed border-border bg-card cursor-pointer py-7 px-4 text-center hover:border-violet-400/60 transition-colors">
+            {uploadingRef ? <Loader2 className="w-5 h-5 animate-spin text-violet-600" /> : <ImagePlus className="w-5 h-5 text-violet-600" />}
+            <span className="text-sm font-medium">Solte uma foto ou clique para enviar</span>
+            <span className="text-[11px] text-muted-foreground">A IA edita a imagem com o que você pedir abaixo</span>
+            <input type="file" accept="image/*" className="hidden" onChange={handleRefUpload} disabled={uploadingRef} />
+          </label>
+        )}
 
         {/* Prompt */}
         <div className="rounded-xl border border-border bg-card shadow-sm overflow-hidden">
           <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Descreva o que você quer criar… (ex: 5 sinais de hipertensão que seus pacientes ignoram)"
+            placeholder={promptPlaceholder}
             className="border-0 resize-none min-h-[84px] text-[15px] focus-visible:ring-0 rounded-none"
             onKeyDown={(e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) generate(); }}
           />
@@ -239,8 +321,9 @@ export default function Studio() {
                 {f.label}
               </button>
             ))}
-            {/* Replicar um post: anexa uma referência → IA recria parecido (com a marca, se houver) */}
-            {!isSatori && (
+            {/* Replicar um post: anexa uma referência → IA recria parecido (com a marca, se houver).
+                Em "Editar" some — lá o upload é o ato principal (dropzone acima). */}
+            {!isSatori && !isEditing && (
               <label
                 title="Anexe um post de referência (print/imagem) e a IA recria um parecido com a sua marca"
                 className={cn(
@@ -253,7 +336,7 @@ export default function Studio() {
                 <input type="file" accept="image/*" className="hidden" onChange={handleRefUpload} disabled={uploadingRef} />
               </label>
             )}
-            <Button onClick={generate} disabled={generating || !prompt.trim()} className="ml-auto h-9 gap-2">
+            <Button onClick={generate} disabled={generating || !prompt.trim()} className="ml-auto h-9 gap-2 transition-transform duration-200 ease-expo hover:-translate-y-0.5 active:translate-y-0 active:scale-[.98]">
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {generating ? "Gerando…" : "Gerar"}
               {!generating && <CostChip cost={effectiveCost} className="bg-primary-foreground/15 border-primary-foreground/25 text-primary-foreground" />}
@@ -360,7 +443,7 @@ export default function Studio() {
           </Popover>
         </div>
 
-        {selectedBrand && !isSatori && (
+        {selectedBrand && !isSatori && !isEditing && (
           <div className="order-2 flex gap-2">
             {DIAL.map((d) => (
               <button
@@ -378,9 +461,30 @@ export default function Studio() {
           </div>
         )}
 
-        {/* Estante de modelos — não se aplica ao Tweet card (motor Satori próprio) */}
-        {!isSatori && (
+        {/* Estante de modelos — recolhida a uma linha (o recomendado já escolhido); "Trocar" abre a
+            grade pra quem é Criador. Não se aplica ao Tweet card (Satori) nem ao "Editar". */}
+        {!isSatori && !isEditing && (
           <div className="order-3">
+            {!showModels ? (
+              <button
+                onClick={() => setShowModels(true)}
+                className="w-full flex items-center gap-3 rounded-xl border border-border bg-card px-3 py-2.5 text-left hover:border-primary/40 hover:shadow-sm transition-all duration-200 ease-expo"
+              >
+                <div className="w-9 h-9 rounded-lg overflow-hidden border border-border shrink-0">
+                  <img src={effModel.sample} alt={effModel.name} className="w-full h-full object-cover" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[13px] font-bold truncate">{effModel.name}</span>
+                    {effModel.tag && <span className="text-[9px] font-bold uppercase tracking-wide bg-primary/10 text-primary px-1.5 py-0.5 rounded shrink-0">{effModel.tag}</span>}
+                  </div>
+                  <div className="text-[11px] text-muted-foreground truncate">{effModel.forte} · {effModel.speed}</div>
+                </div>
+                <CostChip cost={effModel.cost} />
+                <span className="text-xs font-semibold text-primary shrink-0 inline-flex items-center gap-0.5">Trocar <ChevronDown className="w-3.5 h-3.5" /></span>
+              </button>
+            ) : (
+            <div className="animate-grow-down">
             <div className="flex items-baseline gap-2 mb-2 flex-wrap">
               <h2 className="text-xs font-bold uppercase tracking-wide text-muted-foreground">Modelo</h2>
               {wantsStyleFidelity && (
@@ -390,6 +494,7 @@ export default function Studio() {
               {modelId === "qwen" && formatId !== "free" && (
                 <span className="text-[11px] text-[hsl(var(--credit))] font-medium">⚠ Qwen é pra fotos/cenas — não renderiza texto. Ideal em "Imagem livre".</span>
               )}
+              <button onClick={() => setShowModels(false)} className="ml-auto text-[11px] font-semibold text-primary inline-flex items-center gap-0.5 hover:underline">Recolher <ChevronUp className="w-3.5 h-3.5" /></button>
             </div>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 stagger-children">
               {MODELS.map((m) => {
@@ -440,6 +545,8 @@ export default function Studio() {
                 </div>
               </div>
             </div>
+            </div>
+            )}
           </div>
         )}
 

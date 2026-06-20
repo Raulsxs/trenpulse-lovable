@@ -38,7 +38,8 @@ const STEPS = [
 export default function BrandWizard() {
   const navigate = useNavigate();
   const createBrand = useCreateBrand();
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState(0); // 0 = porta de entrada (extrair de um post vs definir do zero)
+  const [startMode, setStartMode] = useState<"post" | "scratch" | null>(null);
   const [brandId, setBrandId] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [generating, setGenerating] = useState(false);
@@ -63,6 +64,21 @@ export default function BrandWizard() {
       setBrandId(result.id);
       toast.success("Marca criada!");
       setStep(2);
+    } catch (err: any) {
+      toast.error("Erro: " + (err.message || "Tente novamente"));
+    }
+  };
+
+  // Caminho primário (doc): "extrair de um post meu". Cria a marca e leva direto ao upload de
+  // exemplos; o passo "Gerar Estilos" roda analyze-brand-examples e extrai paleta/tom/estilo.
+  const startFromPost = async () => {
+    if (!formData.name) { toast.error("Dê um nome pra marca primeiro"); return; }
+    try {
+      const result = await createBrand.mutateAsync({ ...formData, creation_mode: "style_copy", default_visual_style: "ai_background" } as any);
+      setBrandId(result.id);
+      setStartMode("post");
+      toast.success("Marca criada! Agora suba um post que você já fez.");
+      setStep(3);
     } catch (err: any) {
       toast.error("Erro: " + (err.message || "Tente novamente"));
     }
@@ -153,11 +169,12 @@ export default function BrandWizard() {
           </Button>
           <div>
             <h1 className="text-2xl font-heading font-bold text-foreground">Criar Nova Marca</h1>
-            <p className="text-muted-foreground">Siga os passos para configurar sua identidade visual</p>
+            <p className="text-muted-foreground">{step === 0 ? "Comece do jeito mais rápido — a partir de um post que você já fez." : "Siga os passos para configurar sua identidade visual"}</p>
           </div>
         </div>
 
-        {/* Stepper */}
+        {/* Stepper — só depois de escolher o caminho */}
+        {step >= 1 && (
         <div className="flex items-center gap-2">
           {STEPS.map((s, i) => (
             <div key={s.id} className="flex items-center gap-2 flex-1">
@@ -173,6 +190,55 @@ export default function BrandWizard() {
             </div>
           ))}
         </div>
+        )}
+
+        {/* Step 0: porta de entrada — extrair de um post (primário) vs do zero (secundário) */}
+        {step === 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Como você quer começar?</CardTitle>
+              <CardDescription>Dois caminhos — escolha o seu. Você refina depois.</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {/* Primário: extrair de um post existente — payoff imediato pro Replicador */}
+              <div className="rounded-xl border-2 border-primary/40 bg-primary/[0.03] ring-1 ring-primary/20 p-4">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
+                  <ImageIcon className="w-5 h-5 text-primary" />
+                  <span className="font-semibold">Extrair de um post meu</span>
+                  <Badge variant="outline" className="text-[10px] bg-primary/10 text-primary border-primary/20">recomendado · em segundos</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground mb-3">
+                  Dê um nome e, no próximo passo, suba um post que você já fez. A IA detecta paleta, fontes, tom e estilo — você só confirma.
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Input
+                    value={formData.name}
+                    onChange={e => setFormData(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder="Nome da marca (ex: Cardio Saúde)"
+                    className="flex-1 min-w-[180px]"
+                    onKeyDown={e => { if (e.key === "Enter") startFromPost(); }}
+                  />
+                  <Button onClick={startFromPost} disabled={!formData.name || createBrand.isPending} className="gap-1.5">
+                    {createBrand.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+                    Começar pela imagem <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+              {/* Secundário: definir do zero — continua disponível pro Criador */}
+              <button
+                onClick={() => { setStartMode("scratch"); setStep(1); }}
+                className="w-full flex items-center gap-3 rounded-xl border border-border p-4 text-left hover:border-primary/40 hover:bg-muted/30 transition-colors"
+              >
+                <Palette className="w-5 h-5 text-muted-foreground shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="font-semibold">Definir do zero</div>
+                  <div className="text-sm text-muted-foreground">Eu escolho cores, tom e regras manualmente.</div>
+                </div>
+                <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+              </button>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Step 1: Name & Logo */}
         {step === 1 && (
@@ -284,6 +350,11 @@ export default function BrandWizard() {
               <CardDescription>FaÃ§a upload de exemplos de posts, stories e carrossÃ©is da sua marca</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              {startMode === "post" && (
+                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs text-foreground">
+                  <b>Suba o post que você já fez.</b> No próximo passo, a IA analisa e extrai paleta, tom e estilo da sua marca — você só confirma.
+                </div>
+              )}
               <BrandExamples brandId={brandId} brandName={formData.name} onAnalyzeStyle={() => {}} isAnalyzing={false} />
               <div className="flex justify-between pt-4">
                 <Button variant="outline" onClick={() => setStep(2)}>Voltar</Button>

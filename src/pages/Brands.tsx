@@ -3,17 +3,21 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useBrands, useDeleteBrand } from "@/hooks/useStudio";
 import { VISUAL_TONES } from "@/types/studio";
-import { Plus, Palette, Trash2, Edit, Sparkles, Loader2, Copy } from "lucide-react";
+import { Plus, Palette, Trash2, Edit, Sparkles, Loader2, Copy, MoreHorizontal, Star } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 // Como cada modo de criação aparece na lista (o usuário esquece em que modo a marca está).
@@ -31,6 +35,16 @@ export default function Brands() {
   const [analyzingBrandId, setAnalyzingBrandId] = useState<string | null>(null);
   const [duplicatingBrandId, setDuplicatingBrandId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
+  // Marca padrão (frontend-first via localStorage; o Studio lê `tp_default_brand` pra pré-aplicar).
+  // Sem default explícito, a 1ª marca é a padrão implícita — sempre há uma em destaque.
+  const [defaultBrandId, setDefaultBrandId] = useState<string | null>(() => {
+    try { return localStorage.getItem("tp_default_brand"); } catch { return null; }
+  });
+  const makeDefault = (id: string) => {
+    setDefaultBrandId(id);
+    try { localStorage.setItem("tp_default_brand", id); localStorage.setItem("tp_last_brand", id); } catch { /* ignore */ }
+    toast.success("Marca padrão atualizada — o Studio já abre com ela.");
+  };
 
   // Contagem de posts por marca — mostra quais marcas estão ativas vs abandonadas.
   const { data: postCounts } = useQuery({
@@ -167,6 +181,11 @@ export default function Brands() {
     }
   };
 
+  // Padrão efetiva: a marcada explicitamente (se ainda existe) ou, na falta, a 1ª da lista.
+  const effectiveDefaultId = (defaultBrandId && brands?.some((b: any) => b.id === defaultBrandId))
+    ? defaultBrandId
+    : (brands?.[0]?.id ?? null);
+
   return (
     <DashboardLayout>
       <div className="space-y-6 p-6">
@@ -176,7 +195,7 @@ export default function Brands() {
             <h1 className="text-3xl font-heading font-bold text-foreground flex items-center gap-2">
               Marcas
             </h1>
-            <p className="text-muted-foreground">Gerencie suas marcas, estilo visual e configurações de geração</p>
+            <p className="text-muted-foreground">A marca <b className="text-foreground font-semibold">padrão</b> é aplicada no Studio automaticamente.</p>
           </div>
           <Button onClick={() => navigate("/brands/new")}>
             <Plus className="w-4 h-4 mr-2" />
@@ -192,111 +211,104 @@ export default function Brands() {
             ))}
           </div>
         ) : brands && brands.length > 0 ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="space-y-2.5 stagger-children">
             {brands.map((brand) => {
               const mode = CREATION_MODE_META[(brand as any).creation_mode as string];
               const count = postCounts?.[brand.id] ?? 0;
               const logoUrl = (brand as any).logo_url as string | null;
+              const palette = (brand.palette as any[] || [])
+                .map((c) => (typeof c === "string" ? c : c?.hex))
+                .filter(Boolean) as string[];
+              const toneLabel = VISUAL_TONES.find(t => t.value === brand.visual_tone)?.label || brand.visual_tone;
+              const isDefault = brand.id === effectiveDefaultId;
+              const busy = analyzingBrandId === brand.id || duplicatingBrandId === brand.id;
+              const meta = [toneLabel, mode?.label, count > 0 ? `${count} ${count === 1 ? "post" : "posts"}` : "sem posts"]
+                .filter(Boolean).join(" · ");
               return (
-              <Card key={brand.id} className="cursor-pointer hover:shadow-md transition-shadow" onClick={() => navigate(`/brands/${brand.id}/edit`)}>
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {logoUrl ? (
-                        <img src={logoUrl} alt="" className="w-10 h-10 rounded-lg object-cover border border-border shrink-0" />
+                <div
+                  key={brand.id}
+                  onClick={() => navigate(`/brands/${brand.id}/edit`)}
+                  className={cn(
+                    "group flex items-center gap-3.5 rounded-xl border bg-card px-4 py-3 cursor-pointer transition-all duration-200 ease-expo hover:-translate-y-0.5 hover:shadow-md",
+                    isDefault ? "border-primary/40 ring-1 ring-primary/20 bg-primary/[0.03]" : "border-border hover:border-primary/40",
+                  )}
+                >
+                  {/* Miniatura: logo real ou bloco com a paleta da marca */}
+                  {logoUrl ? (
+                    <img src={logoUrl} alt="" className="w-11 h-11 rounded-lg object-cover border border-border shrink-0" />
+                  ) : (
+                    <div className="w-11 h-11 rounded-lg overflow-hidden border border-border shrink-0 flex">
+                      {palette.length > 0 ? (
+                        palette.slice(0, 3).map((hex, i) => (
+                          <span key={i} className="flex-1 h-full" style={{ backgroundColor: hex }} title={hex} />
+                        ))
                       ) : (
-                        <div className="p-2 bg-primary/10 rounded-lg shrink-0">
-                          <Palette className="w-5 h-5 text-primary" />
-                        </div>
+                        <span className="flex-1 h-full bg-primary/10 flex items-center justify-center"><Palette className="w-5 h-5 text-primary" /></span>
                       )}
-                      <div className="min-w-0">
-                        <CardTitle className="text-lg truncate">{brand.name}</CardTitle>
-                        <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                          <Badge variant="outline">
-                            {VISUAL_TONES.find(t => t.value === brand.visual_tone)?.label || brand.visual_tone}
-                          </Badge>
-                          {mode && (
-                            <Badge variant="secondary" className="text-[11px]">{mode.emoji} {mode.label}</Badge>
-                          )}
-                        </div>
-                      </div>
                     </div>
-                    <div className="flex gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleAnalyzeStyle(brand.id)}
-                        disabled={analyzingBrandId === brand.id}
-                        title="Analisar estilo dos exemplos"
-                      >
-                        {analyzingBrandId === brand.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Sparkles className="w-4 h-4 text-primary" />
-                        )}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => handleDuplicate(brand)}
-                        disabled={duplicatingBrandId === brand.id}
-                        title="Duplicar marca"
-                      >
-                        {duplicatingBrandId === brand.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Copy className="w-4 h-4" />
-                        )}
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => navigate(`/brands/${brand.id}/edit`)} title="Editar">
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon" onClick={() => setDeleteTarget({ id: brand.id, name: brand.name })} title="Excluir">
-                        <Trash2 className="w-4 h-4 text-destructive" />
-                      </Button>
+                  )}
+                  {/* Nome + meta condensada (tom · modo · posts) */}
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="font-semibold truncate">{brand.name}</span>
+                      {isDefault && (
+                        <Badge variant="outline" className="text-[10px] gap-1 bg-primary/10 text-primary border-primary/20 hover:bg-primary/10 shrink-0">
+                          <Star className="w-2.5 h-2.5 fill-current" /> PADRÃO
+                        </Badge>
+                      )}
                     </div>
+                    <p className="text-xs text-muted-foreground truncate mt-0.5">{meta}</p>
                   </div>
-                </CardHeader>
-                <CardContent>
-                  {/* Palette — swatches maiores, mais visíveis */}
-                  <div className="flex gap-1.5 mb-3 flex-wrap">
-                    {(brand.palette as any[] || []).slice(0, 6).map((color, i) => {
-                      const hex = typeof color === "string" ? color : color?.hex || "#ccc";
-                      return (
-                        <div
-                          key={i}
-                          className="w-9 h-9 rounded-lg border border-border"
-                          style={{ backgroundColor: hex }}
-                          title={hex}
-                        />
-                      );
-                    })}
+                  {/* Ações: primária Editar + resto no menu ⋯ (confortável no toque) */}
+                  <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <Button variant="outline" size="sm" className="h-8" onClick={() => navigate(`/brands/${brand.id}/edit`)}>
+                      <Edit className="w-3.5 h-3.5 mr-1.5" /> Editar
+                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="Mais ações">
+                          {busy ? <Loader2 className="w-4 h-4 animate-spin" /> : <MoreHorizontal className="w-4 h-4" />}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-48">
+                        {!isDefault && (
+                          <DropdownMenuItem onClick={() => makeDefault(brand.id)}>
+                            <Star className="w-4 h-4 mr-2" /> Definir como padrão
+                          </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => handleAnalyzeStyle(brand.id)} disabled={analyzingBrandId === brand.id}>
+                          <Sparkles className="w-4 h-4 mr-2 text-primary" /> Analisar estilo
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleDuplicate(brand)} disabled={duplicatingBrandId === brand.id}>
+                          <Copy className="w-4 h-4 mr-2" /> Duplicar
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => setDeleteTarget({ id: brand.id, name: brand.name })} className="text-destructive focus:text-destructive">
+                          <Trash2 className="w-4 h-4 mr-2" /> Excluir
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
-                  {brand.do_rules && (
-                    <p className="text-xs text-muted-foreground line-clamp-1 mb-1">✓ {brand.do_rules}</p>
-                  )}
-                  {brand.dont_rules && (
-                    <p className="text-xs text-muted-foreground line-clamp-1">✗ {brand.dont_rules}</p>
-                  )}
-                  <div className="flex items-center gap-2 mt-2 flex-wrap">
-                    {(brand as any).style_guide && (
-                      <Badge className="text-[10px]" variant="secondary">
-                        ✨ Style Guide: {(brand as any).style_guide?.style_preset || "ativo"}
-                      </Badge>
-                    )}
-                    <Badge variant="outline" className="text-[10px] text-muted-foreground">
-                      {count > 0 ? `${count} ${count === 1 ? "post" : "posts"}` : "Sem conteúdo ainda"}
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
+                </div>
               );
             })}
+            {/* Adicionar marca — CTA escaneável no fim da lista */}
+            <button
+              onClick={() => navigate("/brands/new")}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-dashed border-border py-3 text-sm font-medium text-muted-foreground hover:text-primary hover:border-primary/40 hover:bg-primary/[0.03] transition-colors"
+            >
+              <Plus className="w-4 h-4" /> Adicionar marca
+            </button>
           </div>
         ) : (
           <Card className="border-dashed">
             <CardContent className="py-12 text-center">
-              <Palette className="w-12 h-12 mx-auto text-muted-foreground/50 mb-4" />
+              {/* Faixa de exemplos — "show, don't tell": o que dá pra gerar com uma marca */}
+              <div className="flex justify-center gap-2 mb-5">
+                {["/showcase/gpt_post.jpg", "/showcase/ideogram_post.jpg", "/showcase/recraft_post.jpg", "/showcase/seedream_post.jpg", "/showcase/flux_post.jpg"].map((src) => (
+                  <img key={src} src={src} alt="" loading="lazy" className="w-16 h-16 rounded-lg object-cover border border-border shadow-sm" />
+                ))}
+              </div>
               <h3 className="text-lg font-medium mb-2">Nenhuma marca ainda</h3>
               <p className="text-muted-foreground mb-4">
                 Crie sua primeira marca para definir identidade visual

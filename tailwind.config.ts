@@ -126,6 +126,11 @@ export default {
         "shimmer": "shimmer 1.6s infinite",
         "grow-down": "grow-down 0.5s cubic-bezier(0.16, 1, 0.3, 1)",
       },
+      // Curva-assinatura (ease-out-expo): UMA curva em toda transição de hover/press.
+      // Usar via `ease-expo` — coerente com as animations acima ("produto", não "template").
+      transitionTimingFunction: {
+        expo: "cubic-bezier(0.16, 1, 0.3, 1)",
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],

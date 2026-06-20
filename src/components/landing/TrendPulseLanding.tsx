@@ -31,6 +31,27 @@ const STYLE = `
 }
 `;
 
+// Galeria de exemplos (marquee da seção #exemplos). Mistura os posts próprios (/landing)
+// com as amostras dos modelos (/showcase) — variedade real pra escolher. O loop é sem
+// emenda porque o conteúdo é duplicado (a animação tpMarquee anda de 0 a -50%).
+const GALLERY: { src: string; cap: string; pos?: string }[] = [
+  { src: "/landing/post_g7.png", cap: "G7: IA americana vs soberania europeia — o que muda pro seu negócio." },
+  { src: "/landing/tweet_gestao.png", cap: "Retenção +5% eleva o lucro em até 95% — você está deixando dinheiro na mesa.", pos: "top" },
+  { src: "/landing/post_copa.png", cap: "IA vai transformar a Copa 2026: bola com sensores e impedimento automático." },
+  { src: "/landing/post_midjourney.png", cap: "Midjourney lança scanner corporal por ultrassom — estreia em 2027." },
+  { src: "/showcase/gpt_post.jpg", cap: "5 sinais de hipertensão que seus pacientes ignoram." },
+  { src: "/showcase/seedream_post.jpg", cap: "3 hábitos que destravam mais energia no seu dia." },
+  { src: "/showcase/ideogram_post.jpg", cap: "O mito da motivação que trava o seu crescimento." },
+  { src: "/showcase/recraft_post.jpg", cap: "Autoridade nas redes sem precisar aparecer." },
+  { src: "/showcase/imagen_post.jpg", cap: "Do briefing ao post publicável em segundos." },
+  { src: "/showcase/flux_post.jpg", cap: "Fotorrealismo premium pra valorizar a sua marca." },
+  { src: "/showcase/nano_story.jpg", cap: "Story 9:16 pronto pra publicar — sem editor." },
+  { src: "/showcase/reve_post.jpg", cap: "Tipografia impecável em português, do título ao CTA." },
+];
+const galleryCard = (g: { src: string; cap: string; pos?: string }) =>
+  `<div style="flex:none;width:248px;background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(20,37,58,.06)"><img src="${g.src}" alt="Exemplo gerado na plataforma" loading="lazy" style="width:248px;height:248px;object-fit:cover;${g.pos ? `object-position:${g.pos};` : ""}display:block"><div style="padding:13px 14px"><div style="font-size:12.5px;color:#44546B;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${g.cap}</div></div></div>`;
+const GALLERY_HTML = GALLERY.map(galleryCard).join("");
+
 const BODY = `
 <header style="position:fixed;top:0;left:0;right:0;z-index:50;backdrop-filter:blur(14px);background:rgba(247,249,251,.78);border-bottom:1px solid rgba(20,37,58,.08)">
   <div style="max-width:1200px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px">
@@ -308,16 +329,7 @@ const BODY = `
   <div data-reveal style="position:relative">
     <div style="position:absolute;left:0;top:0;bottom:0;width:90px;z-index:2;background:linear-gradient(90deg,#fff,transparent);pointer-events:none"></div>
     <div style="position:absolute;right:0;top:0;bottom:0;width:90px;z-index:2;background:linear-gradient(270deg,#fff,transparent);pointer-events:none"></div>
-    <div style="display:flex;gap:18px;width:max-content;animation:tpMarquee 38s linear infinite;padding:0 9px">
-      <div style="flex:none;width:248px;background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(20,37,58,.06)"><img src="/landing/post_g7.png" alt="Exemplo" style="width:248px;height:248px;object-fit:cover;display:block"><div style="padding:13px 14px"><div style="font-size:12.5px;color:#44546B;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">G7: IA americana vs soberania europeia — o que muda pro seu negócio.</div></div></div>
-      <div style="flex:none;width:248px;background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(20,37,58,.06)"><img src="/landing/tweet_gestao.png" alt="Exemplo" style="width:248px;height:248px;object-fit:cover;object-position:top;display:block"><div style="padding:13px 14px"><div style="font-size:12.5px;color:#44546B;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Você está deixando dinheiro na mesa — retenção +5% eleva o lucro em até 95%.</div></div></div>
-      <div style="flex:none;width:248px;background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(20,37,58,.06)"><img src="/landing/post_copa.png" alt="Exemplo" style="width:248px;height:248px;object-fit:cover;display:block"><div style="padding:13px 14px"><div style="font-size:12.5px;color:#44546B;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">IA vai transformar a Copa 2026: bola com sensores e impedimento automático.</div></div></div>
-      <div style="flex:none;width:248px;background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(20,37,58,.06)"><img src="/landing/post_midjourney.png" alt="Exemplo" style="width:248px;height:248px;object-fit:cover;display:block"><div style="padding:13px 14px"><div style="font-size:12.5px;color:#44546B;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Midjourney lança scanner corporal por ultrassom — estreia em 2027.</div></div></div>
-      <div style="flex:none;width:248px;background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(20,37,58,.06)"><img src="/landing/post_g7.png" alt="Exemplo" style="width:248px;height:248px;object-fit:cover;display:block"><div style="padding:13px 14px"><div style="font-size:12.5px;color:#44546B;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">G7: IA americana vs soberania europeia — o que muda pro seu negócio.</div></div></div>
-      <div style="flex:none;width:248px;background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(20,37,58,.06)"><img src="/landing/tweet_gestao.png" alt="Exemplo" style="width:248px;height:248px;object-fit:cover;object-position:top;display:block"><div style="padding:13px 14px"><div style="font-size:12.5px;color:#44546B;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Você está deixando dinheiro na mesa — retenção +5% eleva o lucro em até 95%.</div></div></div>
-      <div style="flex:none;width:248px;background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(20,37,58,.06)"><img src="/landing/post_copa.png" alt="Exemplo" style="width:248px;height:248px;object-fit:cover;display:block"><div style="padding:13px 14px"><div style="font-size:12.5px;color:#44546B;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">IA vai transformar a Copa 2026: bola com sensores e impedimento automático.</div></div></div>
-      <div style="flex:none;width:248px;background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(20,37,58,.06)"><img src="/landing/post_midjourney.png" alt="Exemplo" style="width:248px;height:248px;object-fit:cover;display:block"><div style="padding:13px 14px"><div style="font-size:12.5px;color:#44546B;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">Midjourney lança scanner corporal por ultrassom — estreia em 2027.</div></div></div>
-    </div>
+    <div style="display:flex;gap:18px;width:max-content;animation:tpMarquee 90s linear infinite;padding:0 9px">${GALLERY_HTML}${GALLERY_HTML}</div>
   </div>
 </section>
 
