@@ -121,10 +121,11 @@ export default function Studio() {
   // "Replicar um post": referência anexada (print/upload) → IA recria parecido com a sua marca.
   const [refPostUrl, setRefPostUrl] = useState<string | null>(null);
   const [uploadingRef, setUploadingRef] = useState(false);
-  // "Anexar fotos": fotos do próprio usuário (ex.: do evento) → carrossel editorial com a marca.
-  // Caminho distinto do "Replicar um post" (que é referência de estilo). São mutuamente exclusivos.
+  // "Anexar imagem": ao anexar, o usuário ESCOLHE o que fazer (chooser) em vez do sistema adivinhar.
+  // post = post no estilo da marca usando a foto · editorial = carrossel 1 slide/foto · edit → vira "Editar".
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploadingPhotos, setUploadingPhotos] = useState(false);
+  const [photoAction, setPhotoAction] = useState<"post" | "editorial">("post");
   const brandPreselected = useRef(false);
   const intentTouched = useRef(false); // não sobrescrever a escolha do usuário
 
@@ -183,10 +184,15 @@ export default function Studio() {
   // Story precisa de 9:16 nativo → Nano Banana (os outros não fazem vertical de verdade).
   const effectiveModel = formatId === "story" ? "nano-banana" : modelId;
   const effectiveCost = format.fixedCost ?? (MODELS.find((m) => m.id === effectiveModel)?.cost ?? model.cost) * format.slides;
-  // Fotos anexadas → carrossel editorial (Satori): 4 cr/slide, 1 slide por foto.
+  // Carrossel editorial (Satori): 4 cr/slide, 1 slide por foto. Post: custo de 1 imagem do modelo.
   const EDITORIAL_SLIDE_COST = 4;
   const hasPhotos = photos.length > 0;
-  const displayCost = hasPhotos ? EDITORIAL_SLIDE_COST * photos.length : effectiveCost;
+  const photosAsEditorial = hasPhotos && photoAction === "editorial";
+  const displayCost = !hasPhotos
+    ? effectiveCost
+    : photosAsEditorial
+      ? EDITORIAL_SLIDE_COST * photos.length
+      : (MODELS.find((m) => m.id === effectiveModel)?.cost ?? model.cost);
   const selectedBrand = brands?.find((b: any) => b.id === brandId);
   const brandSwatch = (b: any) => (b?.palette?.[0] && (typeof b.palette[0] === "string" ? b.palette[0] : b.palette[0]?.hex)) || "#94a3b8";
   // Quer copiar o estilo da marca? (marca de referência + dial não-livre). Se sim, modelos que
@@ -272,20 +278,20 @@ export default function Studio() {
 
   async function generate() {
     if (!prompt.trim() || generating) return;
-    // Fotos do usuário viram carrossel editorial — o backend só usa as fotos com 2+ (photoMode).
-    if (photos.length === 1) {
-      toast.error("Anexe pelo menos 2 fotos pro carrossel editorial (ou remova a foto).");
+    // Carrossel editorial usa as fotos como fundo — o backend só ativa o photoMode com 2+.
+    if (hasPhotos && photoAction === "editorial" && photos.length < 2) {
+      toast.error("O carrossel editorial precisa de pelo menos 2 fotos.");
       return;
     }
-    const usePhotos = photos.length >= 2;
+    const usePhotosEditorial = hasPhotos && photoAction === "editorial" && photos.length >= 2;
+    const usePhotosPost = hasPhotos && photoAction === "post";
     setGenerating(true);
     setResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("ai-chat", {
-        body: usePhotos
+        body: usePhotosEditorial
           ? {
-              // "Anexar fotos": as fotos do usuário viram os fundos do carrossel editorial,
-              // 1 slide por foto, com a cor de destaque da marca. Satori → não manda model.
+              // Carrossel editorial: cada foto vira o fundo de um slide, com a cor da marca. Satori.
               message: prompt.trim(),
               intent_hint: "GENERATE_EDITORIAL_CAROUSEL",
               format: "carousel",
@@ -293,6 +299,20 @@ export default function Studio() {
               brandId: brandId || undefined,
               imageUrls: photos,
               generationParams: { slideCount: photos.length },
+            }
+          : usePhotosPost
+          ? {
+              // Post no estilo da marca usando a foto: a foto vai como referência (image-to-image)
+              // e a marca + dial governam o estilo. 1 post, formato 1:1.
+              message: prompt.trim(),
+              intent_hint: "GENERATE",
+              format: "post",
+              platform: "instagram",
+              brandId: brandId || undefined,
+              model: effectiveModel,
+              creationModeOverride: brandId ? dial : undefined,
+              imageUrls: photos.slice(0, 6),
+              replicateRef: true,
             }
           : {
               message: prompt.trim(),
@@ -314,6 +334,7 @@ export default function Studio() {
       if (ar?.content_id) {
         setResult({ contentId: ar.content_id, contentType: ar.content_type || "post", platform: ar.platform });
         setPhotos([]);
+        setPhotoAction("post");
         refreshCredits();
       } else {
         toast.error(data?.reply || "Não consegui gerar. Tente de novo.");
@@ -454,11 +475,43 @@ export default function Studio() {
                   </div>
                 ))}
               </div>
-              <p className="text-xs text-muted-foreground">
-                {photos.length < 2
-                  ? "Anexe pelo menos 2 fotos — elas viram um carrossel editorial, 1 slide por foto."
-                  : `${photos.length} fotos → carrossel editorial${selectedBrand ? `, com as cores da ${(selectedBrand as any).name}` : ""} (1 slide por foto).`}
-              </p>
+              {/* Chooser: o usuário decide o que fazer com a(s) imagem(ns) — em vez do sistema adivinhar. */}
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold text-foreground/70">O que fazer com {photos.length > 1 ? "essas fotos" : "essa foto"}?</p>
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => setPhotoAction("post")}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors",
+                      photoAction === "post" ? "bg-primary text-primary-foreground border-primary" : "bg-background text-muted-foreground border-border hover:border-primary/40",
+                    )}
+                  >
+                    <Sparkles className="w-3 h-3" /> Post no estilo da marca
+                  </button>
+                  <button
+                    onClick={() => setPhotoAction("editorial")}
+                    disabled={photos.length < 2}
+                    title={photos.length < 2 ? "Precisa de 2+ fotos" : undefined}
+                    className={cn(
+                      "inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+                      photoAction === "editorial" ? "bg-[hsl(var(--credit))] text-white border-[hsl(var(--credit))]" : "bg-background text-muted-foreground border-border hover:border-[hsl(var(--credit))]/40",
+                    )}
+                  >
+                    <Film className="w-3 h-3" /> Carrossel editorial
+                  </button>
+                  <button
+                    onClick={() => { const url = photos[0]; setPhotos([]); pickIntent("editar"); setRefPostUrl(url); }}
+                    className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-medium border bg-background text-muted-foreground border-border hover:border-violet-400/50 transition-colors"
+                  >
+                    <Wand2 className="w-3 h-3" /> Editar a imagem
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {photoAction === "editorial"
+                    ? `${photos.length} fotos → carrossel editorial${selectedBrand ? `, com as cores da ${(selectedBrand as any).name}` : ""} (1 slide por foto).`
+                    : `Cria 1 post ${selectedBrand ? `no estilo da ${(selectedBrand as any).name}` : "no estilo livre"}, usando ${photos.length > 1 ? "as fotos" : "a foto"} como referência.`}
+                </p>
+              </div>
             </div>
           )}
         </div>
