@@ -6,6 +6,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useBrands } from "@/hooks/useStudio";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -32,6 +34,7 @@ import {
   Clock,
   XCircle,
   CalendarClock,
+  RefreshCw,
 } from "lucide-react";
 
 interface Slide {
@@ -50,6 +53,7 @@ interface GeneratedContent {
   trend_id: string | null;
   status: string;
   image_urls: string[] | null;
+  brand_id: string | null;
   created_at: string;
   scheduled_at: string | null;
 }
@@ -62,13 +66,15 @@ const Contents = () => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [brandFilter, setBrandFilter] = useState<string>("all");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const { data: brands } = useBrands();
 
   const fetchContents = async () => {
     try {
       const { data, error } = await supabase
         .from("generated_contents")
-        .select("id, title, caption, hashtags, content_type, trend_id, status, image_urls, created_at, scheduled_at, slide_count")
+        .select("id, title, caption, hashtags, content_type, trend_id, status, image_urls, brand_id, created_at, scheduled_at, slide_count")
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -145,6 +151,20 @@ const Contents = () => {
     }
   };
 
+  const handleRegerar = (content: GeneratedContent) => {
+    // "Regerar no mesmo estilo": leva pro Studio em Replicar, com a marca do post e a imagem
+    // original como referência. A geração (custo/modelo/confirmação) acontece lá, não na lista.
+    navigate("/studio", {
+      state: {
+        replicate: {
+          prompt: content.title || "",
+          brandId: content.brand_id,
+          refUrl: content.image_urls?.[0] ?? null,
+        },
+      },
+    });
+  };
+
   const filteredContents = contents.filter((content) => {
     // Status filter
     if (statusFilter !== "all") {
@@ -152,6 +172,9 @@ const Contents = () => {
       if (statusFilter === "draft" && content.status !== "draft") return false;
       if (statusFilter === "approved" && content.status !== "approved") return false;
     }
+
+    // Brand filter
+    if (brandFilter !== "all" && content.brand_id !== brandFilter) return false;
 
     // Search filter
     if (searchQuery) {
@@ -214,6 +237,19 @@ const Contents = () => {
               className="pl-10"
             />
           </div>
+          {brands && brands.length > 0 && (
+            <Select value={brandFilter} onValueChange={setBrandFilter}>
+              <SelectTrigger className="w-full sm:w-[180px]">
+                <SelectValue placeholder="Todas as marcas" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Todas as marcas</SelectItem>
+                {brands.map((b: any) => (
+                  <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Tabs value={statusFilter} onValueChange={(v) => setStatusFilter(v as StatusFilter)}>
             <TabsList>
               <TabsTrigger value="all" className="gap-1.5">
@@ -344,10 +380,20 @@ const Contents = () => {
                         variant="outline"
                         size="sm"
                         className="flex-1 gap-1.5"
+                        onClick={() => handleRegerar(content)}
+                        title="Gerar uma nova versão no mesmo estilo desta marca"
+                      >
+                        <RefreshCw className="w-4 h-4" />
+                        Regerar
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="px-2 text-muted-foreground"
                         onClick={() => navigate(`/download/${content.id}`)}
+                        title="Baixar"
                       >
                         <Download className="w-4 h-4" />
-                        Baixar
                       </Button>
                       <AlertDialog>
                         <AlertDialogTrigger asChild>

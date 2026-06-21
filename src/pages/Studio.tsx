@@ -100,8 +100,13 @@ export default function Studio() {
   const dismissBrandHint = () => { try { localStorage.setItem("tp_brand_hint_seen", "1"); } catch { /* ignore */ } setShowBrandHint(false); };
 
   // Prefill do onboarding (novas contas caem aqui com o prompt do nicho pré-armado)
-  const onboardingPrefill = (useLocation().state as { prefill?: string } | null)?.prefill;
-  const [prompt, setPrompt] = useState(onboardingPrefill ?? "");
+  // ou "Regerar no mesmo estilo" vindo de /contents (replicate: prompt + marca + imagem-ref).
+  const navState = useLocation().state as
+    | { prefill?: string; replicate?: { prompt?: string; brandId?: string | null; refUrl?: string | null } }
+    | null;
+  const onboardingPrefill = navState?.prefill;
+  const replicateState = navState?.replicate;
+  const [prompt, setPrompt] = useState(replicateState?.prompt ?? onboardingPrefill ?? "");
   const [formatId, setFormatId] = useState<FormatId>("post");
   const [modelId, setModelId] = useState<ModelId>("gpt-image-2");
   const [brandId, setBrandId] = useState<string | null>(null);
@@ -116,6 +121,10 @@ export default function Studio() {
   // "Replicar um post": referência anexada (print/upload) → IA recria parecido com a sua marca.
   const [refPostUrl, setRefPostUrl] = useState<string | null>(null);
   const [uploadingRef, setUploadingRef] = useState(false);
+  // "Anexar fotos": fotos do próprio usuário (ex.: do evento) → carrossel editorial com a marca.
+  // Caminho distinto do "Replicar um post" (que é referência de estilo). São mutuamente exclusivos.
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploadingPhotos, setUploadingPhotos] = useState(false);
   const brandPreselected = useRef(false);
   const intentTouched = useRef(false); // não sobrescrever a escolha do usuário
 
@@ -137,6 +146,19 @@ export default function Studio() {
     brandPreselected.current = true;
     if (!intentTouched.current) { setIntent("replicar"); setDial("copy"); }
   }, [brands, brandId]);
+
+  // "Regerar no mesmo estilo" (vindo de /contents): abre direto em Replicar com a marca do
+  // post original e a imagem dele como referência (image-to-image). Trava a postura adaptativa.
+  useEffect(() => {
+    if (!replicateState) return;
+    intentTouched.current = true;
+    brandPreselected.current = true;
+    setIntent("replicar");
+    setDial("copy");
+    if (replicateState.brandId) setBrandId(replicateState.brandId);
+    if (replicateState.refUrl) setRefPostUrl(replicateState.refUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Troca de intenção ajusta os defaults pra cada perfil (mas tudo segue acessível).
   function pickIntent(id: Intent) {
@@ -161,6 +183,10 @@ export default function Studio() {
   // Story precisa de 9:16 nativo → Nano Banana (os outros não fazem vertical de verdade).
   const effectiveModel = formatId === "story" ? "nano-banana" : modelId;
   const effectiveCost = format.fixedCost ?? (MODELS.find((m) => m.id === effectiveModel)?.cost ?? model.cost) * format.slides;
+  // Fotos anexadas → carrossel editorial (Satori): 4 cr/slide, 1 slide por foto.
+  const EDITORIAL_SLIDE_COST = 4;
+  const hasPhotos = photos.length > 0;
+  const displayCost = hasPhotos ? EDITORIAL_SLIDE_COST * photos.length : effectiveCost;
   const selectedBrand = brands?.find((b: any) => b.id === brandId);
   const brandSwatch = (b: any) => (b?.palette?.[0] && (typeof b.palette[0] === "string" ? b.palette[0] : b.palette[0]?.hex)) || "#94a3b8";
   // Quer copiar o estilo da marca? (marca de referência + dial não-livre). Se sim, modelos que
@@ -199,6 +225,7 @@ export default function Studio() {
     const file = e.target.files?.[0];
     if (file) e.target.value = "";
     if (!file) return;
+    setPhotos([]); // "replicar post" e "anexar fotos" são caminhos distintos
     setUploadingRef(true);
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -216,31 +243,77 @@ export default function Studio() {
     }
   }
 
+  // Upload múltiplo das fotos do usuário → fundos do carrossel editorial.
+  async function handlePhotosUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (e.target) e.target.value = "";
+    if (!files.length) return;
+    setRefPostUrl(null); // exclusivo com "replicar post"
+    setUploadingPhotos(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Não autenticado");
+      const uploaded: string[] = [];
+      for (const file of files) {
+        const ext = file.name.split(".").pop() || "png";
+        const path = `${user.id}/photos/${Date.now()}-${Math.round(Math.random() * 1e6)}.${ext}`;
+        const { error } = await supabase.storage.from("content-images").upload(path, file, { contentType: file.type, upsert: true });
+        if (error) throw error;
+        const { data: urlData } = supabase.storage.from("content-images").getPublicUrl(path);
+        uploaded.push(urlData.publicUrl);
+      }
+      setPhotos((prev) => [...prev, ...uploaded].slice(0, 10));
+    } catch (err: any) {
+      toast.error("Erro ao anexar fotos: " + (err.message || "tente de novo"));
+    } finally {
+      setUploadingPhotos(false);
+    }
+  }
+
   async function generate() {
     if (!prompt.trim() || generating) return;
+    // Fotos do usuário viram carrossel editorial — o backend só usa as fotos com 2+ (photoMode).
+    if (photos.length === 1) {
+      toast.error("Anexe pelo menos 2 fotos pro carrossel editorial (ou remova a foto).");
+      return;
+    }
+    const usePhotos = photos.length >= 2;
     setGenerating(true);
     setResult(null);
     try {
       const { data, error } = await supabase.functions.invoke("ai-chat", {
-        body: {
-          message: prompt.trim(),
-          intent_hint: format.intent,
-          format: format.format,
-          platform: "instagram",
-          brandId: brandId || undefined,
-          // Tweet card é Satori (custo fixo 2cr) — NÃO mandar model, senão cobraria por img_<model>.
-          model: isSatori ? undefined : effectiveModel,
-          creationModeOverride: brandId && !isSatori ? dial : undefined,
-          // "Replicar um post": a referência anexada vai como imagem de referência (image-to-image).
-          imageUrls: refPostUrl && !isSatori ? [refPostUrl] : undefined,
-          replicateRef: refPostUrl && !isSatori ? true : undefined,
-          generationParams: format.slides > 1 ? { slideCount: format.slides } : undefined,
-        },
+        body: usePhotos
+          ? {
+              // "Anexar fotos": as fotos do usuário viram os fundos do carrossel editorial,
+              // 1 slide por foto, com a cor de destaque da marca. Satori → não manda model.
+              message: prompt.trim(),
+              intent_hint: "GENERATE_EDITORIAL_CAROUSEL",
+              format: "carousel",
+              platform: "instagram",
+              brandId: brandId || undefined,
+              imageUrls: photos,
+              generationParams: { slideCount: photos.length },
+            }
+          : {
+              message: prompt.trim(),
+              intent_hint: format.intent,
+              format: format.format,
+              platform: "instagram",
+              brandId: brandId || undefined,
+              // Tweet card é Satori (custo fixo 2cr) — NÃO mandar model, senão cobraria por img_<model>.
+              model: isSatori ? undefined : effectiveModel,
+              creationModeOverride: brandId && !isSatori ? dial : undefined,
+              // "Replicar um post": a referência anexada vai como imagem de referência (image-to-image).
+              imageUrls: refPostUrl && !isSatori ? [refPostUrl] : undefined,
+              replicateRef: refPostUrl && !isSatori ? true : undefined,
+              generationParams: format.slides > 1 ? { slideCount: format.slides } : undefined,
+            },
       });
       if (error) throw error;
       const ar = data?.action_result;
       if (ar?.content_id) {
         setResult({ contentId: ar.content_id, contentType: ar.content_type || "post", platform: ar.platform });
+        setPhotos([]);
         refreshCredits();
       } else {
         toast.error(data?.reply || "Não consegui gerar. Tente de novo.");
@@ -336,10 +409,24 @@ export default function Studio() {
                 <input type="file" accept="image/*" className="hidden" onChange={handleRefUpload} disabled={uploadingRef} />
               </label>
             )}
+            {/* "Anexar fotos": suas fotos viram um carrossel editorial com a sua marca (1 slide/foto). */}
+            {!isSatori && !isEditing && (
+              <label
+                title="Anexe suas fotos (ex.: de um evento) — viram um carrossel editorial com as cores da sua marca"
+                className={cn(
+                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium border cursor-pointer transition-colors",
+                  photos.length ? "bg-[hsl(var(--credit-bg))] text-[hsl(var(--credit))] border-[hsl(var(--credit))]/40" : "bg-background text-muted-foreground border-border hover:border-[hsl(var(--credit))]/40",
+                )}
+              >
+                {uploadingPhotos ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Camera className="w-3.5 h-3.5" />}
+                {photos.length ? `${photos.length} foto${photos.length > 1 ? "s" : ""}` : "Anexar fotos"}
+                <input type="file" accept="image/*" multiple className="hidden" onChange={handlePhotosUpload} disabled={uploadingPhotos} />
+              </label>
+            )}
             <Button onClick={generate} disabled={generating || !prompt.trim()} className="ml-auto h-9 gap-2 transition-transform duration-200 ease-expo hover:-translate-y-0.5 active:translate-y-0 active:scale-[.98]">
               {generating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
               {generating ? "Gerando…" : "Gerar"}
-              {!generating && <CostChip cost={effectiveCost} className="bg-primary-foreground/15 border-primary-foreground/25 text-primary-foreground" />}
+              {!generating && <CostChip cost={displayCost} className="bg-primary-foreground/15 border-primary-foreground/25 text-primary-foreground" />}
             </Button>
           </div>
           {/* Chip da referência anexada (replicar post) */}
@@ -348,6 +435,30 @@ export default function Studio() {
               <img src={refPostUrl} alt="" className="w-8 h-8 rounded object-cover border border-border" />
               <span className="text-xs text-foreground/80 flex-1 min-w-0">Replicando este post — a IA vai recriar um parecido{brandId ? ", com a sua marca" : ""}.</span>
               <button onClick={() => setRefPostUrl(null)} className="text-muted-foreground hover:text-foreground shrink-0" title="Remover referência"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          )}
+          {/* Fotos anexadas → carrossel editorial com a marca */}
+          {photos.length > 0 && (
+            <div className="px-3 py-2.5 border-t border-border/60 bg-[hsl(var(--credit-bg))]/40 space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                {photos.map((url, i) => (
+                  <div key={i} className="relative">
+                    <img src={url} alt="" className="w-12 h-12 rounded object-cover border border-border" />
+                    <button
+                      onClick={() => setPhotos(photos.filter((_, j) => j !== i))}
+                      className="absolute -top-1.5 -right-1.5 bg-background border border-border rounded-full p-0.5 text-muted-foreground hover:text-destructive shadow-sm"
+                      title="Remover foto"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {photos.length < 2
+                  ? "Anexe pelo menos 2 fotos — elas viram um carrossel editorial, 1 slide por foto."
+                  : `${photos.length} fotos → carrossel editorial${selectedBrand ? `, com as cores da ${(selectedBrand as any).name}` : ""} (1 slide por foto).`}
+              </p>
             </div>
           )}
         </div>
