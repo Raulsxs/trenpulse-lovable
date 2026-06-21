@@ -1521,9 +1521,18 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
         const { data: prof } = await svc.from("profiles")
           .select("full_name, instagram_handle, avatar_url")
           .eq("user_id", userId).maybeSingle();
+        const tweetHandle = ((prof?.instagram_handle as string) || "voce").replace(/^@+/, "").trim();
+        // Nome do card: full_name → nome da marca → @handle → fallback. NUNCA "Você" (placeholder
+        // vazava no post real quando o perfil não tinha nome completo).
+        let tweetName = ((prof?.full_name as string) || "").trim();
+        if (!tweetName && requestBrandId) {
+          const { data: tb } = await svc.from("brands").select("name").eq("id", requestBrandId).maybeSingle();
+          tweetName = ((tb?.name as string) || "").trim();
+        }
+        if (!tweetName) tweetName = tweetHandle && tweetHandle !== "voce" ? tweetHandle : "Seu perfil";
         const tweetProfile = {
-          name: (prof?.full_name as string) || "Você",
-          handle: ((prof?.instagram_handle as string) || "voce").replace(/^@+/, ""),
+          name: tweetName,
+          handle: tweetHandle,
           avatar_url: (prof?.avatar_url as string) || null,
           verified: true,
         };
@@ -1542,7 +1551,9 @@ REGRAS:
 - Use listas com "1 -", "2 -" quando fizer sentido (estilo thread).
 - No máximo 1 emoji por tweet, com moderação. SEM hashtags.
 - Cada tweet se sustenta sozinho como um slide.
-- Português do Brasil, acentos corretos.
+- Português do Brasil, acentos corretos. Use APENAS palavras reais e bem grafadas — NÃO invente
+  nem deforme palavras (ex.: o certo é "chefões", nunca "chefsões"; "ações", nunca "açõens").
+  Revise mentalmente cada palavra antes de responder.
 
 Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
 
@@ -1605,8 +1616,30 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
           break;
         }
 
-        // 5. Persist as a carousel (caption = full thread)
-        const caption = tweets.join("\n\n");
+        // 5. Legenda de Instagram REAL (não despejar a thread): gancho + CTA leve + hashtags do tema.
+        let caption = tweets[0]; // fallback: o gancho (não a thread inteira) se a geração falhar
+        let tweetHashtags: string[] = [];
+        try {
+          const capPrompt = `Você é copywriter de Instagram (pt-BR). A partir da thread abaixo, escreva UMA legenda de Instagram — NÃO repita os tweets. 2 a 4 linhas: 1ª linha é um gancho, depois contexto curto + 1 CTA leve (ex.: "arrasta pro lado", "salva pra depois"). Tom natural, português impecável (só palavras reais). Depois 4 a 6 hashtags relevantes do tema (sem inventar).
+THREAD: ${tweets.join(" / ")}
+Responda APENAS JSON: {"caption":"...","hashtags":["tag1","tag2"]}`;
+          const cr = await aiGatewayFetch({ model: "openrouter/minimax-m-25", messages: [{ role: "user", content: capPrompt }] });
+          if (cr.ok) {
+            const cd = await cr.json();
+            const craw = cd.choices?.[0]?.message?.content || "";
+            const cm = craw.match(/\{[\s\S]*\}/);
+            if (cm) {
+              const parsed = JSON.parse(cm[0]);
+              if (typeof parsed.caption === "string" && parsed.caption.trim()) caption = parsed.caption.trim();
+              if (Array.isArray(parsed.hashtags)) {
+                tweetHashtags = parsed.hashtags
+                  .filter((h: any) => typeof h === "string" && h.trim())
+                  .map((h: string) => h.replace(/^#/, "").trim())
+                  .slice(0, 6);
+              }
+            }
+          }
+        } catch (e: any) { console.error("[ai-chat] GENERATE_TWEET_CARD: caption gen failed:", e?.message); }
         const tweetTitle = tweets[0].length > 80 ? tweets[0].substring(0, 80) + "…" : tweets[0];
         // render_mode "ai_full_design" (NOT "tweet_card"): the frontend already treats
         // ai_full_design as "image has baked text — show directly, no overlay" everywhere
@@ -1622,7 +1655,7 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
         }));
 
         const savedContentId = await persistGeneratedContent({
-          generatedContent: { title: tweetTitle, caption, hashtags: [], slides: updatedTweetSlides },
+          generatedContent: { title: tweetTitle, caption, hashtags: tweetHashtags, slides: updatedTweetSlides },
           fallbackTitle: tweetTitle,
           contentType: "carousel",
           brandId: requestBrandId || null,

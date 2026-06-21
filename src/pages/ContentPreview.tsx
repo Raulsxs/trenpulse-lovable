@@ -167,6 +167,21 @@ const ContentPreview = () => {
   const [editHashtags, setEditHashtags] = useState("");
   const [isEditingCaption, setIsEditingCaption] = useState(false);
   const [isRegeneratingCaption, setIsRegeneratingCaption] = useState(false);
+  // Identidade pro header do preview quando o post não tem marca (ex.: tweet card): cai pro
+  // perfil real do usuário em vez de "Sua marca"/"suamarca".
+  const [headerProfile, setHeaderProfile] = useState<{ name: string | null; handle: string | null }>({ name: null, handle: null });
+
+  useEffect(() => {
+    (async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      const { data } = await supabase.from("profiles").select("full_name, instagram_handle").eq("user_id", user.id).maybeSingle();
+      if (data) setHeaderProfile({
+        name: (data as any).full_name || null,
+        handle: ((data as any).instagram_handle || "").replace(/^@+/, "") || null,
+      });
+    })();
+  }, []);
   const compositeRenderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [selectedBlock, setSelectedBlock] = useState<string | null>(null);
   // Background scheduling progress
@@ -1102,7 +1117,12 @@ const ContentPreview = () => {
               const isStoryContent = content.content_type === "story";
               const captionPreview = isStoryContent ? "" : (content.caption || "");
               const hashtagsPreview = isStoryContent ? "" : (content.hashtags || []).join(" ");
-              const brandName = content.brand_snapshot?.name || "Sua marca";
+              // Header do preview: marca do post → perfil real do usuário → fallback genérico.
+              const headerName = content.brand_snapshot?.name || headerProfile.name || headerProfile.handle || "Seu perfil";
+              const headerHandle = content.brand_snapshot?.name
+                ? content.brand_snapshot.name.toLowerCase().replace(/\s/g, "")
+                : (headerProfile.handle || (headerProfile.name || "seuperfil").toLowerCase().replace(/\s/g, ""));
+              const brandName = headerName;
               const truncatedCaption = captionPreview.length > 200 ? captionPreview.substring(0, 200) + "..." : captionPreview;
 
               const renderFrame = (children: React.ReactNode) => {
@@ -1180,7 +1200,7 @@ const ContentPreview = () => {
                               <div className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center">
                                 <span className="text-[8px] font-bold text-white">{brandName.charAt(0)}</span>
                               </div>
-                              <span className="text-[10px] text-white font-medium">{brandName.toLowerCase().replace(/\s/g, "")}</span>
+                              <span className="text-[10px] text-white font-medium">{headerHandle}</span>
                               <span className="text-[9px] text-white/60">Agora</span>
                             </div>
                           </div>
@@ -1207,7 +1227,7 @@ const ContentPreview = () => {
                             </div>
                           </div>
                           <div className="flex-1">
-                            <p className="text-[11px] font-semibold text-foreground">{brandName.toLowerCase().replace(/\s/g, "")}</p>
+                            <p className="text-[11px] font-semibold text-foreground">{headerHandle}</p>
                           </div>
                           <span className="text-muted-foreground text-sm">•••</span>
                         </div>
