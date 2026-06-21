@@ -1,58 +1,15 @@
-import { useEffect, useRef, useState } from "react";
 import { Coins } from "lucide-react";
-import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
-import type { RealtimeChannel } from "@supabase/supabase-js";
+import { useCredits } from "@/hooks/useCredits";
 
 interface CreditsBadgeProps {
   className?: string;
 }
 
 export function CreditsBadge({ className }: CreditsBadgeProps) {
-  const [balance, setBalance] = useState<number | null>(null);
-  const channelRef = useRef<RealtimeChannel | null>(null);
-
-  useEffect(() => {
-    let mounted = true;
-
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user || !mounted) return;
-      const userId = session.user.id;
-
-      const { data } = await supabase
-        .from("profiles" as any)
-        .select("credits_balance")
-        .eq("user_id", userId)
-        .single();
-
-      if (mounted && data) {
-        setBalance((data as any).credits_balance ?? 0);
-      }
-
-      // Realtime: atualiza badge imediatamente após débito/crédito
-      channelRef.current = supabase
-        .channel(`credits-${userId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "UPDATE",
-            schema: "public",
-            table: "profiles",
-            filter: `user_id=eq.${userId}`,
-          },
-          (payload) => {
-            const b = (payload.new as any).credits_balance;
-            if (typeof b === "number" && mounted) setBalance(b);
-          }
-        )
-        .subscribe();
-    });
-
-    return () => {
-      mounted = false;
-      channelRef.current?.unsubscribe();
-    };
-  }, []);
+  // Fonte de verdade: tabela user_credits (via hook). NÃO usar profiles.credits_balance — coluna
+  // legada (migration de mai/2026) que o débito/crédito atual não atualiza mais.
+  const { balance } = useCredits();
 
   if (balance === null) return null;
 

@@ -171,6 +171,8 @@ const Calendar = () => {
   const [filterFormat, setFilterFormat] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterPlatform, setFilterPlatform] = useState<string>("all");
+  const activeFilterCount = [filterBrand, filterFormat, filterStatus, filterPlatform].filter((f) => f !== "all").length;
+  const clearFilters = () => { setFilterBrand("all"); setFilterFormat("all"); setFilterStatus("all"); setFilterPlatform("all"); };
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
   const renderingCompositeIdsRef = useRef<Set<string>>(new Set());
 
@@ -634,52 +636,74 @@ const Calendar = () => {
 
         {/* Filters + Stats */}
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap items-center gap-2">
-            <Filter className="w-3.5 h-3.5 text-muted-foreground" />
-            <Select value={filterBrand} onValueChange={setFilterBrand}>
-              <SelectTrigger className="w-[140px] h-8 text-xs">
-                <SelectValue placeholder="Marca" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas as marcas</SelectItem>
-                {brands.map(b => (
-                  <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Select value={filterFormat} onValueChange={setFilterFormat}>
-              <SelectTrigger className="w-[120px] h-8 text-xs">
-                <SelectValue placeholder="Formato" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="carousel">Carrossel</SelectItem>
-                <SelectItem value="post">Post</SelectItem>
-                <SelectItem value="story">Story</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterStatus} onValueChange={setFilterStatus}>
-              <SelectTrigger className="w-[120px] h-8 text-xs">
-                <SelectValue placeholder="Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="draft">Rascunho</SelectItem>
-                <SelectItem value="approved">Aprovado</SelectItem>
-                <SelectItem value="scheduled">Agendado</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterPlatform} onValueChange={setFilterPlatform}>
-              <SelectTrigger className="w-[130px] h-8 text-xs">
-                <SelectValue placeholder="Plataforma" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todas plataformas</SelectItem>
-                <SelectItem value="instagram">Instagram</SelectItem>
-                <SelectItem value="linkedin">LinkedIn</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-8 gap-1.5 text-xs">
+                <Filter className="w-3.5 h-3.5" />
+                Filtros
+                {activeFilterCount > 0 && (
+                  <span className="ml-0.5 inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-semibold tabular-nums">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent align="start" className="w-60 p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-semibold text-foreground">Filtros</span>
+                {activeFilterCount > 0 && (
+                  <button onClick={clearFilters} className="text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+                    Limpar
+                  </button>
+                )}
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">Marca</label>
+                <Select value={filterBrand} onValueChange={setFilterBrand}>
+                  <SelectTrigger className="w-full h-8 text-xs"><SelectValue placeholder="Marca" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas as marcas</SelectItem>
+                    {brands.map(b => (<SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">Formato</label>
+                <Select value={filterFormat} onValueChange={setFilterFormat}>
+                  <SelectTrigger className="w-full h-8 text-xs"><SelectValue placeholder="Formato" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="carousel">Carrossel</SelectItem>
+                    <SelectItem value="post">Post</SelectItem>
+                    <SelectItem value="story">Story</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">Status</label>
+                <Select value={filterStatus} onValueChange={setFilterStatus}>
+                  <SelectTrigger className="w-full h-8 text-xs"><SelectValue placeholder="Status" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos</SelectItem>
+                    <SelectItem value="draft">Rascunho</SelectItem>
+                    <SelectItem value="approved">Aprovado</SelectItem>
+                    <SelectItem value="scheduled">Agendado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-[11px] font-medium text-muted-foreground">Plataforma</label>
+                <Select value={filterPlatform} onValueChange={setFilterPlatform}>
+                  <SelectTrigger className="w-full h-8 text-xs"><SelectValue placeholder="Plataforma" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todas plataformas</SelectItem>
+                    <SelectItem value="instagram">Instagram</SelectItem>
+                    <SelectItem value="linkedin">LinkedIn</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </PopoverContent>
+          </Popover>
           <div className="flex flex-wrap gap-2">
             <div className="flex items-center gap-1.5 rounded-md border border-primary/20 bg-primary/5 px-2.5 py-1.5">
               <CalendarClock className="w-3.5 h-3.5 text-primary" />

@@ -184,7 +184,7 @@ export default function BrandEdit() {
           <TabsList className="flex-wrap">
             <TabsTrigger value="identity">Identidade</TabsTrigger>
             <TabsTrigger value="generation">Regras para IA</TabsTrigger>
-            <TabsTrigger value="images">Imagens</TabsTrigger>
+            <TabsTrigger value="images">Exemplos</TabsTrigger>
           </TabsList>
 
           {/* â”€â”€ Tab 1: Identidade â€” nome, cores, fontes, tom visual â”€â”€ */}
