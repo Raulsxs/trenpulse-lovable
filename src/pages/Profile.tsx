@@ -3,17 +3,21 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { User, Save, Loader2, Briefcase, X } from "lucide-react";
+import { Save, Loader2, Briefcase, X, Coins, Sparkles, Link2, CheckCircle2, ArrowRight } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import ProfileAvatarSection from "@/components/profile/ProfileAvatarSection";
-import ProfilePersonalInfo from "@/components/profile/ProfilePersonalInfo";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import ImageEditorModal from "@/components/ui/ImageEditorModal";
 import ProfilePreferences from "@/components/profile/ProfilePreferences";
 import SocialConnections from "@/components/profile/SocialConnections";
+import BuyCreditsModal from "@/components/billing/BuyCreditsModal";
+import { useCredits } from "@/hooks/useCredits";
+import { Camera } from "lucide-react";
 
 interface ProfileRow {
   id: string;
@@ -56,7 +60,12 @@ const Profile = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [tab, setTab] = useState("conta");
   const [profile, setProfile] = useState<ProfileRow | null>(null);
+  const [buyOpen, setBuyOpen] = useState(false);
+  const { balance, loading: creditsLoading, refresh: refreshCredits } = useCredits();
+  const [editorFile, setEditorFile] = useState<File | null>(null);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [formData, setFormData] = useState({
     full_name: "",
     company_name: "",
@@ -77,26 +86,30 @@ const Profile = () => {
     reference_sources: [] as string[],
   });
   const [newTopic, setNewTopic] = useState("");
-  const [newSource, setNewSource] = useState("");
 
   useEffect(() => {
     fetchProfile();
   }, []);
 
-  // Handle OAuth callback params
+  // Handle OAuth callback params — manda direto pra aba Conexões pra ver o resultado
   useEffect(() => {
     const connected = searchParams.get("pfm_connected");
     const error = searchParams.get("pfm_error");
     if (connected) {
       toast.success(`${connected} conectado com sucesso!`);
+      setTab("conexoes");
       searchParams.delete("pfm_connected");
       setSearchParams(searchParams, { replace: true });
     }
     if (error) {
       toast.error(`Erro ao conectar: ${error}`);
+      setTab("conexoes");
       searchParams.delete("pfm_error");
       setSearchParams(searchParams, { replace: true });
     }
+    // deep-link opcional: ?tab=plano | conexoes | conta
+    const t = searchParams.get("tab");
+    if (t === "plano" || t === "conexoes" || t === "conta") setTab(t);
   }, [searchParams, setSearchParams]);
 
   const fetchProfile = async () => {
@@ -137,7 +150,6 @@ const Profile = () => {
           content_topics: ctxRes.data.content_topics || [],
           reference_sources: (extra.reference_sources as string[]) || [],
         });
-        // Load bilingual_platforms from extra_context
         if (extra.bilingual_platforms) {
           setFormData(prev => ({ ...prev, bilingual_platforms: extra.bilingual_platforms || [] }));
         }
@@ -151,7 +163,6 @@ const Profile = () => {
   };
 
   const handleAvatarUpload = async (file: File) => {
-
     setUploading(true);
     try {
       const { data: session } = await supabase.auth.getSession();
@@ -177,6 +188,14 @@ const Profile = () => {
     }
   };
 
+  const handleAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (e.target) e.target.value = "";
+    setEditorFile(file);
+    setEditorOpen(true);
+  };
+
   const handleFieldChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -193,20 +212,7 @@ const Profile = () => {
     setContentSettings(prev => ({ ...prev, content_topics: prev.content_topics.filter(t => t !== topic) }));
   };
 
-  const addSource = () => {
-    const s = newSource.trim();
-    if (s && !contentSettings.reference_sources.includes(s)) {
-      setContentSettings(prev => ({ ...prev, reference_sources: [...prev.reference_sources, s] }));
-      setNewSource("");
-    }
-  };
-
-  const removeSource = (source: string) => {
-    setContentSettings(prev => ({ ...prev, reference_sources: prev.reference_sources.filter(s => s !== source) }));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSave = async () => {
     setSaving(true);
     try {
       const { data: session } = await supabase.auth.getSession();
@@ -260,129 +266,258 @@ const Profile = () => {
     );
   }
 
-  return (
-    <div className="p-6 lg:p-8 space-y-6 animate-fade-in max-w-4xl">
-        <div>
-          <h1 className="text-2xl font-heading font-bold text-foreground flex items-center gap-2">
-            <User className="w-7 h-7 text-primary" />
-            Meu Perfil
-            
-          </h1>
-          <p className="text-muted-foreground mt-1">Gerencie suas informações pessoais e preferências</p>
+  // Card de créditos — fonte de verdade: tabela user_credits (modelo pré-pago, não expira).
+  // Sem barra de teto: créditos prepagos não têm denominador.
+  const creditsCard = (
+    <Card className="shadow-card border-border/50 overflow-hidden">
+      <CardContent className="p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Plano &amp; Créditos</span>
+          <Badge variant="outline" className="text-[10px] border-[hsl(var(--credit))]/30 text-[hsl(var(--credit))] bg-[hsl(var(--credit-bg))]">
+            pré-pago
+          </Badge>
         </div>
+        <div className="flex items-baseline gap-2">
+          <Coins className="w-5 h-5 text-[hsl(var(--credit))] shrink-0 self-center" />
+          {creditsLoading ? (
+            <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+          ) : (
+            <span className="text-4xl font-heading font-extrabold text-[hsl(var(--credit))] tabular-nums leading-none">
+              {(balance ?? 0).toLocaleString("pt-BR")}
+            </span>
+          )}
+          <span className="text-sm text-muted-foreground">créditos</span>
+        </div>
+        <p className="text-xs text-muted-foreground -mt-1">
+          ≈ {Math.floor((balance ?? 0) / 8)} posts com imagem · não expiram
+        </p>
+        <Button onClick={() => setBuyOpen(true)} className="w-full gap-2">
+          <Sparkles className="w-4 h-4" />
+          Recarregar créditos
+        </Button>
+      </CardContent>
+    </Card>
+  );
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <ProfileAvatarSection
-            avatarUrl={profile?.avatar_url}
-            fullName={formData.full_name}
-            companyName={formData.company_name}
-            uploading={uploading}
-            onAvatarUpload={handleAvatarUpload}
-          />
+  return (
+    <div className="p-6 lg:p-8 space-y-6 animate-fade-in max-w-5xl">
+      <ImageEditorModal
+        open={editorOpen}
+        file={editorFile}
+        onConfirm={(editedFile) => { setEditorOpen(false); setEditorFile(null); handleAvatarUpload(editedFile); }}
+        onCancel={() => { setEditorOpen(false); setEditorFile(null); }}
+        aspectRatio={1}
+        title="Ajustar foto de perfil"
+      />
+      <BuyCreditsModal open={buyOpen} onClose={() => setBuyOpen(false)} onCredited={refreshCredits} />
 
-          <ProfilePersonalInfo
-            fullName={formData.full_name}
-            companyName={formData.company_name}
-            instagramHandle={formData.instagram_handle}
-            onChange={handleFieldChange}
-          />
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-lg">
-                <Briefcase className="w-5 h-5 text-primary" />
-                Configurações de Conteúdo
-              </CardTitle>
-              <p className="text-sm text-muted-foreground">Essas informações personalizam a geração de conteúdo e as sugestões de temas</p>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="business_niche">Nicho / Área de atuação</Label>
-                  <Input
-                    id="business_niche"
-                    value={contentSettings.business_niche}
-                    onChange={e => setContentSettings(prev => ({ ...prev, business_niche: e.target.value }))}
-                    placeholder="Ex: Marketing Digital, Gastronomia..."
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="brand_voice">Tom de voz</Label>
-                  <Select
-                    value={contentSettings.brand_voice}
-                    onValueChange={v => setContentSettings(prev => ({ ...prev, brand_voice: v }))}
-                  >
-                    <SelectTrigger id="brand_voice">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {VOICE_OPTIONS.map(o => (
-                        <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label>Público-alvo</Label>
-                  <Select
-                    value={formData.preferred_audience}
-                    onValueChange={v => handleFieldChange("preferred_audience", v)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {AUDIENCE_OPTIONS.map(a => (
-                        <SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Temas de conteúdo</Label>
-                <p className="text-xs text-muted-foreground">Temas que você publica com frequência — influenciam sugestões e geração</p>
-                <div className="flex flex-wrap gap-2 mb-2">
-                  {contentSettings.content_topics.map(topic => (
-                    <Badge key={topic} variant="secondary" className="gap-1 pr-1">
-                      {topic}
-                      <button type="button" onClick={() => removeTopic(topic)} className="ml-1 hover:text-destructive">
-                        <X className="w-3 h-3" />
-                      </button>
-                    </Badge>
-                  ))}
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    value={newTopic}
-                    onChange={e => setNewTopic(e.target.value)}
-                    placeholder="Ex: liderança, inovação, tendências..."
-                    onKeyDown={e => e.key === "Enter" && (e.preventDefault(), addTopic())}
-                  />
-                  <Button type="button" variant="outline" size="sm" onClick={addTopic}>Adicionar</Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <ProfilePreferences
-            secondaryLanguages={formData.secondary_languages}
-            bilingualPlatforms={formData.bilingual_platforms}
-            rssSources={formData.rss_sources}
-            onChange={handleFieldChange}
-          />
-
-          <SocialConnections />
-
-          <div className="flex justify-end">
-            <Button type="submit" className="gap-2" disabled={saving}>
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              Salvar Alterações
-            </Button>
-          </div>
-        </form>
+      {/* Header: avatar + nome + Salvar (fixo acima das abas) */}
+      <div className="flex items-center gap-4">
+        <div className="relative group shrink-0">
+          <Avatar className="w-14 h-14 border-2 border-primary/20">
+            <AvatarImage src={profile?.avatar_url || undefined} />
+            <AvatarFallback className="text-lg bg-primary/10 text-primary">
+              {formData.full_name?.charAt(0) || "U"}
+            </AvatarFallback>
+          </Avatar>
+          <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+            {uploading ? <Loader2 className="w-5 h-5 text-white animate-spin" /> : <Camera className="w-5 h-5 text-white" />}
+            <input type="file" accept="image/*" className="hidden" onChange={handleAvatarFile} disabled={uploading} />
+          </label>
+        </div>
+        <div className="min-w-0 flex-1">
+          <h1 className="text-xl font-heading font-bold text-foreground truncate">{formData.full_name || "Seu nome"}</h1>
+          <p className="text-sm text-muted-foreground truncate">{formData.company_name || "Sua empresa"}</p>
+        </div>
+        <Button onClick={handleSave} className="gap-2 shrink-0" disabled={saving}>
+          {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+          Salvar
+        </Button>
       </div>
+
+      <Tabs value={tab} onValueChange={setTab} className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="conta">Conta</TabsTrigger>
+          <TabsTrigger value="conexoes">Conexões</TabsTrigger>
+          <TabsTrigger value="plano">Plano &amp; Créditos</TabsTrigger>
+        </TabsList>
+
+        {/* ───────── Aba Conta ───────── */}
+        <TabsContent value="conta" className="mt-0">
+          <div className="grid lg:grid-cols-2 gap-6 items-start">
+            {/* Coluna esquerda: dados pessoais + preferências globais */}
+            <div className="space-y-6">
+              <Card className="shadow-card border-border/50">
+                <CardHeader>
+                  <CardTitle className="text-base">Dados pessoais</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="full_name">Nome completo</Label>
+                    <Input id="full_name" value={formData.full_name} onChange={(e) => handleFieldChange("full_name", e.target.value)} placeholder="Seu nome completo" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="company_name">Empresa / Instituição</Label>
+                    <Input id="company_name" value={formData.company_name} onChange={(e) => handleFieldChange("company_name", e.target.value)} placeholder="Nome da empresa" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="instagram_handle">Handle do Instagram</Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground">@</span>
+                      <Input
+                        id="instagram_handle"
+                        value={formData.instagram_handle}
+                        onChange={(e) => handleFieldChange("instagram_handle", e.target.value.replace(/[^a-zA-Z0-9._]/g, ""))}
+                        placeholder="seu_usuario"
+                        className="pl-8"
+                        maxLength={30}
+                      />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-card border-border/50">
+                <CardHeader>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Briefcase className="w-4 h-4 text-primary" />
+                      Preferências globais
+                    </CardTitle>
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                      a marca sobrescreve
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Usadas quando você gera sem uma marca selecionada. Se uma marca estiver ativa, os valores dela prevalecem.
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="business_niche">Nicho / Área</Label>
+                      <Input
+                        id="business_niche"
+                        value={contentSettings.business_niche}
+                        onChange={e => setContentSettings(prev => ({ ...prev, business_niche: e.target.value }))}
+                        placeholder="Ex: Marketing, Saúde..."
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="brand_voice">Tom padrão</Label>
+                      <Select
+                        value={contentSettings.brand_voice}
+                        onValueChange={v => setContentSettings(prev => ({ ...prev, brand_voice: v }))}
+                      >
+                        <SelectTrigger id="brand_voice"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {VOICE_OPTIONS.map(o => (<SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Público padrão</Label>
+                    <Select value={formData.preferred_audience} onValueChange={v => handleFieldChange("preferred_audience", v)}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {AUDIENCE_OPTIONS.map(a => (<SelectItem key={a.value} value={a.value}>{a.label}</SelectItem>))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Temas de conteúdo</Label>
+                    <p className="text-xs text-muted-foreground">Temas que você publica com frequência — influenciam sugestões e geração</p>
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {contentSettings.content_topics.map(topic => (
+                        <Badge key={topic} variant="secondary" className="gap-1 pr-1">
+                          {topic}
+                          <button type="button" onClick={() => removeTopic(topic)} className="ml-1 hover:text-destructive">
+                            <X className="w-3 h-3" />
+                          </button>
+                        </Badge>
+                      ))}
+                    </div>
+                    <div className="flex gap-2">
+                      <Input
+                        value={newTopic}
+                        onChange={e => setNewTopic(e.target.value)}
+                        placeholder="Ex: liderança, inovação..."
+                        onKeyDown={e => e.key === "Enter" && (e.preventDefault(), addTopic())}
+                      />
+                      <Button type="button" variant="outline" size="sm" onClick={addTopic}>Adicionar</Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <ProfilePreferences
+                secondaryLanguages={formData.secondary_languages}
+                bilingualPlatforms={formData.bilingual_platforms}
+                rssSources={formData.rss_sources}
+                onChange={handleFieldChange}
+              />
+            </div>
+
+            {/* Coluna direita: plano/créditos + conexões em destaque */}
+            <div className="space-y-6">
+              {creditsCard}
+
+              <Card className="shadow-card border-border/50">
+                <CardContent className="p-5 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Link2 className="w-4 h-4 text-primary" />
+                    <span className="text-sm font-semibold text-foreground">Conexões · auto-publish</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Conecte suas redes para publicar e agendar direto do TrendPulse.
+                  </p>
+                  <Button variant="outline" className="w-full gap-2" onClick={() => setTab("conexoes")}>
+                    Gerenciar conexões
+                    <ArrowRight className="w-4 h-4" />
+                  </Button>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ───────── Aba Conexões ───────── */}
+        <TabsContent value="conexoes" className="mt-0">
+          <SocialConnections />
+        </TabsContent>
+
+        {/* ───────── Aba Plano & Créditos ───────── */}
+        <TabsContent value="plano" className="mt-0">
+          <div className="grid lg:grid-cols-2 gap-6 items-start">
+            {creditsCard}
+
+            <Card className="shadow-card border-border/50">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-[hsl(var(--credit))]" />
+                  Como funcionam os créditos
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm text-muted-foreground">
+                <p className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-[hsl(var(--credit))] mt-0.5 shrink-0" />
+                  Você paga só pelo que gera — cada ação mostra o custo em créditos antes de confirmar.
+                </p>
+                <p className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-[hsl(var(--credit))] mt-0.5 shrink-0" />
+                  Créditos <strong className="text-foreground font-medium">não expiram</strong>: o saldo fica disponível até você usar.
+                </p>
+                <p className="flex items-start gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-[hsl(var(--credit))] mt-0.5 shrink-0" />
+                  Recarregue por PIX (na hora) ou cartão — pacotes maiores rendem bônus.
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 };
 
