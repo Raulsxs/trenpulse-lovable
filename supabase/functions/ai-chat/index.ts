@@ -407,7 +407,8 @@ serve(async (req) => {
         source_summary: generatedContent?.sourceSummary || null,
         key_insights: Array.isArray(generatedContent?.keyInsights) ? generatedContent.keyInsights : null,
         platform_captions: generatedContent?.platformCaptions || null,
-        generation_metadata: generationMetadata || null,
+        // Salva o prompt do usuário pra rastreabilidade (Studio chama direto, não passa por chat_messages).
+        generation_metadata: { ...(generationMetadata || {}), prompt: typeof message === "string" ? message.slice(0, 2000) : null },
       });
 
       const requestedTemplateSetId = typeof templateSetId === "string" && templateSetId.trim()
@@ -612,6 +613,28 @@ Mensagem: "${message}"`;
     if (brandCreationState?.step > 0 && brandCreationState?.step <= 5 && detectedIntent !== "CRIAR_MARCA" && detectedIntent !== "CRIAR_MARCA_ANALYZE") {
       console.log("[ai-chat] Brand creation active (step:", brandCreationState.step, "), overriding intent", detectedIntent, "→ CRIAR_MARCA");
       detectedIntent = "CRIAR_MARCA";
+    }
+
+    // ── A1 guard: usuário descreveu uma EDIÇÃO de imagem específica mas NÃO anexou foto.
+    // Sem isso, o fluxo gerava um post de marca carimbando a instrução crua como manchete
+    // (caso Haaland). Em vez de adivinhar, guia pro caminho certo (anexar + "Editar a imagem").
+    // Determinístico, custo 0. Só dispara em geração-a-partir-de-texto, sem imagem e sem alvo de edição.
+    {
+      const a1Uploaded = (imageUrls || []).filter((u: string) => typeof u === "string" && u.startsWith("http")).length;
+      const a1EditVerb = /\b(edit[ae]|editar|edição|coloc[ae]|colocar|adicion[ae]|adicionar|insir[ae]|inserir|remov[ae]|remover|tir[ae]|tirar|apag[ae]|apagar|troc[ae]|trocar|substitu[ai]|melhor[ae]|melhorar|aument[ae]|deix[ae])\b/i;
+      const a1ImageRef = /\b(ess[ae]\s+(foto|imagem|figura)|ness[ae]\s+(foto|imagem)|nel[ae]\b|naquel[ae]\b|(a|na|da|minha|esta)\s+(foto|imagem|figura))\b/i;
+      const a1IsGenFromText = ["GENERATE", "GENERATE_CAROUSEL", "FREE_IMAGE", "GENERATE_EDITORIAL_CAROUSEL"].includes(detectedIntent);
+      const a1HasContentTarget = !!generationParams?.contentId; // editar conteúdo já existente é legítimo
+      if (a1IsGenFromText && a1Uploaded === 0 && !a1HasContentTarget && a1EditVerb.test(message) && a1ImageRef.test(message)) {
+        console.log("[ai-chat] A1 guard: linguagem de edição sem imagem anexada → guiando em vez de gerar card");
+        return new Response(JSON.stringify({
+          reply: "📸 Parece que você quer **editar uma imagem**. Pra isso, anexe a foto aqui (botão de imagem 📎) e escolha **\"Editar a imagem\"** — aí eu mexo na foto de verdade, sem inventar texto por cima.\n\nSe na verdade você quer um **post novo no estilo da sua marca** sobre esse tema, me diz algo como \"cria um post sobre…\" que eu faço. 🎨",
+          intent: "EDIT_NO_IMAGE_GUARD",
+          action_result: null,
+          quick_replies: null,
+          brand_creation_step: null,
+        }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      }
     }
 
     // ══════════════════════════════════════════════════════════════════════════
@@ -1522,13 +1545,9 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
           .select("full_name, instagram_handle, avatar_url")
           .eq("user_id", userId).maybeSingle();
         const tweetHandle = ((prof?.instagram_handle as string) || "voce").replace(/^@+/, "").trim();
-        // Nome do card: full_name → nome da marca → @handle → fallback. NUNCA "Você" (placeholder
-        // vazava no post real quando o perfil não tinha nome completo).
+        // Nome do card = a PESSOA: full_name → @handle → fallback. NUNCA o nome da marca (é o tweet
+        // do usuário, não da marca) nem "Você".
         let tweetName = ((prof?.full_name as string) || "").trim();
-        if (!tweetName && requestBrandId) {
-          const { data: tb } = await svc.from("brands").select("name").eq("id", requestBrandId).maybeSingle();
-          tweetName = ((tb?.name as string) || "").trim();
-        }
         if (!tweetName) tweetName = tweetHandle && tweetHandle !== "voce" ? tweetHandle : "Seu perfil";
         const tweetProfile = {
           name: tweetName,
