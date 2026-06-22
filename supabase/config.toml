@@ -18,3 +18,8 @@ verify_jwt = false
 # Webhook do Asaas — não manda JWT do Supabase; autenticidade via header asaas-access-token.
 [functions.asaas-webhook]
 verify_jwt = false
+
+# Orquestrador agêntico — chamado pelo front com o JWT do usuário (resolve getUser e repassa
+# o JWT pros tools que reusam o ai-chat). verify_jwt=true (default, explícito por clareza).
+[functions.ai-agent]
+verify_jwt = true
