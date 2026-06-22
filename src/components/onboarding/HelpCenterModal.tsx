@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
-import { HelpCircle, Palette, Wand2, MessageSquare, Share2, CalendarDays, LayoutDashboard, FileText, Sparkles, Play, BookOpen } from "lucide-react";
+import { HelpCircle, Palette, Wand2, MessageSquare, Share2, CalendarDays, LayoutDashboard, FileText, Sparkles, Play, BookOpen, Lightbulb } from "lucide-react";
 import { HelpTutorials } from "./HelpTutorials";
 
 interface HelpSection {
@@ -69,6 +69,38 @@ const HELP_SECTIONS: HelpSection[] = [
         question: "O que são os estilos visuais?",
         answer:
           "Ao gerar conteúdo, você escolhe como as imagens serão criadas: 'IA — Design completo' (IA cria a imagem inteira com texto), 'IA — Ilustração' (cena fotorrealista sem texto pesado), 'Fundo de marca' (background gerado pela IA com texto sobreposto), 'Template limpo' (cores da sua marca como fundo com texto) ou 'Suas fotos' (fotos da marca como fundo).",
+      },
+    ],
+  },
+  {
+    id: "pedir-certo",
+    icon: Lightbulb,
+    title: "Como pedir certo (e o que esperar)",
+    items: [
+      {
+        question: "Quero CRIAR um post, EDITAR uma foto ou REPLICAR um estilo — qual caminho?",
+        answer:
+          "São 3 caminhos diferentes: 1) CRIAR um post — descreva o TEMA (ex: \"5 sinais de burnout\") e a IA cria a arte do zero no estilo da sua marca. 2) EDITAR uma foto — anexe a foto (botão de imagem 📎) e escolha \"Editar a imagem\"; a IA mexe na foto real. 3) REPLICAR — anexe um post de referência e a IA cria um parecido. O erro mais comum é querer editar uma foto mas só descrever a edição sem anexar a foto.",
+      },
+      {
+        question: "Quero usar/editar uma foto minha. Como faço?",
+        answer:
+          "Sempre ANEXE a foto primeiro (botão de imagem). Depois escolha o que fazer com ela: \"Editar a imagem\" (a IA altera a própria foto), \"Post no estilo da marca\" (usa a foto como base de um post novo) ou, com 2+ fotos, \"Carrossel editorial\". Se você só DESCREVER a edição (ex: \"coloque um troféu nessa foto\") sem anexar nenhuma foto, a IA não tem o que editar — ela vai te pedir pra anexar.",
+      },
+      {
+        question: "Por que meu pedido virou o texto da imagem?",
+        answer:
+          "Isso acontecia quando você digitava uma INSTRUÇÃO (ex: \"faça o Haaland segurar um troféu\") num pedido de CRIAR post: a IA tratava a frase como o título do post e a escrevia na arte. Agora: para criar, descreva o TEMA (não a instrução); para editar, anexe a foto. A IA também passou a reescrever seu pedido numa manchete curta antes de gerar.",
+      },
+      {
+        question: "O que a IA faz bem — e o que é arriscado?",
+        answer:
+          "✅ Faz bem: design gráfico, infográficos, posts com texto curto, fundos, carrosséis, ajustes de luz/recorte, posts no estilo da sua marca. ⚠️ É arriscado (pode sair tosco): montagem fotorrealista complexa (colocar um objeto novo na mão de alguém), \"melhorar a qualidade\" de uma foto muito ruim, textos longos dentro da imagem, e rostos de pessoas específicas. Para esses casos, capriche no pedido, gere de novo se precisar, ou use uma foto sua de base.",
+      },
+      {
+        question: "O texto da imagem saiu com erro de ortografia. Por quê?",
+        answer:
+          "O modelo de imagem desenha o texto como parte da arte e, às vezes, erra uma palavra (especialmente palavras longas ou raras). Dicas: prefira textos curtos, gere de novo (cada geração é diferente), e para posts com muito texto use o formato Carrossel (texto mais controlado). Estamos sempre melhorando os modelos de texto em português.",
       },
     ],
   },

@@ -654,7 +654,7 @@ Mensagem: "${message}"`;
         const format = requestFormat || detectFormat(message);
         const contentStyle = detectContentStyle(message);
         // For "frase" requests, extract just the phrase text as the headline
-        const slideHeadline = contentStyle === "quote" ? extractPhrase(message) : message.substring(0, 100);
+        let slideHeadline = contentStyle === "quote" ? extractPhrase(message) : message.substring(0, 100);
         console.log(`[ai-chat] GENERATE: platform=${platform}, format=${format}, contentStyle=${contentStyle || "news"}, headline="${slideHeadline}"`);
 
         {
@@ -760,11 +760,37 @@ Mensagem: "${message}"`;
                 if (b.headline) {
                   const pts = Array.isArray(b.points) ? b.points.filter(Boolean).slice(0, 3) : [];
                   userTopic = `${b.headline}${pts.length ? `\nPontos principais: ${pts.join(" · ")}` : ""}`;
+                  slideHeadline = b.headline;
                   console.log(`[ai-chat] GENERATE: brief da imagem -> "${b.headline}"`);
                 }
               }
             }
           } catch (e: any) { console.warn("[ai-chat] GENERATE: brief da imagem falhou, usando resumo cru:", e?.message); }
+        }
+        // A2 — Brief também SEM artigo: transforma o pedido cru num BRIEF limpo (manchete + pontos)
+        // antes de virar TEMA renderizado. Sem isso, uma instrução crua ("faça Haaland segurar um
+        // troféu") vazava verbatim como manchete na imagem. minimax reescreve em manchete pronta,
+        // sem verbos de instrução, em pt-BR correto.
+        else if (contentStyle !== "quote") {
+          try {
+            const briefResp = await aiGatewayFetch({
+              model: "openrouter/minimax-m-25",
+              messages: [{ role: "user", content: `Transforme o pedido do usuário num BRIEF pra um post/infográfico de Instagram em português brasileiro. Extraia o ASSUNTO e escreva uma manchete PRONTA pra arte — NUNCA repita o pedido nem inclua verbos de instrução ("faça", "crie", "coloque", "edite", "melhore"). Português impecável, só palavras reais e bem grafadas. Responda SOMENTE JSON: {"headline":"manchete forte, máx 8 palavras","points":["até 3 pontos curtos, máx 8 palavras cada"]}\n\nPEDIDO DO USUÁRIO:\n${subject.substring(0, 600)}` }],
+            });
+            if (briefResp.ok) {
+              const bd = await briefResp.json();
+              const jm = extractJsonObject(bd.choices?.[0]?.message?.content || "");
+              if (jm) {
+                const b = JSON.parse(jm);
+                if (b.headline) {
+                  const pts = Array.isArray(b.points) ? b.points.filter(Boolean).slice(0, 3) : [];
+                  userTopic = `${b.headline}${pts.length ? `\nPontos principais: ${pts.join(" · ")}` : ""}`;
+                  slideHeadline = b.headline;
+                  console.log(`[ai-chat] GENERATE: brief (sem artigo) -> "${b.headline}"`);
+                }
+              }
+            }
+          } catch (e: any) { console.warn("[ai-chat] GENERATE: brief sem-artigo falhou, usando subject cru:", e?.message); }
         }
 
         const platformLabel = platform === "linkedin" ? "LinkedIn" : "Instagram";
