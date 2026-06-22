@@ -114,7 +114,7 @@ Deno.serve(async (req) => {
 
           const toolUses = final.content.filter((b: any) => b.type === "tool_use");
           if (final.stop_reason !== "tool_use" || toolUses.length === 0) {
-            sse(controller, enc, { type: "done" });
+            sse(controller, enc, { type: "done", messages });
             controller.close();
             return;
           }
@@ -143,7 +143,7 @@ Deno.serve(async (req) => {
           }
           messages.push({ role: "user", content: toolResults });
         }
-        sse(controller, enc, { type: "done", note: "limite de rodadas" });
+        sse(controller, enc, { type: "done", note: "limite de rodadas", messages });
         controller.close();
       } catch (e: any) {
         sse(controller, enc, { type: "error", error: e?.message || String(e) });

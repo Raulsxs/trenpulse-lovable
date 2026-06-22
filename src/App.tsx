@@ -19,6 +19,7 @@ import BrandEdit from "./pages/BrandEdit";
 import Calendar from "./pages/Calendar";
 import ChatPage from "./pages/ChatPage";
 import Studio from "./pages/Studio";
+import AgentChat from "./pages/AgentChat";
 import ResetPassword from "./pages/ResetPassword";
 import NotFound from "./pages/NotFound";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
@@ -57,6 +58,7 @@ const RoutedApp = () => {
       <Route path="/brands/:id/edit" element={<BrandEdit />} />
       <Route path="/chat" element={<ChatPage />} />
       <Route path="/studio" element={<Studio />} />
+      <Route path="/agent" element={<DashboardLayout><AgentChat /></DashboardLayout>} />
       <Route path="/analytics" element={<Analytics />} />
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/pricing" element={<Pricing />} />
