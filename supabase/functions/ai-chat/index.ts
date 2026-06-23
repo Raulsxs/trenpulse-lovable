@@ -1284,11 +1284,15 @@ Responda em JSON:
         let carouselTitle = cleanSubject.length > 80 ? cleanSubject.substring(0, 80) + "..." : cleanSubject;
         let slides: any[] = [];
 
-        // Tenta gerar a estrutura; 1 retry porque minimax (reasoning) às vezes devolve texto sem JSON.
+        // Tenta gerar a estrutura. minimax (reasoning) às vezes devolve texto sem JSON, e sob
+        // rajada estoura rate-limit (429). Defesa: resposta CURTA (max_tokens baixo → rápido e
+        // determinístico) + 3 tentativas com backoff crescente (mata o 429 transitório).
         const runStructure = async (extraInstruction = ""): Promise<void> => {
           const structResp = await aiGatewayFetch({
             model: "openrouter/minimax-m-25",
             messages: [{ role: "user", content: structurePrompt + extraInstruction }],
+            max_tokens: 2048,      // JSON de carrossel cabe folgado; evita o minimax "pensar" 64k tokens
+            temperature: 0.5,
           });
           if (!structResp.ok) return;
           const structData = await structResp.json();
@@ -1301,17 +1305,17 @@ Responda em JSON:
           }
         };
 
-        try {
-          await runStructure();
-        } catch (structErr: any) {
-          console.error("[ai-chat] GENERATE_CAROUSEL: structure generation failed:", structErr?.message);
-        }
-        if (slides.length === 0) {
-          console.warn("[ai-chat] GENERATE_CAROUSEL: structure empty — retry com instrução JSON estrita");
+        const STRICT_JSON = "\n\nIMPORTANTE: responda SOMENTE com o objeto JSON, sem nenhum texto, raciocínio ou markdown antes ou depois.";
+        const backoffMs = [0, 1200, 2500];   // 3 tentativas; espera antes da 2ª/3ª
+        for (let attempt = 0; attempt < backoffMs.length && slides.length === 0; attempt++) {
+          if (backoffMs[attempt] > 0) {
+            console.warn(`[ai-chat] GENERATE_CAROUSEL: structure vazia — retry ${attempt} após ${backoffMs[attempt]}ms`);
+            await new Promise((r) => setTimeout(r, backoffMs[attempt]));
+          }
           try {
-            await runStructure("\n\nIMPORTANTE: responda SOMENTE com o objeto JSON, sem nenhum texto, raciocínio ou markdown antes ou depois.");
-          } catch (retryErr: any) {
-            console.error("[ai-chat] GENERATE_CAROUSEL: structure retry failed:", retryErr?.message);
+            await runStructure(attempt === 0 ? "" : STRICT_JSON);
+          } catch (structErr: any) {
+            console.error(`[ai-chat] GENERATE_CAROUSEL: structure attempt ${attempt} failed:`, structErr?.message);
           }
         }
 

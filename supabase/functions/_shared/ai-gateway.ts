@@ -320,6 +320,11 @@ async function fetchOpenAICompatible(config: AIConfig, request: FetchAIRequest):
 async function fetchInference(config: AIConfig, request: FetchAIRequest): Promise<FetchAIResponse> {
   const { system_prompt, context, text, images } = openaiToInference(request.messages);
 
+  // max_tokens/temperature parametrizáveis: tarefas estruturadas (JSON de carrossel)
+  // pedem resposta CURTA — minimax (reasoning) com 64k de saída fica lento/instável e
+  // estoura rate-limit sob rajada. Quem chama passa um teto menor; default preserva o legado.
+  const maxTokens = typeof request.max_tokens === "number" ? request.max_tokens : 64000;
+  const temperature = typeof request.temperature === "number" ? request.temperature : 0.7;
   const body: Record<string, unknown> = {
     app: INFERENCE_CHAT_APP,
     wait: true,
@@ -328,8 +333,8 @@ async function fetchInference(config: AIConfig, request: FetchAIRequest): Promis
       system_prompt: system_prompt || "you are a helpful assistant that can answer questions and help with tasks.",
       context,
       stream: false,
-      temperature: 0.7,
-      max_tokens: 64000,
+      temperature,
+      max_tokens: maxTokens,
     },
   };
 
