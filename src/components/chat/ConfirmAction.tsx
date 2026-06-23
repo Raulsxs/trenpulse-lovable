@@ -1,24 +1,33 @@
 import { Button } from "@/components/ui/button";
-import { Send, CalendarClock, AlertTriangle, X, Check, Loader2 } from "lucide-react";
+import { Send, CalendarClock, AlertTriangle, X, Check, Loader2, Coins } from "lucide-react";
 
 interface Props {
-  name: string;            // "publicar" | "agendar_conteudo"
+  name: string;            // "publicar" | "agendar_conteudo" | tool de geração cara
   input: any;              // args propostos pelo agente
+  cost?: number;           // créditos estimados (geração cara)
   busy?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-// Confirmação obrigatória antes de ações irreversíveis (publicar/agendar).
+// Confirmação obrigatória antes de ações irreversíveis (publicar/agendar) OU de gasto alto.
 // O agente PROPÔS a ação; o usuário decide. Nada acontece até clicar Confirmar.
-export default function ConfirmAction({ name, input, busy, onConfirm, onCancel }: Props) {
+export default function ConfirmAction({ name, input, cost, busy, onConfirm, onCancel }: Props) {
   const isPublish = name === "publicar";
-  const Icon = isPublish ? Send : CalendarClock;
+  const isSchedule = name === "agendar_conteudo";
   const plataformas: string[] = Array.isArray(input?.plataformas) ? input.plataformas : [];
-  const titulo = isPublish ? "Publicar agora?" : "Agendar publicação?";
-  const detalhe = isPublish
-    ? `Vou publicar este conteúdo${plataformas.length ? ` em ${plataformas.join(", ")}` : " nas redes conectadas"}.`
-    : `Vou agendar para ${input?.data_hora_iso ? new Date(input.data_hora_iso).toLocaleString("pt-BR") : "a data informada"}${plataformas.length ? ` em ${plataformas.join(", ")}` : ""}.`;
+
+  let Icon = Coins, titulo = "Confirmar ação?", detalhe = "";
+  if (isPublish) {
+    Icon = Send; titulo = "Publicar agora?";
+    detalhe = `Vou publicar este conteúdo${plataformas.length ? ` em ${plataformas.join(", ")}` : " nas redes conectadas"}.`;
+  } else if (isSchedule) {
+    Icon = CalendarClock; titulo = "Agendar publicação?";
+    detalhe = `Vou agendar para ${input?.data_hora_iso ? new Date(input.data_hora_iso).toLocaleString("pt-BR") : "a data informada"}${plataformas.length ? ` em ${plataformas.join(", ")}` : ""}.`;
+  } else {
+    Icon = Coins; titulo = "Confirmar geração?";
+    detalhe = `Esta criação custa cerca de ${cost ?? "?"} créditos.`;
+  }
 
   return (
     <div className="rounded-xl border border-amber-300/60 bg-amber-50 dark:bg-amber-950/20 p-3.5 space-y-3">
@@ -31,6 +40,9 @@ export default function ConfirmAction({ name, input, busy, onConfirm, onCancel }
             <AlertTriangle className="w-3.5 h-3.5 text-amber-600" /> {titulo}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">{detalhe}</p>
+          {(isPublish || isSchedule) && typeof cost === "number" && cost > 0 && (
+            <p className="text-[11px] text-muted-foreground mt-0.5">Custo: ~{cost} créditos.</p>
+          )}
         </div>
       </div>
       <div className="flex gap-2">

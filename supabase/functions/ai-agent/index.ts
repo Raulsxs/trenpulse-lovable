@@ -7,7 +7,7 @@
 // Resume pós-confirmação: o cliente re-chama com { messages, confirm: {tool_use_id,name,input,approved} }.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk";
-import { AGENT_TOOLS, GATED_TOOLS, dispatchTool, type ToolCtx } from "../_shared/agent-tools.ts";
+import { AGENT_TOOLS, GATED_TOOLS, CONFIRM_CREDIT_THRESHOLD, estimateToolCost, dispatchTool, type ToolCtx } from "../_shared/agent-tools.ts";
 
 const MODEL = "claude-haiku-4-5";
 const corsHeaders = {
@@ -122,11 +122,12 @@ Deno.serve(async (req) => {
 
           const toolResults: any[] = [];
           for (const tu of toolUses as any[]) {
-            if (GATED_TOOLS.has(tu.name)) {
-              // Pausa: pede confirmação. O cliente reenvia messages + confirm pra retomar.
+            const cost = estimateToolCost(tu.name, tu.input);
+            if (GATED_TOOLS.has(tu.name) || cost > CONFIRM_CREDIT_THRESHOLD) {
+              // Pausa: pede confirmação (ação irreversível OU custo alto). O cliente reenvia messages + confirm.
               sse(controller, enc, {
                 type: "confirm_request",
-                tool_use_id: tu.id, name: tu.name, input: tu.input,
+                tool_use_id: tu.id, name: tu.name, input: tu.input, cost,
                 assistant_content: final.content,
                 messages,
               });

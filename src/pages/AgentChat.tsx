@@ -1,17 +1,19 @@
 /**
  * AgentChat (/agent) — chat agêntico isolado (Fase 2 do pivot).
  * Consome o SSE do edge function `ai-agent` (Claude Haiku 4.5 + tool-calling).
- * Mantém os `messages` no formato Anthropic (devolvidos no done/confirm_request) p/ continuidade.
- * Reusa o ActionCard; confirma publicar/agendar via ConfirmAction. NÃO toca no /chat atual.
+ * Mantém os `messages` no formato Anthropic (devolvidos no done/confirm_request) p/ continuidade,
+ * persistidos em localStorage por usuário. Reusa o ActionCard; confirma publicar/agendar/gasto-alto
+ * via ConfirmAction. NÃO toca no /chat atual.
  */
 import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2 } from "lucide-react";
+import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus } from "lucide-react";
 import ActionCard from "@/components/chat/ActionCard";
 import ConfirmAction from "@/components/chat/ConfirmAction";
+import { useCredits } from "@/hooks/useCredits";
 
 const SUPABASE_URL = "https://qdmhqxpazffmaxleyzxs.supabase.co";
 const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkbWhxeHBhemZmbWF4bGV5enhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNTI0OTQsImV4cCI6MjA4ODcyODQ5NH0.HlS0S8B1iqfO0MeUIKl8xu5unlK5jx6kvtPkcRklxuo";
@@ -22,7 +24,8 @@ const TOOL_LABEL: Record<string, string> = {
   imagem_livre: "Gerando imagem…", editar_imagem: "Editando a imagem…", editar_conteudo: "Ajustando o conteúdo…",
   replicar_post: "Replicando o post…", link_para_post: "Lendo o link…", listar_agenda: "Consultando a agenda…",
   listar_conexoes: "Vendo suas conexões…", consultar_saldo: "Conferindo seu saldo…",
-  buscar_tendencias: "Buscando tendências…", agendar_conteudo: "Agendando…", publicar: "Publicando…",
+  buscar_tendencias: "Buscando tendências…", planejar_calendario: "Planejando o calendário…",
+  agendar_conteudo: "Agendando…", publicar: "Publicando…",
 };
 
 interface Tool { name: string; ok?: boolean; cancelled?: boolean }
@@ -32,7 +35,7 @@ interface Msg { id: string; role: "user" | "assistant"; text: string; tools: Too
 const SUGGESTIONS = [
   "Crie um post sobre 5 sinais de burnout",
   "Monte um carrossel com dicas de produtividade",
-  "Qual o meu saldo de créditos?",
+  "Monte um plano de conteúdo pra essa semana",
   "O que tenho agendado essa semana?",
 ];
 
@@ -45,18 +48,41 @@ export default function AgentChat() {
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<any>(null);
+  const { balance } = useCredits();
 
   const convo = useRef<any[]>([]);        // messages Anthropic (continuidade)
   const curId = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const storeKey = useRef<string>("");
+  const uiRef = useRef<Msg[]>([]);
+
+  useEffect(() => { uiRef.current = uiMessages; }, [uiMessages]);
 
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("brands").select("id, name").limit(20);
       if (data) setBrands(data as any);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        storeKey.current = `tp_agent_${user.id}`;
+        try {
+          const raw = localStorage.getItem(storeKey.current);
+          if (raw) {
+            const saved = JSON.parse(raw);
+            if (Array.isArray(saved.ui)) setUiMessages(saved.ui);
+            if (Array.isArray(saved.convo)) convo.current = saved.convo;
+          }
+        } catch { /* ignore */ }
+      }
     })();
   }, []);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [uiMessages, pendingConfirm]);
+
+  function persist() {
+    if (!storeKey.current) return;
+    try { localStorage.setItem(storeKey.current, JSON.stringify({ ui: uiRef.current, convo: convo.current })); } catch { /* ignore */ }
+  }
 
   const newId = () => (crypto?.randomUUID ? crypto.randomUUID() : String(Math.random()));
   const patchCur = (fn: (m: Msg) => Msg) =>
@@ -84,7 +110,7 @@ export default function AgentChat() {
         break;
       case "confirm_request":
         convo.current = evt.messages || convo.current;
-        setPendingConfirm({ tool_use_id: evt.tool_use_id, name: evt.name, input: evt.input, messages: evt.messages });
+        setPendingConfirm({ tool_use_id: evt.tool_use_id, name: evt.name, input: evt.input, cost: evt.cost, messages: evt.messages });
         break;
       case "done":
         if (Array.isArray(evt.messages)) convo.current = evt.messages;
@@ -98,7 +124,8 @@ export default function AgentChat() {
 
   async function streamAgent(body: any) {
     setSending(true);
-    // bolha de assistente nova p/ este turno
+    const ac = new AbortController();
+    abortRef.current = ac;
     const aId = newId();
     curId.current = aId;
     setUiMessages((ms) => [...ms, { id: aId, role: "assistant", text: "", tools: [] }]);
@@ -110,6 +137,7 @@ export default function AgentChat() {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, apikey: ANON, "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: ac.signal,
       });
       if (!res.ok || !res.body) { toast.error(`Agente indisponível (${res.status})`); return; }
       const reader = res.body.getReader();
@@ -128,9 +156,10 @@ export default function AgentChat() {
         }
       }
     } catch (e: any) {
-      toast.error(e?.message || "Falha na conexão com o agente");
+      if (e?.name !== "AbortError") toast.error(e?.message || "Falha na conexão com o agente");
     } finally {
       setSending(false);
+      persist();
     }
   }
 
@@ -140,9 +169,7 @@ export default function AgentChat() {
     setInput("");
     const photosNow = [...photos];
     setPhotos([]);
-    // UI: mostra a mensagem do usuário
     setUiMessages((ms) => [...ms, { id: newId(), role: "user", text, tools: [] }]);
-    // convo Anthropic
     convo.current = [...convo.current, { role: "user", content: text }];
     await streamAgent({ messages: convo.current, brandId: brandId || undefined, imageUrls: photosNow });
   }
@@ -152,6 +179,16 @@ export default function AgentChat() {
     setPendingConfirm(null);
     if (!pc) return;
     await streamAgent({ messages: pc.messages, confirm: { tool_use_id: pc.tool_use_id, name: pc.name, input: pc.input, approved } });
+  }
+
+  function handleStop() { abortRef.current?.abort(); setSending(false); }
+  function handleNew() {
+    abortRef.current?.abort();
+    convo.current = [];
+    curId.current = null;
+    setUiMessages([]);
+    setPendingConfirm(null);
+    setTimeout(persist, 0);
   }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -179,16 +216,22 @@ export default function AgentChat() {
   }
 
   return (
-    <div className="flex flex-col h-[calc(100vh-0px)] max-w-3xl mx-auto">
-      <div className="flex items-center gap-2 px-4 py-3 border-b border-border">
-        <Bot className="w-5 h-5 text-primary" />
-        <div>
-          <h1 className="text-sm font-bold leading-tight">Assistente TrendPulse <span className="text-[10px] font-medium text-primary align-middle">beta</span></h1>
-          <p className="text-[11px] text-muted-foreground leading-tight">Peça posts, carrosséis, edições — eu crio, agendo e publico.</p>
+    <div className="flex flex-col h-[calc(100dvh-0px)] max-w-3xl mx-auto w-full">
+      <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-border">
+        <Bot className="w-5 h-5 text-primary shrink-0" />
+        <div className="min-w-0 flex-1">
+          <h1 className="text-sm font-bold leading-tight truncate">Assistente TrendPulse <span className="text-[10px] font-medium text-primary align-middle">beta</span></h1>
+          <p className="text-[11px] text-muted-foreground leading-tight truncate">Peça posts, carrosséis, edições — eu crio, agendo e publico.</p>
         </div>
+        {balance !== null && (
+          <span className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums shrink-0"><Coins className="w-3.5 h-3.5 text-[hsl(var(--credit))]" />{balance}</span>
+        )}
+        {uiMessages.length > 0 && (
+          <Button variant="ghost" size="sm" className="h-8 gap-1 shrink-0" onClick={handleNew} title="Nova conversa"><Plus className="w-4 h-4" /><span className="hidden sm:inline">Nova</span></Button>
+        )}
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 space-y-4">
         {uiMessages.length === 0 && (
           <div className="text-center pt-10 space-y-4">
             <Sparkles className="w-8 h-8 text-primary mx-auto" />
@@ -202,7 +245,7 @@ export default function AgentChat() {
         )}
         {uiMessages.map((m) => (
           <div key={m.id} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-            <div className={m.role === "user" ? "max-w-[80%] rounded-2xl rounded-br-sm bg-primary text-primary-foreground px-3.5 py-2 text-sm whitespace-pre-wrap" : "max-w-[88%] space-y-2"}>
+            <div className={m.role === "user" ? "max-w-[85%] rounded-2xl rounded-br-sm bg-primary text-primary-foreground px-3.5 py-2 text-sm whitespace-pre-wrap" : "max-w-[90%] sm:max-w-[88%] space-y-2"}>
               {m.role === "assistant" && m.tools.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {m.tools.map((t, i) => (
@@ -223,13 +266,13 @@ export default function AgentChat() {
           </div>
         ))}
         {pendingConfirm && (
-          <div className="flex justify-start"><div className="max-w-[88%] w-full">
-            <ConfirmAction name={pendingConfirm.name} input={pendingConfirm.input} busy={sending} onConfirm={() => handleConfirm(true)} onCancel={() => handleConfirm(false)} />
+          <div className="flex justify-start"><div className="max-w-[90%] sm:max-w-[88%] w-full">
+            <ConfirmAction name={pendingConfirm.name} input={pendingConfirm.input} cost={pendingConfirm.cost} busy={sending} onConfirm={() => handleConfirm(true)} onCancel={() => handleConfirm(false)} />
           </div></div>
         )}
       </div>
 
-      <div className="border-t border-border p-3 space-y-2">
+      <div className="border-t border-border p-2.5 sm:p-3 space-y-2">
         {photos.length > 0 && (
           <div className="flex gap-2 flex-wrap">
             {photos.map((u, i) => (
@@ -251,20 +294,21 @@ export default function AgentChat() {
           />
           <div className="flex items-center gap-2 px-2.5 py-2 border-t border-border/60 bg-muted/20">
             {brands.length > 0 && (
-              <select value={brandId} onChange={(e) => setBrandId(e.target.value)} className="text-xs bg-background border border-border rounded-md px-2 py-1.5 max-w-[140px]">
+              <select value={brandId} onChange={(e) => setBrandId(e.target.value)} className="text-xs bg-background border border-border rounded-md px-2 py-1.5 max-w-[120px] sm:max-w-[140px]">
                 <option value="">Sem marca</option>
                 {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             )}
             <label className="inline-flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-md px-2 py-1.5 cursor-pointer hover:border-primary/40">
               {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
-              Fotos
+              <span className="hidden sm:inline">Fotos</span>
               <input type="file" accept="image/*" multiple className="hidden" onChange={handleUpload} disabled={uploading} />
             </label>
-            <Button onClick={handleSend} disabled={sending || !input.trim()} className="ml-auto h-8 gap-1.5">
-              {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-              Enviar
-            </Button>
+            {sending ? (
+              <Button onClick={handleStop} variant="outline" className="ml-auto h-8 gap-1.5"><Square className="w-3.5 h-3.5" /> Parar</Button>
+            ) : (
+              <Button onClick={handleSend} disabled={!input.trim()} className="ml-auto h-8 gap-1.5"><Send className="w-4 h-4" /> Enviar</Button>
+            )}
           </div>
         </div>
       </div>

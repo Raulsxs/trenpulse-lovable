@@ -25,8 +25,26 @@ export interface ToolResult {
 
 // Ações irreversíveis/externas: SEMPRE pedem confirmação antes de executar.
 export const GATED_TOOLS = new Set(["publicar", "agendar_conteudo"]);
-// Acima deste custo (créditos) qualquer geração também pede confirmação.
-export const CONFIRM_CREDIT_THRESHOLD = 25;
+// Acima deste custo (créditos) qualquer geração também pede confirmação (ex.: carrossel grande).
+export const CONFIRM_CREDIT_THRESHOLD = 50;
+
+// Estimativa de custo (créditos) por tool — usada só pra decidir gating. Aproxima credit_pricing.
+export function estimateToolCost(name: string, input: any): number {
+  const slides = Math.min(10, Math.max(3, input?.slides || 5));
+  switch (name) {
+    case "gerar_post":
+    case "imagem_livre":
+    case "editar_imagem":
+    case "editar_conteudo":
+    case "replicar_post":
+    case "link_para_post": return 8;
+    case "gerar_story": return 20;
+    case "gerar_carrossel": return 8 * slides;
+    case "gerar_carrossel_editorial": return 4 * 5;
+    case "gerar_tweet_card": return 5;
+    default: return 0;
+  }
+}
 
 // ─────────────────────────── Schemas (formato Anthropic tools) ───────────────────────────
 // Descrições PRESCRITIVAS ("chame quando…") — Haiku é conservador; isso melhora o should-call.
