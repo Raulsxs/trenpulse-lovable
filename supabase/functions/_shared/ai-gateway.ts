@@ -262,12 +262,82 @@ export async function fetchAI(request: FetchAIRequest): Promise<FetchAIResponse>
     return fetchOpenAICompatible(config, request);
   }
 
-  // Text generation
+  // Text generation — Claude Haiku 4.5 é o motor PRIMÁRIO de texto (migração 2026-06-23).
+  // Substitui o minimax/inference.sh (flaky, reasoning lento, 64k de saída) e não usa a
+  // GOOGLE_AI_API_KEY (reservada ao fix de texto pt-BR do Maikon). minimax vira só rede de segurança.
+  if (Deno.env.get("ANTHROPIC_API_KEY")) {
+    return fetchClaude(request);
+  }
+
   if (config.provider === "inference") {
     return fetchInference(config, request);
   }
 
   return fetchOpenAICompatible(config, request);
+}
+
+// ── Anthropic (Claude Haiku) text — motor primário de texto ──
+
+const CLAUDE_TEXT_MODEL = "claude-haiku-4-5";
+
+async function fetchClaude(request: FetchAIRequest): Promise<FetchAIResponse> {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY")!;
+
+  // OpenAI-compatible → Anthropic: system separado, resto vira user/assistant (texto puro).
+  const toText = (m: OpenAIMessage) =>
+    typeof m.content === "string" ? m.content : m.content.filter((p) => p.type === "text").map((p) => p.text).join("\n");
+  const system = request.messages.filter((m) => m.role === "system").map(toText).join("\n").trim();
+  const chat = request.messages
+    .filter((m) => m.role !== "system")
+    .map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: toText(m) }))
+    .filter((m) => m.content.trim().length > 0);
+
+  const maxTokens = typeof request.max_tokens === "number" ? Math.min(request.max_tokens, 8192) : 4096;
+  const temperature = typeof request.temperature === "number" ? request.temperature : 0.7;
+
+  // Rede de segurança: se o Claude cair, usa minimax (inference.sh) e, em último caso, Google/Lovable.
+  const fallback = async (why: string): Promise<FetchAIResponse> => {
+    console.warn(`[ai-gateway] Claude text ${why} — fallback p/ inference.sh/minimax`);
+    const inferenceKey = Deno.env.get("INFERENCE_SH_API_KEY");
+    if (inferenceKey) {
+      return fetchInference({ url: "https://api.inference.sh/run", apiKey: inferenceKey, provider: "inference" }, request);
+    }
+    try {
+      return await fetchOpenAICompatible(getFallbackAIConfig(), request);
+    } catch {
+      return { ok: false, status: 500, choices: [{ message: { content: "" } }] };
+    }
+  };
+
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      body: JSON.stringify({
+        model: CLAUDE_TEXT_MODEL,
+        max_tokens: maxTokens,
+        temperature,
+        ...(system ? { system } : {}),
+        messages: chat,
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      console.error(`[ai-gateway] Claude text error [${res.status}]: ${errText.substring(0, 300)}`);
+      return fallback(`HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+    if (!text || !text.trim()) return fallback("resposta vazia");
+
+    console.log(`[ai-gateway] Claude text ok: ${text.length} chars (${CLAUDE_TEXT_MODEL})`);
+    return { ok: true, status: 200, choices: [{ message: { content: text } }], raw: data };
+  } catch (e: any) {
+    console.error(`[ai-gateway] Claude text exception: ${e?.message}`);
+    return fallback("exceção");
+  }
 }
 
 async function fetchOpenAICompatible(config: AIConfig, request: FetchAIRequest): Promise<FetchAIResponse> {
