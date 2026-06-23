@@ -262,10 +262,11 @@ export async function fetchAI(request: FetchAIRequest): Promise<FetchAIResponse>
     return fetchOpenAICompatible(config, request);
   }
 
-  // Text generation — Claude Haiku 4.5 é o motor PRIMÁRIO de texto (migração 2026-06-23).
-  // Substitui o minimax/inference.sh (flaky, reasoning lento, 64k de saída) e não usa a
-  // GOOGLE_AI_API_KEY (reservada ao fix de texto pt-BR do Maikon). minimax vira só rede de segurança.
-  if (Deno.env.get("ANTHROPIC_API_KEY")) {
+  // Text generation — Claude Haiku 4.5 SERIA o motor primário, mas em 2026-06-23 o fetchClaude
+  // causou HANG no /chat ("gira e nunca termina") → DESATIVADO atrás de flag até diagnosticar.
+  // Sem USE_CLAUDE_TEXT volta ao comportamento estável (minimax/inference.sh) — não quebra o Maikon.
+  // Reativar: setar secret USE_CLAUDE_TEXT=1 (já com timeouts no fetchClaude).
+  if (Deno.env.get("ANTHROPIC_API_KEY") && Deno.env.get("USE_CLAUDE_TEXT")) {
     return fetchClaude(request);
   }
 
