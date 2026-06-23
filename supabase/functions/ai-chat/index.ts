@@ -1332,9 +1332,17 @@ Responda em JSON:
         // 6. Generate images for ALL slides IN PARALLEL (avoids 150s idle timeout)
         console.log(`[ai-chat] GENERATE_CAROUSEL: generating ${slides.length} slides in parallel`);
 
-        const slideResultsPromise = Promise.all(
-          slides.map(async (slide: any, i: number) => {
-            const carouselHasStyleRefs = referenceImageUrls.length > 0;
+        // Fidelidade de marca: a CAPA (slide 1) é gerada PRIMEIRO e vira ÂNCORA de estilo
+        // (referência image-to-image) pros slides 2..N → consistência visual entre slides.
+        // photo_backgrounds (Maikon) fica INTOCADO: useAnchor=false → caminho paralelo padrão.
+        const useAnchor = !isPhotoBackground && slides.length > 1;
+        const anchorRef: string[] = [];
+        const genSlide = async (slide: any, i: number) => {
+            const refs = (anchorRef.length && i > 0) ? [...anchorRef, ...referenceImageUrls].slice(0, 6) : referenceImageUrls;
+            const carouselHasStyleRefs = refs.length > 0;
+            const slideAnchorBlock = (anchorRef.length && i > 0)
+              ? `\nÂNCORA DE ESTILO: a PRIMEIRA imagem anexada é a CAPA já gerada deste carrossel. Replique FIELMENTE o estilo dela (paleta, tipografia, layout, fundo, clima visual) — os slides devem parecer do MESMO conjunto.\n`
+              : "";
             const carouselRefsBlock = carouselHasStyleRefs
               ? `\nIMAGENS DE REFERÊNCIA ANEXADAS — REGRA DE FIDELIDADE VISUAL:
 As imagens em anexo são exemplos REAIS do estilo desta marca. COPIE EXATAMENTE delas a paleta de cores, tipografia, layout, mockups, cards, formas decorativas e estilo geral. NÃO copie textos das referências (categorias, hashtags, datas, rodapés). O texto da imagem é SOMENTE o do headline/body/bullets acima.\n`
@@ -1349,7 +1357,7 @@ SLIDE ${i + 1}/${slides.length} (${slide.role}):
 Headline: ${slide.headline}
 ${slide.body ? `Body: ${slide.body}` : ""}
 ${slide.bullets?.length ? `Bullets:\n${slide.bullets.map((b: string) => `- ${b}`).join("\n")}` : ""}
-${carouselRefsBlock}
+${slideAnchorBlock}${carouselRefsBlock}
 ${brandContext ? `IDENTIDADE DA MARCA:\n${brandContext}\n` : ""}
 REGRAS:
 - Imagem COMPLETA com texto integrado, pronta para publicar, TEXTO EM PT-BR
@@ -1385,7 +1393,7 @@ Responda APENAS com a imagem gerada.`;
                   backgroundOnly: false,
                   customPrompt: slidePrompt,
                   brandId: requestBrandId || null,
-                  referenceImageUrls: referenceImageUrls.length > 0 ? referenceImageUrls : undefined,
+                  referenceImageUrls: refs.length > 0 ? refs : undefined,
                 }),
               });
 
@@ -1410,8 +1418,17 @@ Responda APENAS com a imagem gerada.`;
                 render_mode: "ai_full_design",
               },
             };
-          })
-        );
+        };
+
+        const slideResultsPromise = (async () => {
+          if (useAnchor) {
+            const cover = await genSlide(slides[0], 0);              // capa primeiro
+            if (cover.slideImageUrl) anchorRef.push(cover.slideImageUrl); // vira âncora
+            const rest = await Promise.all(slides.slice(1).map((s: any, idx: number) => genSlide(s, idx + 1)));
+            return [cover, ...rest];
+          }
+          return Promise.all(slides.map((s: any, i: number) => genSlide(s, i)));
+        })();
 
         // 7. Generate caption IN PARALLEL with the slide images — it only depends on
         // message/userCtx/platform, not on the generated images, so it rides for free
