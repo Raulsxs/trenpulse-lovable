@@ -70,6 +70,7 @@ export default function AgentChat() {
   const storeKey = useRef<string>("");
   const uiRef = useRef<Msg[]>([]);
   const toolBreak = useRef(false);   // separa texto pré/pós tool no mesmo balão
+  const shownContent = useRef<Set<string>>(new Set()); // dedup ActionCard por content_id (1 card/conteúdo) — evita 2 canais realtime no mesmo content (crash)
 
   useEffect(() => { uiRef.current = uiMessages; }, [uiMessages]);
 
@@ -84,7 +85,20 @@ export default function AgentChat() {
           const raw = localStorage.getItem(storeKey.current);
           if (raw) {
             const saved = JSON.parse(raw);
-            if (Array.isArray(saved.ui)) setUiMessages(saved.ui);
+            if (Array.isArray(saved.ui)) {
+              // Sanitiza estados antigos: remove ActionCards duplicados (mesmo content_id) — senão
+              // a conversa salva quando havia o bug recria 2+ canais realtime e crasha na carga.
+              const seen = new Set<string>();
+              const cleaned = saved.ui.map((m: Msg) => {
+                if (m.action?.contentId) {
+                  if (seen.has(m.action.contentId)) return { ...m, action: undefined };
+                  seen.add(m.action.contentId);
+                }
+                return m;
+              });
+              setUiMessages(cleaned);
+              shownContent.current = seen;
+            }
             if (Array.isArray(saved.convo)) convo.current = saved.convo;
           }
         } catch { /* ignore */ }
@@ -127,7 +141,13 @@ export default function AgentChat() {
         break;
       case "action_result":
         if (evt.action_result?.content_id) {
-          patchCur((m) => ({ ...m, action: { contentId: evt.action_result.content_id, contentType: evt.action_result.content_type || "post", platform: evt.action_result.platform } }));
+          const cid = evt.action_result.content_id;
+          // Dedup: só 1 ActionCard por content_id. Edições reusam o mesmo id — o card existente
+          // atualiza sozinho via realtime. Dois cards no mesmo content = 2 canais = crash.
+          if (!shownContent.current.has(cid)) {
+            shownContent.current.add(cid);
+            patchCur((m) => ({ ...m, action: { contentId: cid, contentType: evt.action_result.content_type || "post", platform: evt.action_result.platform } }));
+          }
         }
         break;
       case "confirm_request":
@@ -209,6 +229,8 @@ export default function AgentChat() {
     abortRef.current?.abort();
     convo.current = [];
     curId.current = null;
+    shownContent.current.clear();
+    toolBreak.current = false;
     setUiMessages([]);
     setPendingConfirm(null);
     setTimeout(persist, 0);
