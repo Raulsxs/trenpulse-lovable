@@ -295,9 +295,16 @@ async function fetchClaude(request: FetchAIRequest): Promise<FetchAIResponse> {
   const maxTokens = typeof request.max_tokens === "number" ? Math.min(request.max_tokens, 8192) : 4096;
   const temperature = typeof request.temperature === "number" ? request.temperature : 0.7;
 
-  // Rede de segurança: se o Claude cair, usa minimax (inference.sh) e, em último caso, Google/Lovable.
+  // Rede de segurança em camadas:
+  // 1) MESMO modelo (Haiku) hospedado no Replicate — qualidade idêntica se a API Anthropic cair.
+  // 2) minimax (inference.sh) → Google/Lovable como rede final.
   const fallback = async (why: string): Promise<FetchAIResponse> => {
-    console.warn(`[ai-gateway] Claude text ${why} — fallback p/ inference.sh/minimax`);
+    console.warn(`[ai-gateway] Claude direct ${why} — fallback p/ Replicate Haiku`);
+    if (Deno.env.get("REPLICATE_API_TOKEN")) {
+      const rep = await fetchClaudeReplicate(request);
+      if (rep.ok && rep.choices?.[0]?.message?.content?.trim()) return rep;
+    }
+    console.warn("[ai-gateway] Replicate Haiku indisponível — rede final inference.sh/minimax");
     const inferenceKey = Deno.env.get("INFERENCE_SH_API_KEY");
     if (inferenceKey) {
       return fetchInference({ url: "https://api.inference.sh/run", apiKey: inferenceKey, provider: "inference" }, request);
@@ -337,6 +344,56 @@ async function fetchClaude(request: FetchAIRequest): Promise<FetchAIResponse> {
   } catch (e: any) {
     console.error(`[ai-gateway] Claude text exception: ${e?.message}`);
     return fallback("exceção");
+  }
+}
+
+// ── Claude Haiku no Replicate — fallback do motor de texto (mesmo modelo, outro provider) ──
+// Slug oficial Anthropic no Replicate. Input: prompt + system_prompt + max_tokens.
+// Output: array de strings (chunks) que se concatena. Prefer:wait deixa síncrono (poll de reserva).
+const CLAUDE_REPLICATE_SLUG = "anthropic/claude-4.5-haiku";
+
+async function fetchClaudeReplicate(request: FetchAIRequest): Promise<FetchAIResponse> {
+  const token = Deno.env.get("REPLICATE_API_TOKEN");
+  if (!token) return { ok: false, status: 500, choices: [{ message: { content: "" } }] };
+
+  const toText = (m: OpenAIMessage) =>
+    typeof m.content === "string" ? m.content : m.content.filter((p) => p.type === "text").map((p) => p.text).join("\n");
+  const system = request.messages.filter((m) => m.role === "system").map(toText).join("\n").trim();
+  const chat = request.messages.filter((m) => m.role !== "system");
+  // Replicate/Anthropic usa prompt+system_prompt (não messages[]). 1 turn = direto; multi-turn = prefixa papéis.
+  const prompt = chat.length <= 1
+    ? (chat[0] ? toText(chat[0]) : "")
+    : chat.map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${toText(m)}`).join("\n\n");
+  const maxTokens = typeof request.max_tokens === "number" ? Math.min(request.max_tokens, 8192) : 4096;
+
+  try {
+    const res = await fetch(`https://api.replicate.com/v1/models/${CLAUDE_REPLICATE_SLUG}/predictions`, {
+      method: "POST",
+      headers: { Authorization: `Token ${token}`, "Content-Type": "application/json", Prefer: "wait" },
+      body: JSON.stringify({ input: { prompt, ...(system ? { system_prompt: system } : {}), max_tokens: maxTokens } }),
+    });
+    if (!res.ok) {
+      console.error(`[ai-gateway] Replicate Haiku HTTP ${res.status}: ${(await res.text()).substring(0, 200)}`);
+      return { ok: false, status: res.status, choices: [{ message: { content: "" } }] };
+    }
+    let pred = await res.json();
+    const start = Date.now();
+    while (pred.status && !["succeeded", "failed", "canceled"].includes(pred.status) && Date.now() - start < 60000) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const pr = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, { headers: { Authorization: `Token ${token}` } });
+      if (!pr.ok) break;
+      pred = await pr.json();
+    }
+    if (pred.status !== "succeeded") {
+      console.warn(`[ai-gateway] Replicate Haiku status=${pred.status}`);
+      return { ok: false, status: 502, choices: [{ message: { content: "" } }] };
+    }
+    const text = Array.isArray(pred.output) ? pred.output.join("") : String(pred.output ?? "");
+    console.log(`[ai-gateway] Replicate Haiku ok: ${text.length} chars`);
+    return { ok: !!text.trim(), status: 200, choices: [{ message: { content: text } }], raw: pred };
+  } catch (e: any) {
+    console.error(`[ai-gateway] Replicate Haiku exception: ${e?.message}`);
+    return { ok: false, status: 500, choices: [{ message: { content: "" } }] };
   }
 }
 
