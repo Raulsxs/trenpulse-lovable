@@ -19,12 +19,15 @@ import {
   UserPlus,
   LayoutGrid,
   Coins,
+  Bot,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { HelpCenterTrigger } from "@/components/onboarding/HelpCenterModal";
 import BuyCreditsModal from "@/components/billing/BuyCreditsModal";
 
 const SAVED_ACCOUNTS_KEY = "tp_saved_accounts";
+// Flag de rollout do assistente agêntico (/agent): por ora só o dono vê o link.
+const OWNER_EMAILS = ["raul.sxs27@gmail.com", "raul@trendpulse.app"];
 
 interface SavedAccount {
   userId: string;
@@ -55,8 +58,11 @@ const Sidebar = () => {
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentEmail, setCurrentEmail] = useState<string>("");
   const { balance, refresh: refreshCredits } = useCredits();
   const [buyOpen, setBuyOpen] = useState(false);
+  const isOwner = OWNER_EMAILS.includes((currentEmail || "").toLowerCase());
+  const primaryNav = isOwner ? [{ icon: Bot, label: "Assistente (beta)", href: "/agent" }, ...primaryItems] : primaryItems;
 
   useEffect(() => {
     const saveSession = (session: { user: { id: string; email?: string; user_metadata?: { name?: string } }; access_token: string; refresh_token: string } | null) => {
@@ -65,6 +71,7 @@ const Sidebar = () => {
       const email = session.user.email || "";
       const name = session.user.user_metadata?.name || email.split("@")[0];
       setCurrentUserId(userId);
+      setCurrentEmail(email);
       const stored: SavedAccount[] = (() => {
         try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
       })();
@@ -211,7 +218,7 @@ const Sidebar = () => {
         {/* Navigation */}
         <nav className="p-4 space-y-1" data-onboarding="sidebar-nav">
           {/* Primary — daily use */}
-          {primaryItems.map((item) => {
+          {primaryNav.map((item) => {
             const isActive = location.pathname === item.href;
             return (
               <Link
