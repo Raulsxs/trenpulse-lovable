@@ -23,6 +23,7 @@ const TOOL_LABEL: Record<string, string> = {
   gerar_tweet_card: "Gerando tweet card…", gerar_carrossel_editorial: "Montando carrossel editorial…",
   imagem_livre: "Gerando imagem…", editar_imagem: "Editando a imagem…", editar_conteudo: "Ajustando o conteúdo…",
   replicar_post: "Replicando o post…", link_para_post: "Lendo o link…", listar_agenda: "Consultando a agenda…",
+  editar_slide: "Refazendo o slide…", detalhes_conteudo: "Vendo os detalhes…",
   listar_conexoes: "Vendo suas conexões…", consultar_saldo: "Conferindo seu saldo…",
   buscar_tendencias: "Buscando tendências…", planejar_calendario: "Planejando o calendário…",
   agendar_conteudo: "Agendando…", publicar: "Publicando…",

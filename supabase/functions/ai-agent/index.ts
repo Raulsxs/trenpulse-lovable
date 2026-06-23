@@ -80,6 +80,7 @@ Deno.serve(async (req) => {
   const ctx: ToolCtx = {
     supabaseUrl, anonKey, userAuthHeader: authHeader, userClient,
     anthropicKey,
+    userId: user.id,
     defaultBrandId: body.brandId ?? null,
     defaultModel: selectedModel,
     pendingImageUrls: Array.isArray(body.imageUrls) ? body.imageUrls : [],

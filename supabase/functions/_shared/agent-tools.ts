@@ -13,6 +13,7 @@ export interface ToolCtx {
   userAuthHeader: string;        // "Bearer <jwt do usuário>"
   userClient: any;               // supabase client com auth do usuário (RLS)
   anthropicKey: string;          // p/ tools que usam modelo (planejar_calendario → Sonnet)
+  userId: string;                // p/ chamar generate-slide-images (que recebe userId no body)
   defaultBrandId?: string | null;
   defaultModel?: string | null;  // modelo de imagem selecionado no chat (estante)
   pendingImageUrls?: string[];   // fotos anexadas na mensagem atual
@@ -139,6 +140,28 @@ export const AGENT_TOOLS = [
         instrucao: { type: "string", description: "Ex.: 'deixe o texto maior', 'cores mais vibrantes'." },
       },
       required: ["contentId", "instrucao"],
+    },
+  },
+  {
+    name: "editar_slide",
+    description: "Refaz UM slide específico de um carrossel (ex.: 'o slide 2 saiu com erro / fora do estilo'). Mantém os outros slides e ancora no estilo deles. Chame quando o usuário aponta um slide errado de um carrossel já gerado. Índice começa em 1 (slide 1 = capa).",
+    input_schema: {
+      type: "object",
+      properties: {
+        contentId: { type: "string", description: "ID do carrossel." },
+        slide: { type: "integer", minimum: 1, description: "Número do slide a refazer (1 = capa)." },
+        instrucao: { type: "string", description: "O que corrigir nele (ex.: 'corrige o português', 'deixa no estilo da capa', 'fundo mais escuro')." },
+      },
+      required: ["contentId", "slide", "instrucao"],
+    },
+  },
+  {
+    name: "detalhes_conteudo",
+    description: "Retorna detalhes técnicos de um conteúdo gerado (qual MODELO de imagem foi usado, prompt, formato). Chame quando o usuário pergunta 'qual modelo foi usado' ou detalhes da geração.",
+    input_schema: {
+      type: "object",
+      properties: { contentId: { type: "string" } },
+      required: ["contentId"],
     },
   },
   {
@@ -273,6 +296,66 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
       return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "GENERATE", format: "post", brandId, model, imageUrls: [input.foto_url], replicateRef: true }), "Imagem editada");
     case "editar_conteudo":
       return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "EDIT_CONTENT", contentId: input.contentId, editInstruction: input.instrucao, generationParams: { contentId: input.contentId } }), "Conteúdo ajustado");
+    case "editar_slide": {
+      const idx = Math.max(0, (Number(input.slide) || 1) - 1); // usuário conta de 1
+      const { data: content } = await ctx.userClient.from("generated_contents")
+        .select("id, slides, image_urls, brand_id, platform, content_type").eq("id", input.contentId).maybeSingle();
+      if (!content) return { ok: false, content: "Conteúdo não encontrado." };
+      const slides = Array.isArray(content.slides) ? content.slides : [];
+      if (idx < 0 || idx >= slides.length) return { ok: false, content: `Esse carrossel tem ${slides.length} slide(s) — não existe o slide ${idx + 1}.` };
+      const slide = slides[idx];
+      // Âncora: usa a imagem de OUTRO slide como referência de estilo (consistência).
+      const anchorUrl = (slides.find((s: any, j: number) => j !== idx && (s.image_url || s.background_image_url)) || {}).image_url
+        || (slides.find((s: any, j: number) => j !== idx && s.background_image_url) || {}).background_image_url || null;
+      let brandRefs: string[] = [];
+      if (content.brand_id) {
+        const { data: refs } = await ctx.userClient.from("brand_examples").select("image_url").eq("brand_id", content.brand_id).eq("purpose", "reference").limit(4);
+        brandRefs = (refs || []).map((r: any) => r.image_url).filter(Boolean);
+      }
+      const refImgs = [anchorUrl, ...brandRefs].filter(Boolean).slice(0, 6);
+      const prompt = `Refaça ESTE slide de um carrossel aplicando o ajuste: "${input.instrucao}".
+Headline: ${slide.headline || ""}${slide.body ? `\nBody: ${slide.body}` : ""}${slide.bullets?.length ? `\nBullets: ${slide.bullets.join("; ")}` : ""}
+${anchorUrl ? "A 1ª imagem anexada é OUTRO slide do MESMO carrossel — replique FIELMENTE o estilo dela (paleta, tipografia, layout, fundo, clima) para ficar consistente." : ""}
+Texto em pt-BR impecável e legível. Responda APENAS com a imagem.`;
+      const res = await fetch(`${ctx.supabaseUrl}/functions/v1/generate-slide-images`, {
+        method: "POST",
+        headers: { Authorization: ctx.userAuthHeader, apikey: ctx.anonKey, "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: ctx.userId, model, slide, slideIndex: idx, totalSlides: slides.length,
+          contentFormat: content.content_type || "carousel", platform: content.platform || "instagram",
+          backgroundOnly: false, customPrompt: prompt, brandId: content.brand_id || null,
+          referenceImageUrls: refImgs.length ? refImgs : undefined,
+        }),
+      });
+      const d = await res.json().catch(() => ({}));
+      const imageUrl = d.imageUrl || d.bgImageUrl;
+      if (!imageUrl) return { ok: false, content: "Não consegui refazer o slide agora. Tenta de novo." };
+      const newSlides = slides.map((s: any, j: number) => j === idx ? { ...s, image_url: imageUrl, background_image_url: imageUrl, render_mode: "ai_full_design" } : s);
+      const imgs = Array.isArray(content.image_urls) ? [...content.image_urls] : [];
+      imgs[idx] = imageUrl;
+      await ctx.userClient.from("generated_contents").update({ slides: newSlides, image_urls: imgs }).eq("id", content.id);
+      try { await ctx.userClient.rpc("spend_credits", { p_user: ctx.userId, p_amount: 8, p_generation_id: content.id, p_metadata: { action: "edit_slide", slide: idx + 1 } }); } catch { /* best-effort */ }
+      return { ok: true, content: `Slide ${idx + 1} refeito no estilo dos demais — o preview atualiza sozinho.`, action_result: { content_id: content.id, content_type: content.content_type || "carousel", platform: content.platform } };
+    }
+    case "detalhes_conteudo": {
+      const { data: c } = await ctx.userClient.from("generated_contents")
+        .select("title, content_type, platform, slide_count, generation_metadata").eq("id", input.contentId).maybeSingle();
+      if (!c) return { ok: false, content: "Conteúdo não encontrado." };
+      const gm: any = c.generation_metadata || {};
+      // A PRIMEIRA entrada (asc) é a geração original; ignora edições posteriores (edit_slide).
+      const { data: led } = await ctx.userClient.from("credit_ledger")
+        .select("metadata, created_at").eq("generation_id", input.contentId).eq("reason", "generation").order("created_at", { ascending: true }).limit(5);
+      const genEntry = (led || []).find((e: any) => (e.metadata as any)?.action !== "edit_slide") || (led || [])[0];
+      const action = (genEntry?.metadata as any)?.action as string | undefined;
+      const MODEL_BY_ACTION: Record<string, string> = {
+        img_gpt: "GPT-Image 2", post: "GPT-Image 2 (padrão)", carousel_slide: "GPT-Image 2 (padrão)", free_image: "GPT-Image 2",
+        img_seedream: "Seedream", img_reve: "Reve", img_ideogram: "Ideogram", img_nano: "Nano Banana Pro", story: "Nano Banana Pro",
+        img_qwen: "Qwen", img_imagen: "Imagen 4 Fast", img_recraft: "Recraft", img_flux: "Flux 1.1 Pro",
+        tweet_card: "Satori (tweet card)", editorial_slide: "Satori + foto (editorial)", edit_slide: "edição de slide",
+      };
+      const modelo = action ? (MODEL_BY_ACTION[action] || action) : "padrão (GPT-Image 2)";
+      return { ok: true, content: `"${c.title || c.content_type}" — ${c.content_type}${c.slide_count ? ` (${c.slide_count} slides)` : ""}, ${c.platform || "instagram"}. Modelo de imagem: **${modelo}**.${gm.prompt ? ` Prompt: "${String(gm.prompt).slice(0, 160)}".` : ""}` };
+    }
     case "replicar_post":
       return genResult(await callAiChat(ctx, { message: input.tema || "Recrie um post parecido com este, no estilo da marca.", intent_hint: "GENERATE", format: "post", brandId, model, imageUrls: [input.post_referencia_url], replicateRef: true }), "Post replicado");
     case "link_para_post":
