@@ -10,7 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus } from "lucide-react";
+import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks } from "lucide-react";
 import ActionCard from "@/components/chat/ActionCard";
 import ConfirmAction from "@/components/chat/ConfirmAction";
 import { useCredits } from "@/hooks/useCredits";
@@ -46,10 +46,10 @@ interface Action { contentId: string; contentType: any; platform?: string }
 interface Msg { id: string; role: "user" | "assistant"; text: string; tools: Tool[]; action?: Action }
 
 const SUGGESTIONS = [
-  "Crie um post sobre 5 sinais de burnout",
-  "Monte um carrossel com dicas de produtividade",
-  "Monte um plano de conteúdo pra essa semana",
-  "O que tenho agendado essa semana?",
+  { icon: ImageIcon, text: "Crie um post sobre 5 sinais de burnout" },
+  { icon: LayoutGrid, text: "Monte um carrossel com dicas de produtividade" },
+  { icon: CalendarClock, text: "Monte um plano de conteúdo pra essa semana" },
+  { icon: ListChecks, text: "O que tenho agendado essa semana?" },
 ];
 
 export default function AgentChat() {
@@ -261,49 +261,95 @@ export default function AgentChat() {
     }
   }
 
+  const lastId = uiMessages[uiMessages.length - 1]?.id;
+
   return (
     <div className="flex flex-col h-[calc(100dvh-0px)] max-w-3xl mx-auto w-full">
-      <div className="flex items-center gap-2 px-3 sm:px-4 py-3 border-b border-border">
-        <Bot className="w-5 h-5 text-primary shrink-0" />
+      <header className="flex items-center gap-2.5 px-3 sm:px-4 py-2.5 border-b border-border">
+        <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+          <Bot className="w-[18px] h-[18px] text-primary" />
+        </div>
         <div className="min-w-0 flex-1">
-          <h1 className="text-sm font-bold leading-tight truncate">Assistente TrendPulse <span className="text-[10px] font-medium text-primary align-middle">beta</span></h1>
-          <p className="text-[11px] text-muted-foreground leading-tight truncate">Peça posts, carrosséis, edições — eu crio, agendo e publico.</p>
+          <h1 className="flex items-center gap-1.5 text-sm font-bold leading-tight truncate">
+            Assistente
+            <span className="rounded-full bg-primary/10 text-primary text-[10px] font-semibold px-1.5 py-px leading-4">beta</span>
+          </h1>
+          <p className="text-[11px] text-muted-foreground leading-tight truncate">Eu crio no estilo da sua marca, agendo e publico.</p>
         </div>
         {balance !== null && (
-          <span className="hidden sm:inline-flex items-center gap-1 text-xs text-muted-foreground tabular-nums shrink-0"><Coins className="w-3.5 h-3.5 text-[hsl(var(--credit))]" />{balance}</span>
+          <span
+            title={`${balance} créditos disponíveis`}
+            className="inline-flex items-center gap-1 rounded-full border border-[hsl(var(--credit))]/25 bg-[hsl(var(--credit-bg))] px-2 py-0.5 text-[11px] font-bold leading-4 tabular-nums text-[hsl(var(--credit))] shrink-0"
+          >
+            <Coins className="w-3 h-3" />{balance}
+          </span>
         )}
         {uiMessages.length > 0 && (
-          <Button variant="ghost" size="sm" className="h-8 gap-1 shrink-0" onClick={handleNew} title="Nova conversa"><Plus className="w-4 h-4" /><span className="hidden sm:inline">Nova</span></Button>
+          <Button variant="ghost" size="sm" className="h-8 px-2 gap-1 shrink-0" onClick={handleNew} title="Nova conversa"><Plus className="w-4 h-4" /><span className="hidden sm:inline">Nova</span></Button>
         )}
-      </div>
+      </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 sm:px-4 py-4 space-y-4">
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 sm:px-4 py-5 space-y-4">
         {uiMessages.length === 0 && (
-          <div className="text-center pt-10 space-y-4">
-            <Sparkles className="w-8 h-8 text-primary mx-auto" />
-            <p className="text-sm text-muted-foreground">Descreva o que você quer postar — eu cuido do resto.</p>
-            <div className="flex flex-col gap-2 max-w-sm mx-auto">
-              {SUGGESTIONS.map((s) => (
-                <button key={s} onClick={() => setInput(s)} className="text-left text-sm rounded-lg border border-border px-3 py-2 hover:border-primary/40 transition-colors">{s}</button>
-              ))}
+          <div className="max-w-md mx-auto pt-8 sm:pt-12">
+            <div className="w-11 h-11 rounded-xl bg-accent/10 flex items-center justify-center mb-4">
+              <Sparkles className="w-5 h-5 text-accent" />
+            </div>
+            <h2 className="text-lg font-bold leading-snug">Do prompt ao feed.</h2>
+            <p className="text-sm text-muted-foreground mt-1 mb-5">Descreva o que você quer postar. Eu gero, aplico a marca, agendo e publico pra você.</p>
+            <div className="grid sm:grid-cols-2 gap-2">
+              {SUGGESTIONS.map((s) => {
+                const Icon = s.icon;
+                return (
+                  <button
+                    key={s.text}
+                    onClick={() => setInput(s.text)}
+                    className="group flex items-start gap-2.5 text-left text-[13px] leading-snug rounded-lg border border-border bg-card px-3 py-2.5 hover:border-primary/50 hover:bg-primary/[0.03] transition-colors duration-150"
+                  >
+                    <Icon className="w-4 h-4 mt-px text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                    <span>{s.text}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
         {uiMessages.map((m) => (
           <div key={m.id} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
-            <div className={m.role === "user" ? "max-w-[85%] rounded-2xl rounded-br-sm bg-primary text-primary-foreground px-3.5 py-2 text-sm whitespace-pre-wrap" : "max-w-[90%] sm:max-w-[88%] space-y-2"}>
+            <div className={m.role === "user" ? "max-w-[85%] rounded-2xl rounded-br-sm bg-primary text-primary-foreground px-3.5 py-2 text-sm whitespace-pre-wrap shadow-sm" : "max-w-[90%] sm:max-w-[88%] space-y-2"}>
               {m.role === "assistant" && m.tools.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
-                  {m.tools.map((t, i) => (
-                    <span key={i} className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
-                      {t.ok === undefined ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                      {TOOL_LABEL[t.name] || t.name}{t.cancelled ? " (cancelado)" : ""}
-                    </span>
-                  ))}
+                  {m.tools.map((t, i) => {
+                    const running = t.ok === undefined;
+                    const failed = t.ok === false && !t.cancelled;
+                    return (
+                      <span
+                        key={i}
+                        className={
+                          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium " +
+                          (running
+                            ? "bg-accent/10 text-accent"
+                            : failed
+                            ? "bg-destructive/10 text-destructive"
+                            : "bg-muted text-muted-foreground")
+                        }
+                      >
+                        {running ? <Loader2 className="w-3 h-3 animate-spin" /> : failed ? <AlertTriangle className="w-3 h-3" /> : t.cancelled ? <X className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                        {TOOL_LABEL[t.name] || t.name}{t.cancelled ? " (cancelado)" : ""}
+                      </span>
+                    );
+                  })}
                 </div>
               )}
               {m.text && (
                 <div className={m.role === "assistant" ? "rounded-2xl rounded-bl-sm bg-card border border-border px-3.5 py-2 text-sm whitespace-pre-wrap" : ""}>{m.text}</div>
+              )}
+              {m.role === "assistant" && sending && m.id === lastId && !m.text && !m.action && m.tools.length === 0 && (
+                <div className="flex items-center gap-1 rounded-2xl rounded-bl-sm bg-card border border-border px-3.5 py-3 w-fit" aria-label="Pensando">
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-pulse" style={{ animationDelay: "0ms" }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-pulse" style={{ animationDelay: "150ms" }} />
+                  <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground/60 animate-pulse" style={{ animationDelay: "300ms" }} />
+                </div>
               )}
               {m.action && (
                 <ActionCard contentId={m.action.contentId} contentType={m.action.contentType} platform={m.action.platform} />
@@ -323,13 +369,13 @@ export default function AgentChat() {
           <div className="flex gap-2 flex-wrap">
             {photos.map((u, i) => (
               <div key={i} className="relative">
-                <img src={u} alt="" className="w-12 h-12 rounded object-cover border border-border" />
-                <button onClick={() => setPhotos(photos.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 bg-background border border-border rounded-full p-0.5 shadow-sm"><X className="w-3 h-3" /></button>
+                <img src={u} alt="" className="w-12 h-12 rounded-md object-cover border border-border" />
+                <button onClick={() => setPhotos(photos.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 bg-background border border-border rounded-full p-0.5 shadow-sm hover:text-destructive transition-colors"><X className="w-3 h-3" /></button>
               </div>
             ))}
           </div>
         )}
-        <div className="rounded-xl border border-border bg-card overflow-hidden">
+        <div className="rounded-xl border border-border bg-card overflow-hidden focus-within:border-primary/50 transition-colors">
           <Textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -338,25 +384,25 @@ export default function AgentChat() {
             className="border-0 resize-none min-h-[56px] focus-visible:ring-0 rounded-none text-sm"
             disabled={sending}
           />
-          <div className="flex items-center gap-2 px-2.5 py-2 border-t border-border/60 bg-muted/20">
+          <div className="flex flex-wrap items-center gap-2 px-2.5 py-2 border-t border-border/60 bg-muted/20">
             {brands.length > 0 && (
-              <select value={brandId} onChange={(e) => setBrandId(e.target.value)} className="text-xs bg-background border border-border rounded-md px-2 py-1.5 max-w-[110px] sm:max-w-[130px]">
+              <select value={brandId} onChange={(e) => setBrandId(e.target.value)} title="Marca aplicada" className="h-8 text-xs bg-background border border-border rounded-md px-2 max-w-[110px] sm:max-w-[140px] focus-visible:outline-none focus-visible:border-primary/50 transition-colors">
                 <option value="">Sem marca</option>
                 {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             )}
-            <select value={model} onChange={(e) => setModel(e.target.value)} title="Modelo de imagem" className="text-xs bg-background border border-border rounded-md px-2 py-1.5 max-w-[120px] sm:max-w-[150px]">
+            <select value={model} onChange={(e) => setModel(e.target.value)} title="Modelo de imagem" className="h-8 text-xs bg-background border border-border rounded-md px-2 max-w-[120px] sm:max-w-[160px] focus-visible:outline-none focus-visible:border-primary/50 transition-colors">
               {MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
-            <label className="inline-flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-md px-2 py-1.5 cursor-pointer hover:border-primary/40">
+            <label className="inline-flex items-center gap-1 h-8 text-xs text-muted-foreground border border-border rounded-md px-2 cursor-pointer hover:border-primary/40 hover:text-foreground transition-colors">
               {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">Fotos</span>
               <input type="file" accept="image/*" multiple className="hidden" onChange={handleUpload} disabled={uploading} />
             </label>
             {sending ? (
-              <Button onClick={handleStop} variant="outline" className="ml-auto h-8 gap-1.5"><Square className="w-3.5 h-3.5" /> Parar</Button>
+              <Button onClick={handleStop} variant="outline" size="sm" className="ml-auto h-8 gap-1.5"><Square className="w-3.5 h-3.5" /> Parar</Button>
             ) : (
-              <Button onClick={handleSend} disabled={!input.trim()} className="ml-auto h-8 gap-1.5"><Send className="w-4 h-4" /> Enviar</Button>
+              <Button onClick={handleSend} disabled={!input.trim()} size="sm" className="ml-auto h-8 gap-1.5"><Send className="w-4 h-4" /> Enviar</Button>
             )}
           </div>
         </div>
