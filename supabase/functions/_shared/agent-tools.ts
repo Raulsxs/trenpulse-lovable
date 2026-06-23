@@ -12,6 +12,7 @@ export interface ToolCtx {
   anonKey: string;
   userAuthHeader: string;        // "Bearer <jwt do usuário>"
   userClient: any;               // supabase client com auth do usuário (RLS)
+  anthropicKey: string;          // p/ tools que usam modelo (planejar_calendario → Sonnet)
   defaultBrandId?: string | null;
   pendingImageUrls?: string[];   // fotos anexadas na mensagem atual
 }
@@ -178,6 +179,19 @@ export const AGENT_TOOLS = [
     },
   },
   {
+    name: "planejar_calendario",
+    description: "Monta um PLANO de calendário de conteúdo (vários dias/temas). Chame quando o usuário pede um planejamento/cronograma (ex.: 'plano semanal de medicina: segunda sobre prevenção, terça sobre…'). Retorna o plano dia a dia para o usuário aprovar — NÃO gera nem agenda nada sozinho; depois o usuário decide.",
+    input_schema: {
+      type: "object",
+      properties: {
+        objetivo: { type: "string", description: "O que o usuário quer planejar." },
+        dias: { type: "integer", minimum: 1, maximum: 14, description: "Quantos dias (padrão 7)." },
+        temas: { type: "string", description: "Temas/observações específicas do usuário, se houver." },
+      },
+      required: ["objetivo"],
+    },
+  },
+  {
     name: "publicar",
     description: "PUBLICA AGORA um conteúdo já gerado nas redes. AÇÃO IRREVERSÍVEL — sempre será confirmada pelo usuário antes de efetivar. Chame com o content_id.",
     input_schema: {
@@ -272,6 +286,31 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
       const d = res && res.ok ? await res.json().catch(() => ({})) : {};
       const list = (d?.trends || d?.data || []).slice(0, 6).map((t: any) => `• ${t.title || t.headline || t}`).join("\n");
       return { ok: true, content: list ? `Tendências:\n${list}` : "Não encontrei tendências agora." };
+    }
+
+    case "planejar_calendario": {
+      // Planejamento multi-passo usa Sonnet 4.6 (mais inteligente) — isolado neste tool;
+      // o resto do agente roda em Haiku. Retorna o plano pro usuário aprovar.
+      const dias = Math.min(14, Math.max(1, input.dias || 7));
+      const amanha = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+      const prompt = `Você é estrategista de conteúdo para redes sociais. Monte um plano de ${dias} dias começando em ${amanha}.
+OBJETIVO: ${input.objetivo}
+${input.temas ? `TEMAS/OBSERVAÇÕES: ${input.temas}` : ""}
+Para cada dia dê: data (YYYY-MM-DD), tema (específico, não genérico), formato (post | carrossel | story), e um gancho curto.
+Responda em português, como uma lista dia a dia clara e enxuta pro usuário aprovar. No fim, pergunte se ele quer que você gere e agende.`;
+      try {
+        const res = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": ctx.anthropicKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1500, messages: [{ role: "user", content: prompt }] }),
+        });
+        const d = await res.json();
+        if (!res.ok) return { ok: false, content: `Não consegui montar o plano agora (${d?.error?.message || res.status}).` };
+        const text = (d.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
+        return { ok: true, content: text || "Plano vazio — peça ao usuário pra detalhar o objetivo." };
+      } catch (e: any) {
+        return { ok: false, content: `Erro ao planejar: ${e?.message || e}` };
+      }
     }
 
     // ── Gated (só chegam aqui DEPOIS de confirmadas pelo usuário) ──

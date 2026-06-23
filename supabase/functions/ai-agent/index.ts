@@ -75,6 +75,7 @@ Deno.serve(async (req) => {
   }
   const ctx: ToolCtx = {
     supabaseUrl, anonKey, userAuthHeader: authHeader, userClient,
+    anthropicKey,
     defaultBrandId: body.brandId ?? null,
     pendingImageUrls: Array.isArray(body.imageUrls) ? body.imageUrls : [],
   };
