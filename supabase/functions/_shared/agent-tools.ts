@@ -14,6 +14,7 @@ export interface ToolCtx {
   userClient: any;               // supabase client com auth do usuário (RLS)
   anthropicKey: string;          // p/ tools que usam modelo (planejar_calendario → Sonnet)
   defaultBrandId?: string | null;
+  defaultModel?: string | null;  // modelo de imagem selecionado no chat (estante)
   pendingImageUrls?: string[];   // fotos anexadas na mensagem atual
 }
 
@@ -57,6 +58,7 @@ export const AGENT_TOOLS = [
       properties: {
         tema: { type: "string", description: "O ASSUNTO do post (não uma instrução). Ex.: 'hábitos para mais energia'." },
         brandId: { type: "string", description: "ID da marca a aplicar (opcional; usa a marca padrão se omitido)." },
+        modelo: { type: "string", enum: ["gpt-image-2", "reve", "ideogram", "seedream", "imagen-fast", "nano-banana", "qwen", "recraft", "flux-pro"], description: "Só preencha se o usuário pedir um modelo específico. Senão o app usa o selecionado no chat." },
       },
       required: ["tema"],
     },
@@ -70,6 +72,7 @@ export const AGENT_TOOLS = [
         tema: { type: "string" },
         slides: { type: "integer", minimum: 3, maximum: 10, description: "Nº de slides (padrão 5)." },
         brandId: { type: "string" },
+        modelo: { type: "string", enum: ["gpt-image-2", "reve", "ideogram", "seedream", "imagen-fast", "nano-banana", "qwen", "recraft", "flux-pro"], description: "Só preencha se o usuário pedir um modelo específico." },
       },
       required: ["tema"],
     },
@@ -128,7 +131,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "editar_conteudo",
-    description: "Regenera um conteúdo JÁ GERADO com um ajuste (texto maior, outras cores, refazer). Chame quando o usuário pede para mudar um post que já existe (precisa do content_id retornado por uma geração anterior).",
+    description: "Regenera a IMAGEM PRINCIPAL de um conteúdo já gerado com um ajuste (texto maior, outras cores, refazer). IMPORTANTE: NÃO edita nem remove slides individuais de um carrossel — regenera a peça principal. Se o usuário quer trocar UM slide específico de um carrossel, diga que a edição por-slide ainda não está disponível por aqui (em breve), e ofereça refazer o conteúdo. Precisa do content_id de uma geração anterior.",
     input_schema: {
       type: "object",
       properties: {
@@ -249,11 +252,13 @@ function genResult(data: any, kind: string): ToolResult {
 
 export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Promise<ToolResult> {
   const brandId = input?.brandId || ctx.defaultBrandId || undefined;
+  // Modelo: o que o usuário nomeou na fala (input.modelo) vence o selecionado no chat (defaultModel).
+  const model = input?.modelo || ctx.defaultModel || undefined;
   switch (name) {
     case "gerar_post":
-      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "post", brandId }), "Post");
+      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "post", brandId, model }), "Post");
     case "gerar_carrossel":
-      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_CAROUSEL", format: "carousel", brandId, generationParams: input.slides ? { slideCount: input.slides } : undefined }), "Carrossel");
+      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_CAROUSEL", format: "carousel", brandId, model, generationParams: input.slides ? { slideCount: input.slides } : undefined }), "Carrossel");
     case "gerar_story":
       return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "story", brandId }), "Story");
     case "gerar_tweet_card":
@@ -263,13 +268,13 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
       return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_EDITORIAL_CAROUSEL", format: "carousel", brandId, imageUrls: fotos, generationParams: { slideCount: fotos.length || 5 } }), "Carrossel editorial");
     }
     case "imagem_livre":
-      return genResult(await callAiChat(ctx, { message: input.descricao, intent_hint: "FREE_IMAGE" }), "Imagem");
+      return genResult(await callAiChat(ctx, { message: input.descricao, intent_hint: "FREE_IMAGE", model }), "Imagem");
     case "editar_imagem":
-      return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "GENERATE", format: "post", brandId, imageUrls: [input.foto_url], replicateRef: true }), "Imagem editada");
+      return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "GENERATE", format: "post", brandId, model, imageUrls: [input.foto_url], replicateRef: true }), "Imagem editada");
     case "editar_conteudo":
       return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "EDIT_CONTENT", contentId: input.contentId, editInstruction: input.instrucao, generationParams: { contentId: input.contentId } }), "Conteúdo ajustado");
     case "replicar_post":
-      return genResult(await callAiChat(ctx, { message: input.tema || "Recrie um post parecido com este, no estilo da marca.", intent_hint: "GENERATE", format: "post", brandId, imageUrls: [input.post_referencia_url], replicateRef: true }), "Post replicado");
+      return genResult(await callAiChat(ctx, { message: input.tema || "Recrie um post parecido com este, no estilo da marca.", intent_hint: "GENERATE", format: "post", brandId, model, imageUrls: [input.post_referencia_url], replicateRef: true }), "Post replicado");
     case "link_para_post":
       return genResult(await callAiChat(ctx, { message: `${input.url}${input.brandId ? "" : ""}`, intent_hint: "LINK_PARA_POST", brandId }), "Post do link");
 

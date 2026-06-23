@@ -28,6 +28,18 @@ const TOOL_LABEL: Record<string, string> = {
   agendar_conteudo: "Agendando…", publicar: "Publicando…",
 };
 
+const MODELS = [
+  { id: "gpt-image-2", label: "GPT-Image · texto + marca" },
+  { id: "reve", label: "Reve · texto pt-BR impecável" },
+  { id: "ideogram", label: "Ideogram · copia estilo" },
+  { id: "seedream", label: "Seedream · rápido" },
+  { id: "imagen-fast", label: "Imagen · rápido" },
+  { id: "nano-banana", label: "Nano Banana · 9:16/premium" },
+  { id: "qwen", label: "Qwen · fotos" },
+  { id: "recraft", label: "Recraft · design" },
+  { id: "flux-pro", label: "Flux Pro · fotorrealismo" },
+];
+
 interface Tool { name: string; ok?: boolean; cancelled?: boolean }
 interface Action { contentId: string; contentType: any; platform?: string }
 interface Msg { id: string; role: "user" | "assistant"; text: string; tools: Tool[]; action?: Action }
@@ -45,6 +57,7 @@ export default function AgentChat() {
   const [sending, setSending] = useState(false);
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
   const [brandId, setBrandId] = useState<string>("");
+  const [model, setModel] = useState<string>("gpt-image-2");
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<any>(null);
@@ -56,6 +69,7 @@ export default function AgentChat() {
   const abortRef = useRef<AbortController | null>(null);
   const storeKey = useRef<string>("");
   const uiRef = useRef<Msg[]>([]);
+  const toolBreak = useRef(false);   // separa texto pré/pós tool no mesmo balão
 
   useEffect(() => { uiRef.current = uiMessages; }, [uiMessages]);
 
@@ -90,13 +104,21 @@ export default function AgentChat() {
 
   function handleEvent(evt: any) {
     switch (evt.type) {
-      case "text":
-        patchCur((m) => ({ ...m, text: m.text + (evt.delta || "") }));
+      case "text": {
+        const delta = evt.delta || "";
+        if (toolBreak.current) {
+          toolBreak.current = false;
+          patchCur((m) => ({ ...m, text: m.text + (m.text && !m.text.endsWith("\n") ? "\n\n" : "") + delta }));
+        } else {
+          patchCur((m) => ({ ...m, text: m.text + delta }));
+        }
         break;
+      }
       case "tool_start":
         patchCur((m) => ({ ...m, tools: [...m.tools, { name: evt.name }] }));
         break;
       case "tool_done":
+        toolBreak.current = true;
         patchCur((m) => {
           const tools = [...m.tools];
           for (let i = tools.length - 1; i >= 0; i--) if (tools[i].name === evt.name && tools[i].ok === undefined) { tools[i] = { ...tools[i], ok: evt.ok, cancelled: evt.cancelled }; break; }
@@ -128,6 +150,7 @@ export default function AgentChat() {
     abortRef.current = ac;
     const aId = newId();
     curId.current = aId;
+    toolBreak.current = false;
     setUiMessages((ms) => [...ms, { id: aId, role: "assistant", text: "", tools: [] }]);
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -171,7 +194,7 @@ export default function AgentChat() {
     setPhotos([]);
     setUiMessages((ms) => [...ms, { id: newId(), role: "user", text, tools: [] }]);
     convo.current = [...convo.current, { role: "user", content: text }];
-    await streamAgent({ messages: convo.current, brandId: brandId || undefined, imageUrls: photosNow });
+    await streamAgent({ messages: convo.current, brandId: brandId || undefined, model, imageUrls: photosNow });
   }
 
   async function handleConfirm(approved: boolean) {
@@ -294,11 +317,14 @@ export default function AgentChat() {
           />
           <div className="flex items-center gap-2 px-2.5 py-2 border-t border-border/60 bg-muted/20">
             {brands.length > 0 && (
-              <select value={brandId} onChange={(e) => setBrandId(e.target.value)} className="text-xs bg-background border border-border rounded-md px-2 py-1.5 max-w-[120px] sm:max-w-[140px]">
+              <select value={brandId} onChange={(e) => setBrandId(e.target.value)} className="text-xs bg-background border border-border rounded-md px-2 py-1.5 max-w-[110px] sm:max-w-[130px]">
                 <option value="">Sem marca</option>
                 {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             )}
+            <select value={model} onChange={(e) => setModel(e.target.value)} title="Modelo de imagem" className="text-xs bg-background border border-border rounded-md px-2 py-1.5 max-w-[120px] sm:max-w-[150px]">
+              {MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+            </select>
             <label className="inline-flex items-center gap-1 text-xs text-muted-foreground border border-border rounded-md px-2 py-1.5 cursor-pointer hover:border-primary/40">
               {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">Fotos</span>
