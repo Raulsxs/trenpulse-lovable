@@ -1342,6 +1342,9 @@ Responda em JSON:
         const useAnchor = !isPhotoBackground && slides.length > 1;
         const anchorRef: string[] = [];
         const genSlide = async (slide: any, i: number) => {
+            // Escalona a largada: N slides disparando juntos estouravam o rate-limit do Replicate
+            // (429) → slide sem imagem. Espalhar ~800ms por índice + o retry do callReplicate resolve.
+            if (i > 0) await new Promise((r) => setTimeout(r, i * 800));
             const refs = (anchorRef.length && i > 0) ? [...anchorRef, ...referenceImageUrls].slice(0, 6) : referenceImageUrls;
             const carouselHasStyleRefs = refs.length > 0;
             const slideAnchorBlock = (anchorRef.length && i > 0)

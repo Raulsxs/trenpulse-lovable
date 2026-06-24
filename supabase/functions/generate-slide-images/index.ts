@@ -139,30 +139,47 @@ async function callReplicate(modelId: string, prompt: string, aspectRatio: strin
   const token = Deno.env.get("REPLICATE_API_TOKEN");
   const entry = REPLICATE_REGISTRY[modelId];
   if (!token || !entry) return null;
-  try {
-    const input = entry.build(prompt, aspectRatio, refImages);
-    const res = await fetch(`https://api.replicate.com/v1/models/${entry.slug}/predictions`, {
-      method: "POST",
-      headers: { Authorization: `Token ${token}`, "Content-Type": "application/json", Prefer: "wait" },
-      body: JSON.stringify({ input }),
-    });
-    if (!res.ok) { console.warn(`[replicate] ${entry.slug} HTTP ${res.status}: ${(await res.text()).substring(0, 200)}`); return null; }
-    let pred = await res.json();
-    // Prefer:wait bloqueia até ~60s; modelos lentos (gpt medium) voltam "processing" → poll até ~115s.
-    const start = Date.now();
-    while (pred.status && !["succeeded", "failed", "canceled"].includes(pred.status) && Date.now() - start < 115000) {
-      await new Promise((r) => setTimeout(r, 2000));
-      const pr = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, { headers: { Authorization: `Token ${token}` } });
-      if (!pr.ok) break;
-      pred = await pr.json();
+  const input = entry.build(prompt, aspectRatio, refImages);
+
+  // Retry com backoff + jitter: sob carrossel, N slides disparam em paralelo e o Replicate
+  // devolve 429 (rate-limit) em alguns → antes virava null sem retry (slide sem imagem).
+  // 429 e 5xx são transitórios → re-tenta; 4xx permanente (ex: 400) → desiste.
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 1200 * attempt + Math.floor(Math.random() * 900)));
+    try {
+      const res = await fetch(`https://api.replicate.com/v1/models/${entry.slug}/predictions`, {
+        method: "POST",
+        headers: { Authorization: `Token ${token}`, "Content-Type": "application/json", Prefer: "wait" },
+        body: JSON.stringify({ input }),
+      });
+      if (!res.ok) {
+        console.warn(`[replicate] ${entry.slug} HTTP ${res.status} (tentativa ${attempt + 1}): ${(await res.text()).substring(0, 150)}`);
+        if (res.status === 429 || res.status >= 500) continue; // transitório → retry
+        return null; // erro permanente
+      }
+      let pred = await res.json();
+      // Prefer:wait bloqueia até ~60s; modelos lentos (gpt medium) voltam "processing" → poll até ~115s.
+      const start = Date.now();
+      while (pred.status && !["succeeded", "failed", "canceled"].includes(pred.status) && Date.now() - start < 115000) {
+        await new Promise((r) => setTimeout(r, 2000));
+        const pr = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, { headers: { Authorization: `Token ${token}` } });
+        if (!pr.ok) break;
+        pred = await pr.json();
+      }
+      if (pred.status === "succeeded") {
+        const out = Array.isArray(pred.output) ? pred.output[0] : pred.output;
+        return typeof out === "string" ? out : (out?.url || null);
+      }
+      console.warn(`[replicate] ${entry.slug} status=${pred.status} (tentativa ${attempt + 1})`);
+      if (pred.status === "failed") continue; // geração falhou → retry
+      return null;
+    } catch (e: any) {
+      console.warn(`[replicate] ${modelId} exceção (tentativa ${attempt + 1}): ${e?.message}`);
+      // rede/timeout → retry
     }
-    if (pred.status !== "succeeded") { console.warn(`[replicate] ${entry.slug} status=${pred.status}`); return null; }
-    const out = Array.isArray(pred.output) ? pred.output[0] : pred.output;
-    return typeof out === "string" ? out : (out?.url || null);
-  } catch (e: any) {
-    console.warn(`[replicate] ${modelId} exception: ${e?.message}`);
-    return null;
   }
+  console.warn(`[replicate] ${entry.slug} esgotou retries`);
+  return null;
 }
 
 serve(async (req) => {
