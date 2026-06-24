@@ -25,6 +25,8 @@
  *   const imageUrl = result.choices[0].message.images?.[0]?.image_url?.url;
  */
 
+import Anthropic from "npm:@anthropic-ai/sdk";
+
 interface AIConfig {
   url: string;
   apiKey: string;
@@ -262,10 +264,10 @@ export async function fetchAI(request: FetchAIRequest): Promise<FetchAIResponse>
     return fetchOpenAICompatible(config, request);
   }
 
-  // Text generation — Claude Haiku 4.5 SERIA o motor primário, mas em 2026-06-23 o fetchClaude
-  // causou HANG no /chat ("gira e nunca termina") → DESATIVADO atrás de flag até diagnosticar.
-  // Sem USE_CLAUDE_TEXT volta ao comportamento estável (minimax/inference.sh) — não quebra o Maikon.
-  // Reativar: setar secret USE_CLAUDE_TEXT=1 (já com timeouts no fetchClaude).
+  // Text generation — Claude Haiku 4.5 é o motor primário (secret USE_CLAUDE_TEXT=1, ativo 2026-06-23).
+  // O hang anterior NÃO era o fetchClaude (diag provou: estrutura JSON em ~5s) e sim a cascata de
+  // fallback SEM timeout. Agora fetchClaude usa o SDK com timeout 35s + Replicate com timeout → não pendura.
+  // A flag é o KILL-SWITCH: `supabase secrets unset USE_CLAUDE_TEXT` volta na hora pro minimax.
   if (Deno.env.get("ANTHROPIC_API_KEY") && Deno.env.get("USE_CLAUDE_TEXT")) {
     return fetchClaude(request);
   }
@@ -318,33 +320,24 @@ async function fetchClaude(request: FetchAIRequest): Promise<FetchAIResponse> {
   };
 
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({
-        model: CLAUDE_TEXT_MODEL,
-        max_tokens: maxTokens,
-        temperature,
-        ...(system ? { system } : {}),
-        messages: chat,
-      }),
+    // SDK Anthropic (mesmo caminho do orquestrador /agent, comprovado no diag) com timeout DURO
+    // de 35s + 1 retry → nunca pendura (a causa do hang anterior era a cascata sem timeout).
+    const client = new Anthropic({ apiKey, timeout: 35000, maxRetries: 1 });
+    const msg: any = await client.messages.create({
+      model: CLAUDE_TEXT_MODEL,
+      max_tokens: maxTokens,
+      temperature,
+      ...(system ? { system } : {}),
+      messages: chat as any,
     });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error(`[ai-gateway] Claude text error [${res.status}]: ${errText.substring(0, 300)}`);
-      return fallback(`HTTP ${res.status}`);
-    }
-
-    const data = await res.json();
-    const text = (data.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+    const text = (msg.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
     if (!text || !text.trim()) return fallback("resposta vazia");
 
     console.log(`[ai-gateway] Claude text ok: ${text.length} chars (${CLAUDE_TEXT_MODEL})`);
-    return { ok: true, status: 200, choices: [{ message: { content: text } }], raw: data };
+    return { ok: true, status: 200, choices: [{ message: { content: text } }], raw: msg };
   } catch (e: any) {
-    console.error(`[ai-gateway] Claude text exception: ${e?.message}`);
-    return fallback("exceção");
+    console.error(`[ai-gateway] Claude text exception: ${e?.status || ""} ${e?.message}`);
+    return fallback(`exceção ${e?.status || ""}`);
   }
 }
 
@@ -367,21 +360,28 @@ async function fetchClaudeReplicate(request: FetchAIRequest): Promise<FetchAIRes
     : chat.map((m) => `${m.role === "assistant" ? "Assistant" : "User"}: ${toText(m)}`).join("\n\n");
   const maxTokens = typeof request.max_tokens === "number" ? Math.min(request.max_tokens, 8192) : 4096;
 
+  // Timeout duro em cada fetch (Prefer:wait pode segurar a conexão) — o fallback NUNCA pendura.
+  const tfetch = (url: string, init: RequestInit, ms: number) => {
+    const ctrl = new AbortController();
+    const t = setTimeout(() => ctrl.abort(), ms);
+    return fetch(url, { ...init, signal: ctrl.signal }).finally(() => clearTimeout(t));
+  };
+
   try {
-    const res = await fetch(`https://api.replicate.com/v1/models/${CLAUDE_REPLICATE_SLUG}/predictions`, {
+    const res = await tfetch(`https://api.replicate.com/v1/models/${CLAUDE_REPLICATE_SLUG}/predictions`, {
       method: "POST",
       headers: { Authorization: `Token ${token}`, "Content-Type": "application/json", Prefer: "wait" },
       body: JSON.stringify({ input: { prompt, ...(system ? { system_prompt: system } : {}), max_tokens: maxTokens } }),
-    });
+    }, 35000);
     if (!res.ok) {
       console.error(`[ai-gateway] Replicate Haiku HTTP ${res.status}: ${(await res.text()).substring(0, 200)}`);
       return { ok: false, status: res.status, choices: [{ message: { content: "" } }] };
     }
     let pred = await res.json();
     const start = Date.now();
-    while (pred.status && !["succeeded", "failed", "canceled"].includes(pred.status) && Date.now() - start < 60000) {
+    while (pred.status && !["succeeded", "failed", "canceled"].includes(pred.status) && Date.now() - start < 35000) {
       await new Promise((r) => setTimeout(r, 1500));
-      const pr = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, { headers: { Authorization: `Token ${token}` } });
+      const pr = await tfetch(`https://api.replicate.com/v1/predictions/${pred.id}`, { headers: { Authorization: `Token ${token}` } }, 10000);
       if (!pr.ok) break;
       pred = await pr.json();
     }
