@@ -1281,7 +1281,7 @@ ${articleSnippet ? `Contexto (NÃO incluir na imagem):\n${articleSnippet}\n` : "
 FIDELIDADE VISUAL:
 - Replique EXATAMENTE o estilo das referências: cores, tipografia, mockups, cards, shapes, decorações.
 - Use as MESMAS cores, gradientes, formas e proporções.
-${contentFormat === "carousel" ? "- TODOS os slides do carrossel DEVEM ter o mesmo estilo visual — como uma série.\n" : ""}- Safe area: margem mínima de 80px em TODAS as bordas.
+${contentFormat === "carousel" ? "- TODOS os slides do carrossel DEVEM ter o mesmo estilo visual — como uma série.\n" : ""}- SAFE AREA: todo texto vive dentro de uma moldura a 15% de CADA borda; largura de qualquer linha no MÁXIMO 70% da imagem (quebre em mais linhas se não couber). NENHUMA letra cortada ou encostada na borda — na dúvida, fonte menor.
 - FORMATO: ${orientation} (${aspectRatio}, ${dimensions}px).
 
 PROIBIÇÕES:

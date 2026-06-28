@@ -129,13 +129,15 @@ async function extractArticleContent(rawUrl: string, tag: string): Promise<strin
   }
 }
 
-// Strong safe-area rules to prevent text being cropped at edges
-const SAFE_AREA_RULES = `SAFE AREA — REGRA CRÍTICA (não pode ser violada):
-- Reserve uma margem interna de PELO MENOS 12% da altura/largura em TODAS as bordas (topo, base, esquerda, direita) onde NENHUM texto, letra, número, logo ou elemento essencial pode aparecer.
-- TODO o texto (títulos, subtítulos, frases, CTAs) deve estar 100% DENTRO da área central segura — NUNCA encostando ou sendo cortado pelas bordas.
-- Se o texto for grande, REDUZA o tamanho da fonte para caber inteiro dentro da safe area, em vez de estender até as bordas.
-- A imagem é quadrada/vertical fechada — não há "fora do quadro". Tudo que importa precisa estar visível inteiro.
-- Verifique mentalmente: a primeira e a última letra de cada linha de texto estão longe das bordas? Se não, recompor.`;
+// Strong safe-area rules to prevent text being cropped at edges.
+// Linguagem que um modelo de difusão obedece: % relativo (não px — ele não tem régua),
+// teto de LARGURA DE LINHA (é o que faz a letra da ponta sangrar) e regra de quebra de linha.
+const SAFE_AREA_RULES = `SAFE AREA — REGRA INVIOLÁVEL (texto cortado = FALHA GRAVE):
+- Imagine uma moldura invisível a 15% de distância de CADA borda (topo, base, esquerda, direita). TODO texto, número e logo vive 100% DENTRO dessa moldura, com respiro visível até a borda.
+- A largura de QUALQUER linha de texto é no MÁXIMO 70% da largura da imagem. Se uma palavra ou frase não couber nesse limite, QUEBRE em mais de uma linha — NUNCA estique a palavra até a borda.
+- PROIBIDO: qualquer letra cortada, encostada ou sangrando na borda. A PRIMEIRA e a ÚLTIMA letra de cada linha precisam de espaço claro até a lateral.
+- Na dúvida entre "fonte grande/impactante" e "texto que cabe inteiro", SEMPRE escolha a fonte menor. Caber inteiro vence impacto.
+- Centralize horizontalmente os blocos de texto para garantir margem igual nos dois lados.`;
 
 // Prevents Gemini from generating UI screenshots instead of the actual design content
 const NO_UI_MOCKUP_RULE = `PROIBIDO ABSOLUTO — NUNCA gere screenshots, prints, mockups ou simulações de interface de rede social. Não mostre o app do Instagram, TikTok, Twitter, LinkedIn ou qualquer plataforma. Não inclua elementos de UI da plataforma: feed, header de perfil (foto + nome + seguidores), botão "Turbinar post", curtidas, comentários, barra de stories, notificações, frame de celular.
@@ -1370,8 +1372,7 @@ REGRAS:
 - Imagem COMPLETA com texto integrado, pronta para publicar, TEXTO EM PT-BR
 - Manter identidade visual consistente entre slides
 - Texto legível, fonte profissional
-${carouselHasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas (mas TRADUZA qualquer texto delas para pt-BR).\n" : ""}- Safe area: margem mínima de 80px em todas as bordas
-- NUNCA inclua URLs, QR codes, @handles inventados
+${carouselHasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas (mas TRADUZA qualquer texto delas para pt-BR).\n" : ""}- NUNCA inclua URLs, QR codes, @handles inventados
 - Formato: ${dims.w}x${dims.h}px
 ${i === 0 ? "- Este é o COVER: título grande, impactante" : ""}
 ${slide.role === "cta" ? "- Este é o ÚLTIMO slide: chamada para ação clara" : ""}
