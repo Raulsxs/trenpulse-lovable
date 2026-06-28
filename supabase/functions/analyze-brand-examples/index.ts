@@ -1,22 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { fetchAI } from "../_shared/ai-gateway.ts";
-
-async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
-  try {
-    const result = await fetchAI(body as any);
-    return new Response(JSON.stringify({ choices: result.choices }), {
-      status: result.ok ? 200 : (result.status || 500),
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (err: any) {
-    console.error("[aiGatewayFetch] Exception:", err?.message || err);
-    return new Response(JSON.stringify({ choices: [{ message: { content: "" } }], error: err?.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-}
+import { fetchVisionJson } from "../_shared/ai-gateway.ts";
+import { parseLlmJson } from "../_shared/llm-json.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -206,39 +191,31 @@ Return this EXACT JSON structure:
       });
     }
 
-    const response = await aiGatewayFetch({
-      model: "google/gemini-2.5-pro",
-      messages: [{ role: "user", content: contentParts }],
-    });
+    // VISÃO REAL: as imagens precisam CHEGAR ao modelo. fetchAI/fetchClaude descartavam imagens
+    // (tratam tudo como texto) → style_guide saía sem ver a marca. fetchVisionJson usa Claude
+    // multimodal via ANTHROPIC_API_KEY (key nossa, dedicada).
+    const textPrompt = contentParts.find((p: any) => p.type === "text")?.text || "";
+    const imageUrls = imagesToSend.map((e: any) => e.image_url).filter(Boolean);
+    const vision = await fetchVisionJson(textPrompt, imageUrls, { maxTokens: 4096 });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      console.error(`[analyze-brand-examples] AI error: ${response.status}`, errText);
-      if (response.status === 429) {
-        return new Response(JSON.stringify({ error: "Rate limit exceeded, tente novamente em alguns minutos." }), {
+    if (!vision.ok) {
+      console.error(`[analyze-brand-examples] vision error: ${vision.status}`);
+      if (vision.status === 429) {
+        return new Response(JSON.stringify({ error: "Rate limit, tente novamente em alguns minutos." }), {
           status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" },
         });
       }
-      if (response.status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos insuficientes. Adicione créditos ao workspace." }), {
-          status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      throw new Error(`AI gateway error: ${response.status}`);
+      throw new Error(`Vision gateway error: ${vision.status}`);
     }
 
-    const aiData = await response.json();
-    const rawContent = aiData.choices?.[0]?.message?.content || "";
-    console.log(`[analyze-brand-examples] AI response length: ${rawContent.length}`);
+    const rawContent = vision.text;
+    console.log(`[analyze-brand-examples] vision response length: ${rawContent.length}`);
 
-    // Parse JSON from response
-    const jsonMatch = rawContent.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
+    const styleGuide = parseLlmJson<any>(rawContent);
+    if (!styleGuide) {
       console.error("[analyze-brand-examples] Could not parse JSON from:", rawContent.substring(0, 500));
       throw new Error("Failed to parse style guide from AI response");
     }
-
-    const styleGuide = JSON.parse(jsonMatch[0]);
     console.log(`[analyze-brand-examples] Style preset: ${styleGuide.style_preset}, confidence: ${styleGuide.confidence}`);
 
     // Save to brands with version tracking

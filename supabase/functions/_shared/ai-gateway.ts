@@ -341,6 +341,112 @@ async function fetchClaude(request: FetchAIRequest): Promise<FetchAIResponse> {
   }
 }
 
+// ── Claude com VISÃO — análise de imagens → JSON (style_guide da marca) ──
+// Caminho dedicado porque fetchAI/fetchClaude trata tudo como texto e DESCARTA imagens.
+// Usa a ANTHROPIC_API_KEY (key nossa, dedicada — não a GOOGLE do Maikon, não inativa).
+// Claude é multimodal e forte em JSON estruturado; roda 1x por marca (custo desprezível).
+const CLAUDE_VISION_MODEL = "claude-sonnet-4-6";
+const GEMINI_VISION_SLUG = "google/gemini-2.5-flash"; // multimodal no Replicate (key com crédito), até 10 imgs
+
+// Visão (style_guide da marca): Replicate Gemini PRIMÁRIO (a key Anthropic vive zerando crédito),
+// Claude/Anthropic como fallback. Consolida no Replicate. Output Replicate = array de strings.
+export async function fetchVisionJson(
+  textPrompt: string,
+  imageUrls: string[],
+  opts?: { model?: string; maxTokens?: number },
+): Promise<{ ok: boolean; text: string; status: number }> {
+  if (Deno.env.get("REPLICATE_API_TOKEN")) {
+    const rep = await fetchVisionReplicate(textPrompt, imageUrls, opts);
+    if (rep.ok) return rep;
+    console.warn(`[ai-gateway] vision Replicate falhou (${rep.status}: ${rep.text.slice(0, 80)}) — fallback Anthropic`);
+  }
+  return fetchVisionAnthropic(textPrompt, imageUrls, opts);
+}
+
+async function fetchVisionReplicate(
+  textPrompt: string,
+  imageUrls: string[],
+  opts?: { maxTokens?: number },
+): Promise<{ ok: boolean; text: string; status: number }> {
+  const token = Deno.env.get("REPLICATE_API_TOKEN");
+  if (!token) return { ok: false, text: "sem token", status: 500 };
+  const input = {
+    prompt: textPrompt,
+    images: imageUrls.filter(Boolean).slice(0, 10),
+    thinking_budget: 0, // direto ao JSON, sem reasoning
+    max_output_tokens: opts?.maxTokens || 8192,
+  };
+  const tfetch = (url: string, init: RequestInit, ms: number) => {
+    const c = new AbortController(); const t = setTimeout(() => c.abort(), ms);
+    return fetch(url, { ...init, signal: c.signal }).finally(() => clearTimeout(t));
+  };
+  try {
+    const res = await tfetch(`https://api.replicate.com/v1/models/${GEMINI_VISION_SLUG}/predictions`, {
+      method: "POST", headers: { Authorization: `Token ${token}`, "Content-Type": "application/json", Prefer: "wait" },
+      body: JSON.stringify({ input }),
+    }, 40000);
+    if (!res.ok) { const b = await res.text(); console.error(`[ai-gateway] vision Replicate HTTP ${res.status}: ${b.slice(0, 150)}`); return { ok: false, text: b.slice(0, 200), status: res.status }; }
+    let pred = await res.json();
+    const start = Date.now();
+    while (pred.status && !["succeeded", "failed", "canceled"].includes(pred.status) && Date.now() - start < 60000) {
+      await new Promise((r) => setTimeout(r, 1500));
+      const pr = await tfetch(`https://api.replicate.com/v1/predictions/${pred.id}`, { headers: { Authorization: `Token ${token}` } }, 10000);
+      if (!pr.ok) break;
+      pred = await pr.json();
+    }
+    if (pred.status !== "succeeded") return { ok: false, text: `status=${pred.status}`, status: 502 };
+    const text = Array.isArray(pred.output) ? pred.output.join("") : String(pred.output ?? "");
+    if (!text.trim()) return { ok: false, text: "vazio", status: 200 };
+    console.log(`[ai-gateway] vision Replicate(gemini-2.5-flash) ok: ${text.length} chars, ${input.images.length} imgs`);
+    return { ok: true, text, status: 200 };
+  } catch (e: any) {
+    console.error(`[ai-gateway] vision Replicate exceção: ${e?.message}`);
+    return { ok: false, text: e?.message || "erro", status: 500 };
+  }
+}
+
+async function fetchVisionAnthropic(
+  textPrompt: string,
+  imageUrls: string[],
+  opts?: { model?: string; maxTokens?: number },
+): Promise<{ ok: boolean; text: string; status: number }> {
+  const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
+  if (!apiKey) return { ok: false, text: "", status: 500 };
+
+  const content: any[] = [{ type: "text", text: textPrompt }];
+  // Baixa cada imagem e manda como base64 (o source "url" do Anthropic dá 400 aqui).
+  const OK_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+  for (const url of imageUrls.filter(Boolean).slice(0, 8)) {
+    try {
+      const r = await fetch(url);
+      if (!r.ok) { console.warn(`[ai-gateway] vision: img ${r.status} ${url.slice(0, 80)}`); continue; }
+      let ct = (r.headers.get("content-type") || "image/png").split(";")[0].trim();
+      if (!OK_TYPES.includes(ct)) ct = "image/png";
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      let bin = "";
+      for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+      content.push({ type: "image", source: { type: "base64", media_type: ct, data: btoa(bin) } });
+    } catch (e: any) { console.warn(`[ai-gateway] vision: img download falhou ${url.slice(0, 80)}: ${e?.message}`); }
+  }
+  if (content.length === 1) return { ok: false, text: "nenhuma imagem carregada", status: 400 };
+
+  try {
+    const client = new Anthropic({ apiKey, timeout: 60000, maxRetries: 1 });
+    const msg: any = await client.messages.create({
+      model: opts?.model || CLAUDE_VISION_MODEL,
+      max_tokens: opts?.maxTokens || 4096,
+      messages: [{ role: "user", content }],
+    });
+    const text = (msg.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+    if (!text.trim()) return { ok: false, text: "resposta vazia", status: 200 };
+    console.log(`[ai-gateway] vision ok: ${text.length} chars, ${content.length - 1} imgs (${opts?.model || CLAUDE_VISION_MODEL})`);
+    return { ok: true, text, status: 200 };
+  } catch (e: any) {
+    console.error(`[ai-gateway] vision error: ${e?.status || ""} ${e?.message}`);
+    return { ok: false, text: `erro: ${e?.status || ""} ${e?.message || e}`, status: e?.status || 500 };
+  }
+}
+
 // ── Claude Haiku no Replicate — fallback do motor de texto (mesmo modelo, outro provider) ──
 // Slug oficial Anthropic no Replicate. Input: prompt + system_prompt + max_tokens.
 // Output: array de strings (chunks) que se concatena. Prefer:wait deixa síncrono (poll de reserva).
