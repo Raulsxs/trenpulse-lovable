@@ -264,10 +264,15 @@ export async function fetchAI(request: FetchAIRequest): Promise<FetchAIResponse>
     return fetchOpenAICompatible(config, request);
   }
 
-  // Text generation — Claude Haiku 4.5 é o motor primário (secret USE_CLAUDE_TEXT=1, ativo 2026-06-23).
-  // O hang anterior NÃO era o fetchClaude (diag provou: estrutura JSON em ~5s) e sim a cascata de
-  // fallback SEM timeout. Agora fetchClaude usa o SDK com timeout 35s + Replicate com timeout → não pendura.
-  // A flag é o KILL-SWITCH: `supabase secrets unset USE_CLAUDE_TEXT` volta na hora pro minimax.
+  // Text generation — REPLICATE Haiku é o motor PRIMÁRIO oficial (2026-06-28: a ANTHROPIC_API_KEY
+  // vive sem crédito; consolidamos tudo no Replicate, que tem crédito estável). Mesmo modelo (Haiku),
+  // só hospedado no Replicate. Anthropic direto vira fallback (quando recarregar); minimax/Google = rede final.
+  if (Deno.env.get("REPLICATE_API_TOKEN")) {
+    const rep = await fetchClaudeReplicate(request);
+    if (rep.ok && rep.choices?.[0]?.message?.content?.trim()) return rep;
+    console.warn("[ai-gateway] texto Replicate Haiku indisponível — fallback Anthropic/minimax");
+  }
+
   if (Deno.env.get("ANTHROPIC_API_KEY") && Deno.env.get("USE_CLAUDE_TEXT")) {
     return fetchClaude(request);
   }
@@ -302,12 +307,9 @@ async function fetchClaude(request: FetchAIRequest): Promise<FetchAIResponse> {
   // 1) MESMO modelo (Haiku) hospedado no Replicate — qualidade idêntica se a API Anthropic cair.
   // 2) minimax (inference.sh) → Google/Lovable como rede final.
   const fallback = async (why: string): Promise<FetchAIResponse> => {
-    console.warn(`[ai-gateway] Claude direct ${why} — fallback p/ Replicate Haiku`);
-    if (Deno.env.get("REPLICATE_API_TOKEN")) {
-      const rep = await fetchClaudeReplicate(request);
-      if (rep.ok && rep.choices?.[0]?.message?.content?.trim()) return rep;
-    }
-    console.warn("[ai-gateway] Replicate Haiku indisponível — rede final inference.sh/minimax");
+    // Replicate Haiku já é o PRIMÁRIO (no fetchAI) → aqui o fallback do Anthropic vai direto p/ minimax,
+    // sem voltar pro Replicate (evita loop).
+    console.warn(`[ai-gateway] Claude direct ${why} — rede final inference.sh/minimax`);
     const inferenceKey = Deno.env.get("INFERENCE_SH_API_KEY");
     if (inferenceKey) {
       return fetchInference({ url: "https://api.inference.sh/run", apiKey: inferenceKey, provider: "inference" }, request);
