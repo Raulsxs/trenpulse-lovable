@@ -23,7 +23,3 @@ verify_jwt = false
 # o JWT pros tools que reusam o ai-chat). verify_jwt=true (default, explícito por clareza).
 [functions.ai-agent]
 verify_jwt = true
-
-# Diagnóstico temporário do hang do Claude (REMOVER depois). Sem JWT p/ testar via curl/anon.
-[functions.diag-claude]
-verify_jwt = false
