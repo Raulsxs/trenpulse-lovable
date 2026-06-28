@@ -6,6 +6,7 @@
  * via ConfirmAction. NÃO toca no /chat atual.
  */
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -63,6 +64,12 @@ export default function AgentChat() {
   const [uploading, setUploading] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<any>(null);
   const { balance } = useCredits();
+  const location = useLocation();
+  // Prefill vindo do FeatureSpotlight ("Criar vídeo" → cai com o pedido pronto no input).
+  useEffect(() => {
+    const pf = (location.state as any)?.prefill;
+    if (typeof pf === "string" && pf) setInput(pf);
+  }, [location.state]);
 
   const convo = useRef<any[]>([]);        // messages Anthropic (continuidade)
   const curId = useRef<string | null>(null);

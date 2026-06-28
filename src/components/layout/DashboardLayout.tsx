@@ -8,6 +8,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import FeatureSpotlight from "@/components/showcase/FeatureSpotlight";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -104,6 +105,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
         <main className={cn("flex-1 min-h-0 bg-background", isChatRoute ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden")}>
           {children}
         </main>
+        <FeatureSpotlight />
       </div>
     );
   }
@@ -115,6 +117,7 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
       <main className={cn("flex-1 min-h-0 bg-background scrollbar-thin", isChatRoute ? "overflow-hidden" : "overflow-y-auto overflow-x-hidden")}>
         {children}
       </main>
+      <FeatureSpotlight />
     </div>
   );
 };
