@@ -15,6 +15,10 @@ verify_jwt = false
 [functions.generate-slide-images]
 verify_jwt = false
 
+# Vídeo animado via Grok — chamada interna (service_role) pela tool gerar_video do /agent.
+[functions.generate-video]
+verify_jwt = false
+
 # Webhook do Asaas — não manda JWT do Supabase; autenticidade via header asaas-access-token.
 [functions.asaas-webhook]
 verify_jwt = false
@@ -23,3 +27,7 @@ verify_jwt = false
 # o JWT pros tools que reusam o ai-chat). verify_jwt=true (default, explícito por clareza).
 [functions.ai-agent]
 verify_jwt = true
+
+# Validação temporária do caminho de visão do style_guide (REMOVER após validar).
+[functions.diag-vision]
+verify_jwt = false

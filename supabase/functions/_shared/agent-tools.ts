@@ -60,6 +60,7 @@ export function estimateToolCost(name: string, input: any): number {
     case "gerar_carrossel": return 8 * slides * mult;
     case "gerar_carrossel_editorial": return 4 * 5 * mult;
     case "gerar_tweet_card": return 5;
+    case "gerar_video": return Math.min(15, Math.max(3, input?.duracao || 5)) * 7; // ~$0.05/s × margem
     default: return 0;
   }
 }
@@ -109,6 +110,20 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: "object",
       properties: { tema: { type: "string" }, brandId: { type: "string" } },
+      required: ["tema"],
+    },
+  },
+  {
+    name: "gerar_video",
+    description: "Cria um VÍDEO animado curto (motion graphics) que EXPLICA um tema — animação ilustrativa sobre um assunto (ex.: como o coração bombeia sangue, um conceito, uma notícia). Chame quando o usuário pede vídeo/reel/animação sobre um ASSUNTO. NÃO é avatar nem pessoa falando — é animação do tema. Segue a marca se houver, ou estilo livre.",
+    input_schema: {
+      type: "object",
+      properties: {
+        tema: { type: "string", description: "O ASSUNTO que o vídeo explica (ex.: 'como funciona uma ponte de safena')." },
+        duracao: { type: "integer", minimum: 3, maximum: 15, description: "Segundos do vídeo (padrão 5; mais longo custa mais)." },
+        formato: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "9:16 reel/story (padrão), 1:1 feed, 16:9 horizontal." },
+        brandId: { type: "string", description: "Marca a seguir (opcional; sem marca = estilo livre)." },
+      },
       required: ["tema"],
     },
   },
@@ -302,6 +317,20 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
       return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "story", brandId }), "Story");
     case "gerar_tweet_card":
       return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_TWEET_CARD", brandId }), "Tweet card");
+    case "gerar_video": {
+      const res = await fetch(`${ctx.supabaseUrl}/functions/v1/generate-video`, {
+        method: "POST",
+        headers: { Authorization: ctx.userAuthHeader, apikey: ctx.anonKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: ctx.userId, tema: input.tema, duration: input.duracao || 5, aspectRatio: input.formato || "9:16", brandId }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.contentId) return { ok: false, content: data?.error || "Não consegui gerar o vídeo agora. Tente de novo." };
+      return {
+        ok: true,
+        content: `Vídeo gerado (content_id=${data.contentId}). Pré-visualização pronta para o usuário. Confirme em 1 frase e ofereça publicar/agendar; não repita o conteúdo.`,
+        action_result: { content_id: data.contentId, content_type: "video" },
+      };
+    }
     case "gerar_carrossel_editorial": {
       const fotos = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
       return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_EDITORIAL_CAROUSEL", format: "carousel", brandId, imageUrls: fotos, generationParams: { slideCount: fotos.length || 5 } }), "Carrossel editorial");
