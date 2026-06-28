@@ -39,10 +39,63 @@ function isImageModelId(m: unknown): m is ImageModelId {
   return typeof m === "string" && ALL_MODEL_IDS.includes(m);
 }
 
-/** Resolve o modelo: respeita o pedido do Studio; senão hybrid (9:16 → Nano Banana, resto → gpt-image-2). */
-function resolveImageModel(requested: unknown, aspectRatio: string): ImageModelId {
-  if (isImageModelId(requested)) return requested;
-  return aspectRatio === "9:16" ? "nano-banana" : "gpt-image-2";
+// Modelos que renderizam o aspect NATIVAMENTE (sem cair pra proporção errada).
+// gpt-image-2 só aceita 1:1|3:2|2:3 → 9:16/4:5 vira 2:3 (degradação silenciosa).
+// nano-banana / reve / imagen-fast / recraft passam o aspect direto (ou mapeiam pra próximo nativo).
+const ASPECT_NATIVE_MODELS: Record<string, ImageModelId[]> = {
+  "9:16": ["nano-banana", "recraft", "imagen-fast", "reve", "ideogram", "flux-pro", "seedream", "qwen"],
+  "4:5": ["nano-banana", "recraft", "reve", "ideogram", "flux-pro", "seedream", "qwen"], // imagen mapeia 4:5→3:4
+};
+
+/** true se o modelo NÃO suporta nativamente o aspect (vai degradar silenciosamente). */
+function modelDegradesAspect(model: ImageModelId, aspectRatio: string): boolean {
+  // gpt-image-2 é o único da estante que força 2:3 pra qualquer coisa que não seja 1:1.
+  return model === "gpt-image-2" && (aspectRatio === "9:16" || aspectRatio === "4:5");
+}
+
+/**
+ * Resolve o modelo default (quando o Studio NÃO forçou `model`).
+ * Hybrid enriquecido: além do aspect, considera contentStyle (quote/citação) + idioma pt-BR.
+ * - story 9:16 → nano-banana (vertical nativo + texto pt-BR perfeito)
+ * - quote/citação pt-BR → reve (acentos perfeitos, estética clean)
+ * - 1:1 / 4:5 com muito texto → gpt-image-2 (melhor design + texto pt-BR)
+ */
+function resolveDefaultModel(aspectRatio: string, contentStyle?: string | null, language?: string | null): ImageModelId {
+  const isPtBr = !language || language.toLowerCase().startsWith("pt");
+  if (aspectRatio === "9:16") return "nano-banana";
+  if (contentStyle === "quote" && isPtBr) return "reve";
+  if (aspectRatio === "4:5") return "nano-banana"; // 4:5 nativo + texto pt-BR (gpt-image-2 degrada 4:5)
+  return "gpt-image-2";
+}
+
+/**
+ * Resolve o modelo final: respeita o pedido explícito do Studio; senão usa o default enriquecido.
+ * GUARD de aspect (P0): se o modelo resolvido degrada o aspect pedido (gpt-image-2 em 9:16/4:5),
+ * re-roteia pra um modelo que suporta nativamente — SEMPRE logando o warning de degradação,
+ * inclusive quando o usuário forçou gpt-image-2 no Studio.
+ */
+function resolveImageModel(
+  requested: unknown,
+  aspectRatio: string,
+  contentStyle?: string | null,
+  language?: string | null,
+): ImageModelId {
+  let model: ImageModelId = isImageModelId(requested)
+    ? requested
+    : resolveDefaultModel(aspectRatio, contentStyle, language);
+
+  if (modelDegradesAspect(model, aspectRatio)) {
+    const candidates = ASPECT_NATIVE_MODELS[aspectRatio] || [];
+    const reroute = candidates[0] || "nano-banana";
+    const forced = isImageModelId(requested);
+    console.warn(
+      `[resolveImageModel] ASPECT DEGRADADO: "${model}" não suporta ${aspectRatio} nativamente ` +
+      `(forçaria 2:3). Re-roteando para "${reroute}".` +
+      (forced ? ` (usuário forçou "${model}" no Studio — re-roteio mesmo assim para preservar proporção.)` : ""),
+    );
+    model = reroute;
+  }
+  return model;
 }
 
 /** Monta o body do inference.sh por modelo. refImages: image-to-image / referência de estilo. */
@@ -576,7 +629,7 @@ ${brandColorHint}
       // o fluxo Gemini/inference.sh provado assumir — preserva melhor a pessoa na imagem.
       const isPersonalPhotoMode = !!userGeminiKey && refImages.length > 0;
       if (!base64Image && Deno.env.get("REPLICATE_API_TOKEN") && !isPersonalPhotoMode) {
-        const resolvedModelRep = resolveImageModel(requestModel, aspectRatio);
+        const resolvedModelRep = resolveImageModel(requestModel, aspectRatio, contentStyle, language);
         console.log(`[generate-slide-images] Tier-1 Replicate: model=${resolvedModelRep}, aspect=${aspectRatio}, refs=${refImages.length}`);
         const repUrl = await callReplicate(resolvedModelRep, promptText, aspectRatio, refImages);
         if (repUrl) {
@@ -611,7 +664,7 @@ ${brandColorHint}
             // - 9:16 (story) → Nano Banana Pro (vertical nativo + texto pt-BR perfeito).
             // - 1:1 / 4:5 → gpt-image-2 medium (texto pt-BR perfeito; sem 9:16 verdadeiro).
             // - seedream → rápido/barato, texto pt-BR ~90% (escolha do usuário no Studio).
-            const resolvedModel = resolveImageModel(requestModel, aspectRatio);
+            const resolvedModel = resolveImageModel(requestModel, aspectRatio, contentStyle, language);
             const infBody = buildInferenceBody(resolvedModel, promptText, aspectRatio, refImages);
             console.log(`[generate-slide-images] inference.sh request: app=${infBody.app}, aspect=${aspectRatio}, refs=${refImages.length}, promptLen=${promptText.length}, bodySize=${JSON.stringify(infBody).length}`);
             const infRes = await fetch("https://api.inference.sh/run", {

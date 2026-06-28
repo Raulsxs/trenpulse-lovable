@@ -30,19 +30,35 @@ export const GATED_TOOLS = new Set(["publicar", "agendar_conteudo"]);
 // Acima deste custo (créditos) qualquer geração também pede confirmação (ex.: carrossel grande).
 export const CONFIRM_CREDIT_THRESHOLD = 50;
 
+// Multiplicador de custo por modelo de imagem — aproxima credit_pricing (modelos premium custam
+// mais por chamada). Base (×1) = gpt-image-2/seedream/imagen-fast/ideogram/qwen; premium (Nano
+// Banana Pro, Flux Pro, Reve, Recraft) ≈ 2×. Mantém o gate de custo ciente do modelo escolhido.
+function modelCostMultiplier(model?: string | null): number {
+  if (!model) return 1;
+  switch (model) {
+    case "nano-banana":
+    case "flux-pro":
+    case "reve":
+    case "recraft": return 2;
+    default: return 1; // gpt-image-2, seedream, imagen-fast, ideogram, qwen
+  }
+}
+
 // Estimativa de custo (créditos) por tool — usada só pra decidir gating. Aproxima credit_pricing.
 export function estimateToolCost(name: string, input: any): number {
   const slides = Math.min(10, Math.max(3, input?.slides || 5));
+  const mult = modelCostMultiplier(input?.modelo);
   switch (name) {
     case "gerar_post":
     case "imagem_livre":
     case "editar_imagem":
     case "editar_conteudo":
+    case "editar_slide":      // debita 8 no dispatch — antes caía no default 0 (estimativa mentia)
     case "replicar_post":
-    case "link_para_post": return 8;
-    case "gerar_story": return 20;
-    case "gerar_carrossel": return 8 * slides;
-    case "gerar_carrossel_editorial": return 4 * 5;
+    case "link_para_post": return 8 * mult;
+    case "gerar_story": return 20 * mult;
+    case "gerar_carrossel": return 8 * slides * mult;
+    case "gerar_carrossel_editorial": return 4 * 5 * mult;
     case "gerar_tweet_card": return 5;
     default: return 0;
   }
@@ -297,7 +313,15 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
     case "editar_conteudo":
       return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "EDIT_CONTENT", contentId: input.contentId, editInstruction: input.instrucao, generationParams: { contentId: input.contentId } }), "Conteúdo ajustado");
     case "editar_slide": {
+      const SLIDE_EDIT_COST = 8; // mesma fonte do débito spend_credits abaixo
       const idx = Math.max(0, (Number(input.slide) || 1) - 1); // usuário conta de 1
+      // Checa saldo ANTES de gastar a geração (mesma fonte que spend_credits afeta: user_credits.balance).
+      // Evita o furo de "gera o slide e depois descobre que não dá pra debitar".
+      const { data: creds } = await ctx.userClient.from("user_credits").select("balance").maybeSingle();
+      const balance = Number(creds?.balance ?? 0);
+      if (balance < SLIDE_EDIT_COST) {
+        return { ok: false, content: `Saldo insuficiente para refazer o slide (precisa de ${SLIDE_EDIT_COST} créditos, você tem ${balance}). Recarregue em Perfil → Créditos.` };
+      }
       const { data: content } = await ctx.userClient.from("generated_contents")
         .select("id, slides, image_urls, brand_id, platform, content_type").eq("id", input.contentId).maybeSingle();
       if (!content) return { ok: false, content: "Conteúdo não encontrado." };
@@ -334,7 +358,15 @@ Texto em pt-BR impecável e legível. Responda APENAS com a imagem.`;
       const imgs = Array.isArray(content.image_urls) ? [...content.image_urls] : [];
       imgs[idx] = imageUrl;
       await ctx.userClient.from("generated_contents").update({ slides: newSlides, image_urls: imgs }).eq("id", content.id);
-      try { await ctx.userClient.rpc("spend_credits", { p_user: ctx.userId, p_amount: 8, p_generation_id: content.id, p_metadata: { action: "edit_slide", slide: idx + 1 } }); } catch { /* best-effort */ }
+      // Débito relevante: se spend_credits falhar, o usuário recebeu o slide e ninguém pagou — loga
+      // VISÍVEL (não engole) pra rastrear o furo de gasto. A pré-checagem de saldo acima reduz, mas
+      // não elimina (race), o risco de o débito falhar aqui.
+      try {
+        const { error: spendErr } = await ctx.userClient.rpc("spend_credits", { p_user: ctx.userId, p_amount: SLIDE_EDIT_COST, p_generation_id: content.id, p_metadata: { action: "edit_slide", slide: idx + 1 } });
+        if (spendErr) console.error(`[agent-tools] editar_slide: spend_credits FALHOU (slide entregue sem cobrança) user=${ctx.userId} content=${content.id} slide=${idx + 1}:`, spendErr.message || spendErr);
+      } catch (e: any) {
+        console.error(`[agent-tools] editar_slide: spend_credits LANÇOU (slide entregue sem cobrança) user=${ctx.userId} content=${content.id} slide=${idx + 1}:`, e?.message || e);
+      }
       return { ok: true, content: `Slide ${idx + 1} refeito no estilo dos demais — o preview atualiza sozinho.`, action_result: { content_id: content.id, content_type: content.content_type || "carousel", platform: content.platform } };
     }
     case "detalhes_conteudo": {
@@ -359,7 +391,7 @@ Texto em pt-BR impecável e legível. Responda APENAS com a imagem.`;
     case "replicar_post":
       return genResult(await callAiChat(ctx, { message: input.tema || "Recrie um post parecido com este, no estilo da marca.", intent_hint: "GENERATE", format: "post", brandId, model, imageUrls: [input.post_referencia_url], replicateRef: true }), "Post replicado");
     case "link_para_post":
-      return genResult(await callAiChat(ctx, { message: `${input.url}${input.brandId ? "" : ""}`, intent_hint: "LINK_PARA_POST", brandId }), "Post do link");
+      return genResult(await callAiChat(ctx, { message: input.url, intent_hint: "LINK_PARA_POST", brandId }), "Post do link");
 
     case "listar_agenda": {
       const { data } = await ctx.userClient
@@ -429,6 +461,17 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
       return { ok: true, content: `Agendado para ${new Date(input.data_hora_iso).toLocaleString("pt-BR")}.` };
     }
     case "publicar": {
+      // INVARIANTE de código (não só dica ao LLM): só publica se houver rede conectada.
+      // Reusa o mesmo endpoint/lógica de listar_conexoes (connect-social action:"list").
+      const connRes = await fetch(`${ctx.supabaseUrl}/functions/v1/connect-social`, {
+        method: "POST", headers: { Authorization: ctx.userAuthHeader, apikey: ctx.anonKey, "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "list" }),
+      });
+      const connData = await connRes.json().catch(() => ({}));
+      const connections = connData?.connections || [];
+      if (!Array.isArray(connections) || connections.length === 0) {
+        return { ok: false, content: "Nenhuma rede social conectada. Conecte uma rede em Perfil → Conexões antes de publicar." };
+      }
       const res = await fetch(`${ctx.supabaseUrl}/functions/v1/publish-postforme`, {
         method: "POST", headers: { Authorization: ctx.userAuthHeader, apikey: ctx.anonKey, "Content-Type": "application/json" },
         body: JSON.stringify({ contentId: input.contentId, platforms: input.plataformas }),

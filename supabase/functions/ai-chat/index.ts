@@ -1,6 +1,9 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAI } from "../_shared/ai-gateway.ts";
+import { buildBrandContext, brandTextLimits } from "../_shared/brand-context.ts";
+import { parseLlmJson } from "../_shared/llm-json.ts";
+import { clampSlides, normalizeHashtags, enforceTweetLimit, truncateToChars } from "../_shared/content-validators.ts";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TrendPulse AI Chat — Simplified (~1500 lines)
@@ -528,7 +531,12 @@ Mensagem: "${message}"`;
       if (classifyResp.ok) {
         const classifyData = await classifyResp.json();
         const classified = classifyData.choices?.[0]?.message?.content?.trim()?.toUpperCase() || "";
-        const match = INTENTS.find((i) => classified.includes(i));
+        // Match o nome de intenção MAIS ESPECÍFICO (mais longo) primeiro: "GENERATE_CAROUSEL"
+        // contém o prefixo "GENERATE", então um find na ordem do array casaria "GENERATE"
+        // por engano. Ordenar candidatos por comprimento desc garante o composto vencer.
+        const match = [...INTENTS]
+          .sort((a, b) => b.length - a.length)
+          .find((i) => classified.includes(i));
         if (match) detectedIntent = match;
       }
 
@@ -667,35 +675,24 @@ Mensagem: "${message}"`;
         // 2. Load brand if brandId provided
         let brandContext = "";
         let brandSnapshot: Record<string, any> | null = null;
+        let brandForLimits: any = null;
         let referenceImageUrls: string[] = [];
         let isPhotoBackground = false;
         let photoBackgroundUrls: string[] = [];
 
         if (requestBrandId && requestBrandId !== "none") {
           const { data: brand } = await svc.from("brands")
-            .select("name, palette, fonts, visual_tone, do_rules, dont_rules, visual_preferences, logo_url, creation_mode")
+            .select("name, palette, fonts, visual_tone, do_rules, dont_rules, visual_preferences, logo_url, creation_mode, style_guide")
             .eq("id", requestBrandId).single();
 
           if (brand) {
             brandSnapshot = brand;
             isPhotoBackground = (brand as any).creation_mode === "photo_backgrounds";
 
-            const parts: string[] = [];
-            parts.push(`Marca: ${brand.name}`);
-            if (brand.palette?.length) {
-              const colors = (brand.palette as any[]).map((c: any) => typeof c === "string" ? c : c.hex).filter(Boolean);
-              if (colors.length) parts.push(`Cores: ${colors.join(", ")}`);
-            }
-            if (brand.fonts) {
-              const fonts = brand.fonts as any;
-              parts.push(`Fontes: títulos=${fonts.headings || "Inter"}, corpo=${fonts.body || "Inter"}`);
-            }
-            if (brand.visual_tone) parts.push(`Tom visual: ${brand.visual_tone}`);
-            if (brand.do_rules) parts.push(`FAÇA: ${brand.do_rules}`);
-            if (brand.dont_rules) parts.push(`NÃO FAÇA: ${brand.dont_rules}`);
-            const prefs = brand.visual_preferences as any;
-            if (prefs?.custom_notes) parts.push(`Nota visual: ${prefs.custom_notes}`);
-            brandContext = parts.join("\n");
+            // Serializador único da identidade (inclui style_guide quando houver). Substitui
+            // os 3 blocos copy-paste que divergiam; o EDIT agora também ganha custom_notes.
+            brandContext = buildBrandContext(brand);
+            brandForLimits = brand;
 
             if (isPhotoBackground) {
               const { data: bgPhotos } = await svc.from("brand_examples")
@@ -793,6 +790,13 @@ Mensagem: "${message}"`;
               }
             }
           } catch (e: any) { console.warn("[ai-chat] GENERATE: brief sem-artigo falhou, usando subject cru:", e?.message); }
+        }
+
+        // Limite de headline do style_guide (quando definido) — aplicado ANTES de montar o
+        // prompt da imagem, pra a manchete renderizada respeitar o teto de caracteres da marca.
+        {
+          const limits = brandForLimits ? brandTextLimits(brandForLimits, format === "story" ? "story" : "post") : null;
+          if (limits?.headline && slideHeadline) slideHeadline = truncateToChars(slideHeadline, limits.headline);
         }
 
         const platformLabel = platform === "linkedin" ? "LinkedIn" : "Instagram";
@@ -1020,33 +1024,24 @@ JSON: { "title": "...", "caption": "...", "hashtags": ["#..."] }`;
           if (captionResp.ok) {
             const captionData = await captionResp.json();
             const raw = captionData.choices?.[0]?.message?.content || "";
-            const jsonMatch = extractJsonObject(raw);
-            if (jsonMatch) {
-              try {
-                const parsed = JSON.parse(jsonMatch);
-                aiTitle = parsed.title || "";
-                caption = parsed.caption || "";
-                hashtags = parsed.hashtags || [];
-              } catch (parseErr) {
-                console.warn("[ai-chat] GENERATE: caption JSON parse failed, extracting with regex");
-                const titleRx = raw.match(/"title"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
-                const captionRx = raw.match(/"caption"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
-                const hashRx = raw.match(/"hashtags"\s*:\s*(\[[^\]]*\])/s);
-                if (captionRx) {
-                  caption = captionRx[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-                  if (titleRx) aiTitle = titleRx[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-                  if (hashRx) { try { hashtags = JSON.parse(hashRx[1]); } catch { /* ignore */ } }
-                } else {
-                  caption = raw.replace(/```json\n?|\n?```/g, "").trim();
-                }
-              }
+            const parsed = parseLlmJson<{ title?: string; caption?: string; hashtags?: string[] }>(raw);
+            if (parsed) {
+              aiTitle = parsed.title || "";
+              caption = parsed.caption || "";
+              hashtags = parsed.hashtags || [];
             } else {
-              caption = raw.trim();
+              // Sem JSON válido: NUNCA publicar o raciocínio cru do modelo como legenda.
+              // Deixa vazia — o resto do fluxo (título, imagem) segue normalmente.
+              console.warn("[ai-chat] GENERATE: caption sem JSON válido — legenda fica vazia");
+              caption = "";
             }
           }
         } catch (captionErr: any) {
           console.warn("[ai-chat] GENERATE: caption generation failed:", captionErr?.message);
         }
+
+        // Enforcement determinístico: hashtags com '#' único e sem duplicatas.
+        hashtags = normalizeHashtags(hashtags);
 
         // 8. Build title — prefer AI-generated title, fallback to phrase/message cleanup
         const title = contentStyle === "quote"
@@ -1092,14 +1087,12 @@ Responda APENAS em JSON:
           if (variantResp.ok) {
             const variantData = await variantResp.json();
             const raw = variantData.choices?.[0]?.message?.content || "";
-            const jsonMatch = raw.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              try {
-                platformCaptions = JSON.parse(jsonMatch[0]);
-                console.log("[ai-chat] GENERATE: platform variants generated:", Object.keys(platformCaptions || {}).join(", "));
-              } catch {
-                console.warn("[ai-chat] GENERATE: platform variants JSON parse failed");
-              }
+            const parsedVariants = parseLlmJson<Record<string, string>>(raw);
+            if (parsedVariants) {
+              platformCaptions = parsedVariants;
+              console.log("[ai-chat] GENERATE: platform variants generated:", Object.keys(platformCaptions || {}).join(", "));
+            } else {
+              console.warn("[ai-chat] GENERATE: platform variants JSON parse failed");
             }
           }
         } catch (variantErr: any) {
@@ -1182,35 +1175,23 @@ Responda APENAS em JSON:
         // 2. Load brand if brandId provided
         let brandContext = "";
         let brandSnapshot: Record<string, any> | null = null;
+        let brandForLimits: any = null;
         let referenceImageUrls: string[] = [];
         let isPhotoBackground = false;
         let photoBackgroundUrls: string[] = [];
 
         if (requestBrandId && requestBrandId !== "none") {
           const { data: brand } = await svc.from("brands")
-            .select("name, palette, fonts, visual_tone, do_rules, dont_rules, visual_preferences, logo_url, creation_mode")
+            .select("name, palette, fonts, visual_tone, do_rules, dont_rules, visual_preferences, logo_url, creation_mode, style_guide")
             .eq("id", requestBrandId).single();
 
           if (brand) {
             brandSnapshot = brand;
             isPhotoBackground = (brand as any).creation_mode === "photo_backgrounds";
 
-            const parts: string[] = [];
-            parts.push(`Marca: ${brand.name}`);
-            if (brand.palette?.length) {
-              const colors = (brand.palette as any[]).map((c: any) => typeof c === "string" ? c : c.hex).filter(Boolean);
-              if (colors.length) parts.push(`Cores: ${colors.join(", ")}`);
-            }
-            if (brand.fonts) {
-              const fonts = brand.fonts as any;
-              parts.push(`Fontes: títulos=${fonts.headings || "Inter"}, corpo=${fonts.body || "Inter"}`);
-            }
-            if (brand.visual_tone) parts.push(`Tom visual: ${brand.visual_tone}`);
-            if (brand.do_rules) parts.push(`FAÇA: ${brand.do_rules}`);
-            if (brand.dont_rules) parts.push(`NÃO FAÇA: ${brand.dont_rules}`);
-            const prefs = brand.visual_preferences as any;
-            if (prefs?.custom_notes) parts.push(`Nota visual: ${prefs.custom_notes}`);
-            brandContext = parts.join("\n");
+            // Serializador único da identidade (inclui style_guide quando houver).
+            brandContext = buildBrandContext(brand);
+            brandForLimits = brand;
 
             if (isPhotoBackground) {
               const { data: bgPhotos } = await svc.from("brand_examples")
@@ -1254,13 +1235,15 @@ Responda APENAS em JSON:
           : `FORMATO INSTAGRAM CARROSSEL:
 - Slide 1 (CAPA): Gancho irresistível que faça deslizar (máx 8 palavras). Pode ser pergunta, afirmação ousada ou promessa.
 - Slides 2-${slideCount - 1} (CONTEÚDO): 1 ponto por slide. Headline emocional + body didático + bullets práticos.
-- Slide ${slideCount} (CTA): "Salve para consultar depois" + "Compartilhe com quem precisa" + "Siga @handle".
+- Slide ${slideCount} (CTA): "Salve para consultar depois" + "Compartilhe com quem precisa"${userCtx?.instagram_handle ? ` + "Siga @${String(userCtx.instagram_handle).replace(/^@+/, "")}"` : " + convite para seguir o perfil"}.
 - Tom: ${userCtx?.brand_voice || "educativo e acessível"}, como se ensinasse a um amigo.`;
 
         const structurePrompt = `Você é um estrategista de conteúdo especialista em carrosseis virais. Crie ${slideCount} slides.
 
 TEMA: ${userTopic}
 ${userCtx?.business_niche ? `NICHO DO AUTOR: ${userCtx.business_niche}` : ""}
+${userCtx?.brand_voice ? `TOM DE VOZ DA MARCA: ${userCtx.brand_voice} — escreva o texto dos slides nessa voz.` : ""}
+${Array.isArray(userCtx?.content_topics) && userCtx.content_topics.length ? `TEMAS RECORRENTES DO AUTOR: ${userCtx.content_topics.join(", ")} — use como contexto de fundo.` : ""}
 
 ${carouselPlatformGuide}
 
@@ -1328,6 +1311,9 @@ Responda em JSON:
           actionResult = null;
           break;
         }
+
+        // Enforcement: garante EXATAMENTE o número de slides pedido (o modelo às vezes gera a mais).
+        slides = clampSlides(slides, slideCount);
 
         const tStructureDone = Date.now();
         console.log(`[ai-chat] GENERATE_CAROUSEL timing: structure=${tStructureDone - tCarouselStart}ms`);
@@ -1456,11 +1442,33 @@ Responda APENAS com a imagem gerada.`;
             const carouselNoBioRule = `\nPROIBIDO: nunca escreva "link na bio", "link no perfil", "arrasta pra cima", "swipe up", "veja mais nos stories" ou variações.`;
 
             const captionTopic = articleContent ? `o seguinte artigo: ${articleContent.substring(0, 1200)}` : `"${subject}"`;
-            const captionPrompt = `Gere uma legenda para um carrossel de ${platform === "linkedin" ? "LinkedIn" : "Instagram"} sobre: ${captionTopic}
-${userCtx?.business_niche ? `Nicho: ${userCtx.business_niche}` : ""}
-${userCtx?.brand_voice ? `Tom: ${userCtx.brand_voice}` : ""}
-Legenda curta e engajante. Inclua 5-8 hashtags relevantes no final.${carouselBilingual}${carouselNoBioRule}${carouselSourceRule}
-Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
+            // Caption de carrossel elevada ao mesmo nível do post (copywriter: gancho/
+            // desenvolvimento/CTA + regras por plataforma), preservando as regras específicas
+            // de carrossel já existentes (anti-"link na bio", fonte, bilíngue).
+            const carouselCaptionRules = platform === "linkedin"
+              ? `REGRAS LINKEDIN:
+- Tom de especialista/thought leader compartilhando insight valioso.
+- Comece com um gancho forte (dado surpreendente, pergunta provocativa ou afirmação ousada).
+- Parágrafos curtos (2-3 linhas) com espaçamento. CTA no final (pergunta aberta para gerar comentários).
+- Máx 3000 chars. Emojis com parcimônia (1-2). 3-5 hashtags relevantes só no final.`
+              : `REGRAS INSTAGRAM:
+- Tom ${userCtx?.brand_voice || "natural"} e acessível, como se falasse com um seguidor próximo.
+- Gancho que pare o scroll na 1ª linha. Desenvolvimento curto que faça abrir o carrossel.
+- Emojis com moderação para dar ritmo. CTA claro (salve, compartilhe, comente, arrasta pro lado).
+- Máx 2200 chars. 8-12 hashtags no final, separadas do texto.`;
+
+            const captionPrompt = `Você é um especialista em copywriting para redes sociais. Gere uma legenda de alta qualidade para um carrossel de ${platform === "linkedin" ? "LinkedIn" : "Instagram"}.
+
+${carouselCaptionRules}
+${carouselNoBioRule}${carouselSourceRule}
+
+${userCtx?.business_niche ? `NICHO DO AUTOR: ${userCtx.business_niche} — use como contexto de fundo.` : ""}
+${userCtx?.brand_voice ? `TOM DE VOZ: ${userCtx.brand_voice}` : ""}
+
+TEMA/CONTEÚDO: ${captionTopic}${carouselBilingual}
+
+A legenda deve ter estrutura de copy: gancho + desenvolvimento + CTA. Inclua hashtags relevantes e específicas (não genéricas).
+Responda APENAS em JSON: { "caption": "...", "hashtags": ["#..."] }`;
 
             const captionResp = await aiGatewayFetch({
               model: "openrouter/minimax-m-25",
@@ -1470,31 +1478,20 @@ Responda em JSON: { "caption": "...", "hashtags": ["#..."] }`;
             if (captionResp.ok) {
               const captionData = await captionResp.json();
               const raw = captionData.choices?.[0]?.message?.content || "";
-              const jsonMatch = extractJsonObject(raw);
-              if (jsonMatch) {
-                try {
-                  const parsed = JSON.parse(jsonMatch);
-                  caption = parsed.caption || "";
-                  hashtags = parsed.hashtags || [];
-                } catch {
-                  console.warn("[ai-chat] GENERATE_CAROUSEL: caption JSON parse failed, extracting with regex");
-                  const captionRx = raw.match(/"caption"\s*:\s*"((?:[^"\\]|\\.)*)"/s);
-                  const hashRx = raw.match(/"hashtags"\s*:\s*(\[[^\]]*\])/s);
-                  if (captionRx) {
-                    caption = captionRx[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-                    if (hashRx) { try { hashtags = JSON.parse(hashRx[1]); } catch { /* ignore */ } }
-                  } else {
-                    caption = raw.replace(/```json\n?|\n?```/g, "").trim();
-                  }
-                }
+              const parsed = parseLlmJson<{ caption?: string; hashtags?: string[] }>(raw);
+              if (parsed) {
+                caption = parsed.caption || "";
+                hashtags = parsed.hashtags || [];
               } else {
-                caption = raw.trim();
+                // Sem JSON válido: legenda fica vazia (nunca o raciocínio cru do modelo).
+                console.warn("[ai-chat] GENERATE_CAROUSEL: caption sem JSON válido — legenda fica vazia");
+                caption = "";
               }
             }
           } catch (captionErr: any) {
             console.warn("[ai-chat] GENERATE_CAROUSEL: caption generation failed:", captionErr?.message);
           }
-          return { caption, hashtags };
+          return { caption, hashtags: normalizeHashtags(hashtags) };
         })();
 
         const [slideResults, { caption, hashtags }] = await Promise.all([
@@ -1640,7 +1637,7 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
             if (m) {
               tweets = JSON.parse(m[0])
                 .filter((t: any) => typeof t === "string" && t.trim())
-                .map((t: string) => t.trim());
+                .map((t: string) => enforceTweetLimit(t.trim())); // ≤280 chars por card
             }
           }
         } catch (e: any) {
@@ -1697,9 +1694,9 @@ Responda APENAS JSON: {"caption":"...","hashtags":["tag1","tag2"]}`;
           if (cr.ok) {
             const cd = await cr.json();
             const craw = cd.choices?.[0]?.message?.content || "";
-            const cm = craw.match(/\{[\s\S]*\}/);
-            if (cm) {
-              const parsed = JSON.parse(cm[0]);
+            const parsed = parseLlmJson<{ caption?: string; hashtags?: string[] }>(craw);
+            if (parsed) {
+              // caption mantém o fallback (tweets[0]) se vier vazia — nunca o raciocínio cru.
               if (typeof parsed.caption === "string" && parsed.caption.trim()) caption = parsed.caption.trim();
               if (Array.isArray(parsed.hashtags)) {
                 tweetHashtags = parsed.hashtags
@@ -1822,8 +1819,7 @@ Responda APENAS em JSON:
           if (r.ok) {
             const d = await r.json();
             const raw = d.choices?.[0]?.message?.content || "";
-            const m = raw.match(/\{[\s\S]*\}/);
-            if (m) edStruct = JSON.parse(m[0]);
+            edStruct = parseLlmJson<any>(raw);
           }
         } catch (e: any) { console.error("[ai-chat] EDITORIAL: struct failed:", e?.message); }
 
@@ -1881,7 +1877,7 @@ Responda APENAS em JSON:
         try {
           const headlinesText = edSlides.map((s: any) => (s.headline_tokens || []).map((t: any) => t.t).join(" ")).join(" | ");
           const cr = await aiGatewayFetch({ model: "openrouter/minimax-m-25", messages: [{ role: "user", content: `Gere uma legenda curta e engajante (pt-BR) para um carrossel sobre: "${message}". Pontos: ${headlinesText}. 5-8 hashtags no fim. JSON: {"caption":"...","hashtags":["#..."]}` }] });
-          if (cr.ok) { const cd = await cr.json(); const raw = cd.choices?.[0]?.message?.content || ""; const jm = raw.match(/\{[\s\S]*\}/); if (jm) { const p = JSON.parse(jm[0]); edCaption = p.caption || ""; edHashtags = p.hashtags || []; } }
+          if (cr.ok) { const cd = await cr.json(); const raw = cd.choices?.[0]?.message?.content || ""; const p = parseLlmJson<{ caption?: string; hashtags?: string[] }>(raw); if (p) { edCaption = p.caption || ""; edHashtags = normalizeHashtags(p.hashtags); } }
         } catch { /* legenda opcional */ }
 
         // 7. Persist
@@ -2030,18 +2026,12 @@ Responda APENAS em JSON:
         let editBrandContext = "";
         if (existing.brand_id) {
           const { data: editBrand } = await svc.from("brands")
-            .select("name, palette, fonts, visual_tone, do_rules, dont_rules")
+            .select("name, palette, fonts, visual_tone, do_rules, dont_rules, visual_preferences, logo_url, creation_mode, style_guide")
             .eq("id", existing.brand_id).single();
           if (editBrand) {
-            const bParts: string[] = [];
-            if (editBrand.name) bParts.push(`Marca: ${editBrand.name}`);
-            const bColors = ((editBrand.palette as any[]) || []).map((c: any) => typeof c === "string" ? c : c.hex).filter(Boolean);
-            if (bColors.length) bParts.push(`Cores da marca: ${bColors.join(", ")}`);
-            if ((editBrand.fonts as any)?.headings) bParts.push(`Fonte títulos: ${(editBrand.fonts as any).headings}`);
-            if (editBrand.visual_tone) bParts.push(`Tom visual: ${editBrand.visual_tone}`);
-            if (editBrand.do_rules) bParts.push(`FAÇA: ${editBrand.do_rules}`);
-            if (editBrand.dont_rules) bParts.push(`NÃO FAÇA: ${editBrand.dont_rules}`);
-            editBrandContext = bParts.join("\n");
+            // Mesmo serializador dos outros handlers: o EDIT agora inclui custom_notes
+            // (visual_preferences) e style_guide, que a versão antiga perdia.
+            editBrandContext = buildBrandContext(editBrand);
           }
         }
 
@@ -2317,8 +2307,7 @@ ${SAFE_AREA_RULES}`;
             if (extractResp.ok) {
               const d = await extractResp.json();
               const raw = d.choices?.[0]?.message?.content || "";
-              const m = raw.match(/\{[\s\S]*\}/);
-              if (m) extracted = JSON.parse(m[0]);
+              extracted = parseLlmJson<any>(raw) || {};
             }
 
             const palette = (extracted.colors || []).map((c: string) => ({ hex: c }));
@@ -2471,9 +2460,9 @@ ${SAFE_AREA_RULES}`;
               if (prefResp.ok) {
                 const d = await prefResp.json();
                 const raw = d.choices?.[0]?.message?.content || "";
-                const m = raw.match(/\{[\s\S]*\}/);
-                if (m) {
-                  visualPrefs = JSON.parse(m[0]);
+                const parsedPrefs = parseLlmJson<Record<string, any>>(raw);
+                if (parsedPrefs) {
+                  visualPrefs = parsedPrefs;
                   // Remove null values
                   for (const key of Object.keys(visualPrefs)) {
                     if (visualPrefs[key] === null) delete visualPrefs[key];
@@ -2507,9 +2496,8 @@ ${SAFE_AREA_RULES}`;
             if (colorResp.ok) {
               const d = await colorResp.json();
               const raw = d.choices?.[0]?.message?.content || "";
-              const m = raw.match(/\{[\s\S]*\}/);
-              if (m) {
-                const parsed = JSON.parse(m[0]);
+              const parsed = parseLlmJson<{ colors?: string[]; visual_tone?: string }>(raw);
+              if (parsed) {
                 colors = parsed.colors || [];
                 tone = parsed.visual_tone || "clean";
               }
@@ -2804,14 +2792,13 @@ Mensagem: "${message}"` }],
           if (extractResp.ok) {
             const extractData = await extractResp.json();
             const raw = extractData.choices?.[0]?.message?.content || "";
-            const jsonMatch = raw.match(/\{[\s\S]*\}/);
-            if (jsonMatch) {
-              const parsed = JSON.parse(jsonMatch[0]);
+            const parsed = parseLlmJson<{ field?: string; value?: string; action?: string }>(raw);
+            if (parsed) {
               const { field, value, action } = parsed;
               const allowedFields = ["business_niche", "brand_voice", "content_topics", "instagram_handle"];
               if (action === "ask" || !value || value === "novo valor") {
                 const fieldLabels: Record<string, string> = { business_niche: "nicho", brand_voice: "tom de voz", content_topics: "temas", instagram_handle: "Instagram" };
-                replyOverride = `Para qual ${fieldLabels[field] || "valor"} você quer mudar? Me diga especificamente, por exemplo: "meu nicho é Marketing Digital".`;
+                replyOverride = `Para qual ${fieldLabels[field ?? ""] || "valor"} você quer mudar? Me diga especificamente, por exemplo: "meu nicho é Marketing Digital".`;
               } else if (field && allowedFields.includes(field) && value) {
                 if (field === "content_topics") {
                   const { data: ctxData } = await supabase.from("ai_user_context").select("content_topics").eq("user_id", userId).maybeSingle();
