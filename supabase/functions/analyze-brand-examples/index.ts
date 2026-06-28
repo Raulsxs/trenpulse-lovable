@@ -76,8 +76,8 @@ serve(async (req) => {
 
     console.log(`[analyze-brand-examples] Found ${exampleCount} examples (confidence: ${confidence}), palette: ${JSON.stringify(brand.palette)}`);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    // (removido o check morto de LOVABLE_API_KEY — Lovable não existe mais; a visão roda no
+    //  Replicate Gemini via fetchVisionJson. O throw aqui quebrava a criação de marca com 500.)
 
     // Build examples metadata summary
     const examplesSummary = examples.map((ex, i) => 
@@ -196,7 +196,7 @@ Return this EXACT JSON structure:
     // multimodal via ANTHROPIC_API_KEY (key nossa, dedicada).
     const textPrompt = contentParts.find((p: any) => p.type === "text")?.text || "";
     const imageUrls = imagesToSend.map((e: any) => e.image_url).filter(Boolean);
-    const vision = await fetchVisionJson(textPrompt, imageUrls, { maxTokens: 4096 });
+    const vision = await fetchVisionJson(textPrompt, imageUrls, { maxTokens: 8192 }); // JSON do style_guide é grande
 
     if (!vision.ok) {
       console.error(`[analyze-brand-examples] vision error: ${vision.status}`);

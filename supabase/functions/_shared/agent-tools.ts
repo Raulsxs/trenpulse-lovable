@@ -120,7 +120,7 @@ export const AGENT_TOOLS = [
       type: "object",
       properties: {
         tema: { type: "string", description: "O ASSUNTO que o vídeo explica (ex.: 'como funciona uma ponte de safena')." },
-        duracao: { type: "integer", minimum: 3, maximum: 15, description: "Segundos do vídeo (padrão 5; mais longo custa mais)." },
+        duracao: { type: "integer", minimum: 5, maximum: 15, description: "Segundos do vídeo (padrão 10; 15 é o máximo. Mais longo custa mais — ~7cr/s. Se o usuário quiser, ofereça estender pra 15s)." },
         formato: { type: "string", enum: ["9:16", "1:1", "16:9"], description: "9:16 reel/story (padrão), 1:1 feed, 16:9 horizontal." },
         brandId: { type: "string", description: "Marca a seguir (opcional; sem marca = estilo livre)." },
       },

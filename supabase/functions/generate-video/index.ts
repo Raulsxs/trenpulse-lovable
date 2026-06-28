@@ -54,7 +54,7 @@ serve(async (req) => {
     if (!token) return new Response(JSON.stringify({ error: "REPLICATE_API_TOKEN ausente" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const body = await req.json();
-    const { userId, tema, prompt, imageUrl, duration = 5, aspectRatio = "9:16", brandId, platform = "instagram" } = body;
+    const { userId, tema, prompt, imageUrl, duration = 10, aspectRatio = "9:16", brandId, platform = "instagram" } = body;
     if (!userId || (!tema && !prompt && !imageUrl)) {
       return new Response(JSON.stringify({ error: "userId + (tema | prompt | imageUrl) obrigatórios" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
