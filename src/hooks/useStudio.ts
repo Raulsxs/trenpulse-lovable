@@ -42,7 +42,7 @@ export function useCreateBrand() {
       }
       
       if (!userId) {
-        throw new Error('SessÃ£o expirada. FaÃ§a login novamente.');
+        throw new Error('Sessão expirada. Faça login novamente.');
       }
 
       const brandId = crypto.randomUUID();
@@ -127,7 +127,7 @@ export function useDeleteBrand() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['brands'] });
-      toast.success('Marca excluÃ­da!');
+      toast.success('Marca excluída!');
     },
     onError: (error) => {
       toast.error('Erro ao excluir marca: ' + error.message);
@@ -305,7 +305,7 @@ export function useCreateBrandCategory() {
     },
     onError: (error: any) => {
       if (error.message?.includes('idx_brand_example_categories_unique_name')) {
-        toast.error('JÃ¡ existe um pilar com esse nome');
+        toast.error('Já existe um pilar com esse nome');
       } else {
         toast.error('Erro ao criar pilar: ' + error.message);
       }

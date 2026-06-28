@@ -145,7 +145,7 @@ export default function BrandEdit() {
     return (
       <DashboardLayout>
         <div className="p-6 text-center">
-          <p className="text-muted-foreground">Marca nÃ£o encontrada.</p>
+          <p className="text-muted-foreground">Marca não encontrada.</p>
           <Button variant="link" onClick={() => navigate("/brands")}>Voltar</Button>
         </div>
       </DashboardLayout>
@@ -187,7 +187,7 @@ export default function BrandEdit() {
             <TabsTrigger value="images">Exemplos</TabsTrigger>
           </TabsList>
 
-          {/* â”€â”€ Tab 1: Identidade â€” nome, cores, fontes, tom visual â”€â”€ */}
+          {/* â”€â”€ Tab 1: Identidade — nome, cores, fontes, tom visual â”€â”€ */}
           <TabsContent value="identity">
             <Card>
               <CardContent className="space-y-4 pt-6">
@@ -239,15 +239,15 @@ export default function BrandEdit() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label>Modo de CriaÃ§Ã£o</Label>
-                  <p className="text-xs text-muted-foreground">Define como a IA usa referÃªncias visuais ao gerar conteÃºdo.</p>
+                  <Label>Modo de Criação</Label>
+                  <p className="text-xs text-muted-foreground">Define como a IA usa referências visuais ao gerar conteúdo.</p>
                   <Select value={formData.creation_mode || "from_scratch"} onValueChange={(value) => setFormData({ ...formData, creation_mode: value })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="photo_backgrounds">ðŸ“¸ Fotos pessoais como fundo</SelectItem>
-                      <SelectItem value="style_copy">ðŸŽ¨ Copiar estilo de referÃªncias</SelectItem>
-                      <SelectItem value="inspired">ðŸ’¡ Inspirado em referÃªncias</SelectItem>
-                      <SelectItem value="from_scratch">âœ¨ Criar do zero (sem referÃªncias)</SelectItem>
+                      <SelectItem value="style_copy">ðŸŽ¨ Copiar estilo de referências</SelectItem>
+                      <SelectItem value="inspired">ðŸ’¡ Inspirado em referências</SelectItem>
+                      <SelectItem value="from_scratch">âœ¨ Criar do zero (sem referências)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -279,7 +279,7 @@ export default function BrandEdit() {
                   <p className="text-xs text-muted-foreground">Usadas nos textos sobrepostos nas imagens. Ex: Inter, Montserrat, Playfair Display, Poppins.</p>
                   <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-1">
-                      <Label className="text-xs text-muted-foreground">TÃ­tulos (headlines)</Label>
+                      <Label className="text-xs text-muted-foreground">Títulos (headlines)</Label>
                       <Select value={formData.fonts.headings} onValueChange={v => setFormData({ ...formData, fonts: { ...formData.fonts, headings: v } })}>
                         <SelectTrigger><SelectValue placeholder="Selecione uma fonte" /></SelectTrigger>
                         <SelectContent>
@@ -303,29 +303,29 @@ export default function BrandEdit() {
             </Card>
           </TabsContent>
 
-          {/* â”€â”€ Tab 2: GeraÃ§Ã£o â€” como a IA gera conteÃºdo para esta marca â”€â”€ */}
+          {/* â”€â”€ Tab 2: Geração — como a IA gera conteúdo para esta marca â”€â”€ */}
           <TabsContent value="generation">
             <Card>
               <CardContent className="space-y-4 pt-6">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>âœ… O que a IA DEVE fazer nos conteÃºdos</Label>
+                    <Label>âœ… O que a IA DEVE fazer nos conteúdos</Label>
                     <p className="text-xs text-muted-foreground">Regras que a IA vai seguir ao gerar textos e imagens para esta marca.</p>
-                    <Textarea value={formData.do_rules} onChange={(e) => setFormData({ ...formData, do_rules: e.target.value })} placeholder={"Exemplos:\nâ€¢ Usar linguagem informal e prÃ³xima\nâ€¢ Sempre incluir dados e estatÃ­sticas\nâ€¢ Mencionar o nome da marca nos slides\nâ€¢ Usar emojis com moderaÃ§Ã£o\nâ€¢ Headlines curtos e impactantes (mÃ¡x 60 caracteres)"} rows={4} />
+                    <Textarea value={formData.do_rules} onChange={(e) => setFormData({ ...formData, do_rules: e.target.value })} placeholder={"Exemplos:\nâ€¢ Usar linguagem informal e próxima\nâ€¢ Sempre incluir dados e estatísticas\nâ€¢ Mencionar o nome da marca nos slides\nâ€¢ Usar emojis com moderação\nâ€¢ Headlines curtos e impactantes (máx 60 caracteres)"} rows={4} />
                   </div>
 
                   <div className="space-y-2">
-                    <Label>ðŸš« O que a IA NÃƒO deve fazer</Label>
-                    <p className="text-xs text-muted-foreground">Regras do que evitar â€” a IA nÃ£o vai fazer nada desta lista.</p>
-                    <Textarea value={formData.dont_rules} onChange={(e) => setFormData({ ...formData, dont_rules: e.target.value })} placeholder={"Exemplos:\nâ€¢ NÃ£o usar jargÃµes tÃ©cnicos\nâ€¢ NÃ£o fazer textos longos demais\nâ€¢ NÃ£o usar emojis em excesso\nâ€¢ NÃ£o mencionar concorrentes\nâ€¢ NÃ£o usar CAPS LOCK nos headlines"} rows={4} />
+                    <Label>ðŸš« O que a IA NÃO deve fazer</Label>
+                    <p className="text-xs text-muted-foreground">Regras do que evitar — a IA não vai fazer nada desta lista.</p>
+                    <Textarea value={formData.dont_rules} onChange={(e) => setFormData({ ...formData, dont_rules: e.target.value })} placeholder={"Exemplos:\nâ€¢ Não usar jargões técnicos\nâ€¢ Não fazer textos longos demais\nâ€¢ Não usar emojis em excesso\nâ€¢ Não mencionar concorrentes\nâ€¢ Não usar CAPS LOCK nos headlines"} rows={4} />
                   </div>
                 </div>
 
                 {/* Visual Preferences */}
                 <div className="border-t border-border pt-4 space-y-4">
                   <div>
-                    <Label>ðŸŽ¨ PreferÃªncias visuais das imagens</Label>
-                    <p className="text-xs text-muted-foreground mt-0.5">Controle como a IA gera as imagens. Essas preferÃªncias sÃ£o aplicadas automaticamente em toda geraÃ§Ã£o.</p>
+                    <Label>ðŸŽ¨ Preferências visuais das imagens</Label>
+                    <p className="text-xs text-muted-foreground mt-0.5">Controle como a IA gera as imagens. Essas preferências são aplicadas automaticamente em toda geração.</p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
@@ -355,19 +355,19 @@ export default function BrandEdit() {
                     />
                     <VisualPrefToggle
                       label="Formas abstratas"
-                      description="Formas geomÃ©tricas e abstratas como decoraÃ§Ã£o"
+                      description="Formas geométricas e abstratas como decoração"
                       value={formData.visual_preferences.abstract_elements}
                       onChange={(v) => setFormData({ ...formData, visual_preferences: { ...formData.visual_preferences, abstract_elements: v } })}
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label>ðŸ“ InstruÃ§Ãµes extras para a IA (imagens)</Label>
-                    <p className="text-xs text-muted-foreground">Texto livre que serÃ¡ enviado ao gerador de imagens. Use para descrever o estilo que vocÃª quer.</p>
+                    <Label>ðŸ“ Instruções extras para a IA (imagens)</Label>
+                    <p className="text-xs text-muted-foreground">Texto livre que será enviado ao gerador de imagens. Use para descrever o estilo que você quer.</p>
                     <Textarea
                       value={formData.visual_preferences.custom_notes}
                       onChange={(e) => setFormData({ ...formData, visual_preferences: { ...formData.visual_preferences, custom_notes: e.target.value } })}
-                      placeholder={"Exemplos:\nâ€¢ Estilo minimalista, fundo escuro com detalhes dourados\nâ€¢ Sempre usar degradÃª azul para roxo\nâ€¢ Preferir fotos reais ao invÃ©s de ilustraÃ§Ãµes\nâ€¢ Headlines sempre na parte inferior da imagem"}
+                      placeholder={"Exemplos:\nâ€¢ Estilo minimalista, fundo escuro com detalhes dourados\nâ€¢ Sempre usar degradê azul para roxo\nâ€¢ Preferir fotos reais ao invés de ilustrações\nâ€¢ Headlines sempre na parte inferior da imagem"}
                       rows={4}
                     />
                   </div>
@@ -377,16 +377,16 @@ export default function BrandEdit() {
             </Card>
           </TabsContent>
 
-          {/* â”€â”€ Tab 3: Imagens â€” referÃªncias visuais + fotos pessoais â”€â”€ */}
+          {/* â”€â”€ Tab 3: Imagens — referências visuais + fotos pessoais â”€â”€ */}
           <TabsContent value="images">
             <div className="space-y-6">
-              {/* ReferÃªncias de estilo */}
+              {/* Referências de estilo */}
               <Card>
                 <CardContent className="pt-6 space-y-4">
                   <div className="space-y-1">
-                    <h3 className="text-sm font-semibold">ReferÃªncias de estilo</h3>
+                    <h3 className="text-sm font-semibold">Referências de estilo</h3>
                     <p className="text-xs text-muted-foreground">
-                      Exemplos de posts que vocÃª jÃ¡ usa ou que gosta. A IA analisa e copia o estilo visual.
+                      Exemplos de posts que você já usa ou que gosta. A IA analisa e copia o estilo visual.
                     </p>
                   </div>
                   <BrandExamples
@@ -421,7 +421,7 @@ export default function BrandEdit() {
                   <div className="space-y-1">
                     <h3 className="text-sm font-semibold">Fotos pessoais</h3>
                     <p className="text-xs text-muted-foreground">
-                      Fotos que serÃ£o usadas como fundo dos posts no modo "ðŸ“¸ Foto + texto". Ideal para fotos profissionais.
+                      Fotos que serão usadas como fundo dos posts no modo "ðŸ“¸ Foto + texto". Ideal para fotos profissionais.
                     </p>
                   </div>
                   <BrandPhotoBackgrounds brandId={brand.id} />
@@ -519,7 +519,7 @@ function VisualPrefToggle({ label, description, value, onChange }: {
     <button
       type="button"
       onClick={() => {
-        // Cycle: null (nÃ£o definido) â†’ true (sim) â†’ false (nÃ£o) â†’ null
+        // Cycle: null (não definido) â†’ true (sim) â†’ false (não) â†’ null
         if (value === null) onChange(true);
         else if (value === true) onChange(false);
         else onChange(null);

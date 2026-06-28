@@ -215,3 +215,16 @@ Brands are not visual mode controllers anymore — they inject context into the 
 - Name, palette, fonts, tone, do/don't rules
 - Reference images (for style) or background photos (for literal use)
 - Visual preferences (custom_notes, phone_mockup, etc.)
+
+## ⚠️ Mojibake recorrente no front (encoding UTF-8) — APRENDIZADO
+
+**Sintoma:** strings com acento aparecem corrompidas na UI, ex.: botão "Próximo" vira **"PrÃ³ximo"**, "ção" vira "Ã§Ã£o", travessão vira "â€"". Não é o modelo de imagem nem charset do HTML (o `index.html` já tem `<meta charset="UTF-8">`). É **double-encoding no SOURCE**: alguma ferramenta lê o arquivo `.tsx` (UTF-8) como Latin-1/Windows-1252 e re-salva como UTF-8, corrompendo só as strings tocadas — por isso no MESMO arquivo convivem "próximo" (certo) e "PrÃ³ximo" (corrompido). Suspeito nº1: edições pelo **Lovable** (auto-deploy do front) ou edição no Windows sem forçar UTF-8.
+
+**Detectar (rode antes de commitar mudanças no front):**
+```bash
+grep -rlE 'Ã³|Ã£|Ã©|Ã§|Ã¡|Ã­|Ãª|Ãº|Ã |Ã¢|â€"|â€œ|â€™' src
+```
+
+**Corrigir:** mapa de substituição mojibake→correto (NUNCA reinterpretar o arquivo inteiro com `Buffer.from(t,'latin1').toString('utf8')` — isso CORROMPE as partes que já estão certas). Mapa base: `Ã¡→á Ã →à Ã¢→â Ã£→ã Ã©→é Ãª→ê Ã­→í Ã³→ó Ã´→ô Ãµ→õ Ãº→ú Ã§→ç` (+ maiúsculas `Ã‰→É Ã‡→Ç Ã“→Ó` etc.) e pontuação `â€“→– â€"→— â€œ→" â€™→' Â →(espaço)`. Aplicar com `str.split(a).join(b)` por arquivo, depois confirmar `grep` = 0 e `npx vite build`. (Fix de 62 ocorrências em BrandEdit/BrandWizard/useStudio feito em 2026-06-28, commit logo após.)
+
+**Prevenir:** sempre salvar `.tsx`/`.ts` em **UTF-8 sem BOM**. No PowerShell (Windows), nunca escrever arquivo de código sem `-Encoding utf8`. Ao tocar num componente, checar se o acento renderiza certo.
