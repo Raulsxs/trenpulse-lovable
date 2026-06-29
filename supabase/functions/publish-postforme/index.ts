@@ -121,6 +121,7 @@ Deno.serve(async (req) => {
               platform: a.platform,
               pfm_account_id: a.id,
               status: "connected",
+              expires_at: a.access_token_expires_at, // p/ detectar token vencido → "reconecte"
             }));
           console.log(`[publish-postforme] Loaded ${connections.length} accounts from PFM API (DB was empty) for user ${userId}`);
         } else {
@@ -158,7 +159,7 @@ Deno.serve(async (req) => {
     }
 
     // If accountIds provided, publish to those specific accounts; otherwise use platform matching
-    const publishTargets: Array<{ platform: string; pfm_account_id: string }> = [];
+    const publishTargets: Array<{ platform: string; pfm_account_id: string; expires_at?: string }> = [];
 
     if (accountIds?.length) {
       // Specific accounts selected by user
@@ -178,7 +179,7 @@ Deno.serve(async (req) => {
             const known = new Set(pool.map((c: any) => c.pfm_account_id));
             const live = (Array.isArray(pfmData?.data) ? pfmData.data : [])
               .filter((a: any) => a.status === "connected" && a.external_id === userId)
-              .map((a: any) => ({ platform: a.platform, pfm_account_id: a.id, status: "connected" }))
+              .map((a: any) => ({ platform: a.platform, pfm_account_id: a.id, status: "connected", expires_at: a.access_token_expires_at }))
               .filter((c: any) => !known.has(c.pfm_account_id));
             if (live.length) pool = [...pool, ...live];
             console.log(`[publish-postforme] resolved ${missing.length} selected id(s) via live PFM; pool now ${pool.length}`);
@@ -191,13 +192,13 @@ Deno.serve(async (req) => {
       }
       for (const accId of accountIds) {
         const conn = pool.find((c: any) => c.pfm_account_id === accId);
-        if (conn) publishTargets.push({ platform: conn.platform, pfm_account_id: accId });
+        if (conn) publishTargets.push({ platform: conn.platform, pfm_account_id: accId, expires_at: conn.expires_at });
       }
     } else {
       // Legacy: match by platform name
       for (const tp of targetPlatforms) {
         const conn = connections.find((c: any) => c.platform === tp);
-        if (conn?.pfm_account_id) publishTargets.push({ platform: tp, pfm_account_id: conn.pfm_account_id });
+        if (conn?.pfm_account_id) publishTargets.push({ platform: tp, pfm_account_id: conn.pfm_account_id, expires_at: conn.expires_at });
       }
     }
 
@@ -216,11 +217,18 @@ Deno.serve(async (req) => {
     // Helper: publish one PFM social-post and poll for a concrete verdict.
     // Returns { success, postId?, error?, pending?, url? }.
     const publishOne = async (
-      target: { platform: string; pfm_account_id: string },
+      target: { platform: string; pfm_account_id: string; expires_at?: string },
       mediaList: string[],
       forceStory: boolean,
       slideIdxLog: string,
     ): Promise<{ success: boolean; postId?: string; error?: string; pending?: boolean; url?: string }> => {
+      // Token vencido = a plataforma rejeita com 400 genérico ("Request failed with status code 400")
+      // e o usuário não entende. Detecta ANTES e devolve instrução clara de reconexão.
+      if (target.expires_at && new Date(target.expires_at).getTime() < Date.now()) {
+        console.warn(`[publish-postforme] ${slideIdxLog}token EXPIRADO p/ ${target.platform} (${target.pfm_account_id}) em ${target.expires_at}`);
+        const platLabel = target.platform.charAt(0).toUpperCase() + target.platform.slice(1);
+        return { success: false, error: `A conexão com o ${platLabel} expirou. Reconecte a conta em Perfil → Conexões e tente publicar de novo.` };
+      }
       const caption = platformCaptions?.[target.platform] || (defaultCaption + hashtagsStr);
       const isStory = forceStory || baseContentType === "story" || baseContentType === "reels";
       const media = mediaList.map((url: string) => ({ url }));
