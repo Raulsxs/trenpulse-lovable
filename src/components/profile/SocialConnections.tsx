@@ -196,7 +196,16 @@ export default function SocialConnections() {
       }
     } catch (err: any) {
       console.error("[SocialConnections] connect error:", err);
-      toast.error(err?.message || `Erro ao conectar ${platformId}`);
+      // supabase.functions.invoke joga erro genérico ("non-2xx") em falha — a causa real
+      // (ex.: "TikTok não configurado") vem no corpo. Lê err.context pra mostrar o motivo.
+      let msg = err?.message || `Erro ao conectar ${platformId}`;
+      try {
+        if (err?.context && typeof err.context.json === "function") {
+          const body = await err.context.json();
+          if (body?.error) msg = body.error;
+        }
+      } catch { /* corpo não-JSON */ }
+      toast.error(msg);
     } finally {
       setConnectingPlatform(null);
     }

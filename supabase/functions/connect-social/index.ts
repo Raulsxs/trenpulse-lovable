@@ -184,7 +184,13 @@ Deno.serve(async (req) => {
     if (!pfmResp.ok) {
       let detail = pfmText;
       try { detail = JSON.parse(pfmText)?.message || pfmText; } catch {}
-      return respond({ error: `Erro ao conectar ${platform}: ${detail}` }, 502);
+      // Provedor não configurado no Post for Me (ex.: TikTok sem credenciais de app) → 404
+      // "Social provider app credentials not found". Mensagem clara em vez de erro genérico.
+      const notConfigured = pfmResp.status === 404 || /credential|provider/i.test(detail);
+      const msg = notConfigured
+        ? `A integração com ${platform} ainda não está disponível (provedor não configurado no Post for Me).`
+        : `Erro ao conectar ${platform}: ${detail}`;
+      return respond({ error: msg }, notConfigured ? 400 : 502);
     }
 
     let pfmData: any;
