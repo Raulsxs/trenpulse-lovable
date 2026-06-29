@@ -69,9 +69,13 @@ serve(async (req) => {
       }
     }
 
-    // Prompt de vídeo: animação explicativa, motion graphics, SEM pessoa/avatar/rosto.
+    // Prompt de vídeo: animação CINEMATOGRÁFICA 3D que EXPLICA o tema (não motion graphics flat —
+    // o "flat" antigo matava o 3D que o Maikon quer: câmera mergulhando na anatomia, etc.).
+    // SEM pessoa/rosto e SEM TEXTO baked (modelo de vídeo erra ortografia pt-BR, ex.: "safenão";
+    // a explicação vai na legenda do post).
     const videoPrompt = (prompt as string) ||
-      `Animação explicativa em estilo motion graphics flat e ilustrativo sobre o tema: "${tema}". Visual educativo, ícones, formas e ilustrações que explicam o assunto. PROIBIDO: pessoas, avatares, rostos, mãos realistas. Movimento suave, design moderno e limpo.${brandBlock}`;
+      `Animação CINEMATOGRÁFICA e dinâmica em 3D que explica visualmente o tema: "${tema}". Câmera com movimento fluido que REVELA e explora o assunto (aproximação/dolly que mergulha no objeto do tema — ex.: a câmera entra no corpo e chega no órgão, ou percorre o processo). Mostre o ASSUNTO em si pela animação (anatomia, órgão, mecanismo, processo ou conceito do tema), com volume, profundidade, iluminação rica e materiais realistas — sensação premium, científica e educativa. Movimento suave e contínuo.
+PROIBIDO: pessoas, avatares, rostos ou mãos realistas. PROIBIDO renderizar TEXTO, letras, números ou legendas DENTRO do vídeo (texto em vídeo sai com erro de ortografia — a explicação vai na legenda do post).${brandBlock}`;
 
     const dur = Math.min(Math.max(parseInt(String(duration)) || 5, 1), 15);
     const input: Record<string, unknown> = { prompt: videoPrompt, duration: dur, aspect_ratio: aspectRatio, resolution: "720p" };
