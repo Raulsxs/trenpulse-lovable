@@ -26,6 +26,8 @@ async function fetchAccounts(): Promise<ConnectedAccount[]> {
       connected: true,
       account_name: a.account_name || a.username || null,
       pfm_account_id: a.pfm_account_id || a.id || null,
+      expired: a.expired === true,
+      expires_at: a.expires_at || null,
     }));
   } catch {
     return [];

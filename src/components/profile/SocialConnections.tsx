@@ -104,6 +104,8 @@ export interface ConnectedAccount {
   connected: boolean;
   account_name?: string;
   pfm_account_id?: string;
+  expired?: boolean;          // token vencido → precisa reconectar (senão o publish dá 400)
+  expires_at?: string | null;
 }
 
 export default function SocialConnections() {
@@ -128,6 +130,8 @@ export default function SocialConnections() {
             connected: true,
             account_name: c.account_name,
             pfm_account_id: c.pfm_account_id,
+            expired: c.expired === true,
+            expires_at: c.expires_at ?? null,
           })),
       );
     } catch (err) {
@@ -235,6 +239,7 @@ export default function SocialConnections() {
             {PLATFORMS.map((p) => {
               const platformAccounts = accounts.filter((a) => a.platform === p.id);
               const hasAccounts = platformAccounts.length > 0;
+              const hasExpired = platformAccounts.some((a) => a.expired);
               const isConnecting = connectingPlatform === p.id;
               const IconComp = p.icon;
 
@@ -242,7 +247,9 @@ export default function SocialConnections() {
                 <div
                   key={p.id}
                   className={`p-3 rounded-xl border transition-all ${
-                    hasAccounts
+                    hasExpired
+                      ? "border-amber-500/40 bg-amber-500/5"
+                      : hasAccounts
                       ? "border-green-500/30 bg-green-500/5"
                       : "border-border hover:border-primary/30 hover:bg-muted/30"
                   }`}
@@ -263,15 +270,29 @@ export default function SocialConnections() {
                     <div className="space-y-1.5">
                       {platformAccounts.map((account) => {
                         const isDisc = disconnectingAccountId === account.pfm_account_id;
+                        const expired = account.expired === true;
                         return (
                           <div
                             key={account.pfm_account_id || `${p.id}-unknown`}
-                            className="flex items-center gap-2 p-2 rounded-md bg-background/50 border border-border/50"
+                            className={`flex items-center gap-2 p-2 rounded-md border ${expired ? "bg-amber-500/10 border-amber-500/40" : "bg-background/50 border-border/50"}`}
                           >
-                            <div className="w-1.5 h-1.5 rounded-full bg-green-500 shrink-0" />
+                            <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${expired ? "bg-amber-500" : "bg-green-500"}`} />
                             <span className="text-xs flex-1 truncate" title={account.account_name || ""}>
                               {account.account_name || "Conta conectada"}
+                              {expired && <span className="ml-1 font-medium text-amber-600">· conexão expirada</span>}
                             </span>
+                            {expired && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-6 px-2 text-[11px] border-amber-500/50 text-amber-700 hover:bg-amber-500/10"
+                                onClick={() => handleConnect(p.id)}
+                                disabled={isConnecting}
+                                title="Reconectar esta conta"
+                              >
+                                {isConnecting ? <Loader2 className="w-3 h-3 animate-spin" /> : "Reconectar"}
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="ghost"

@@ -1045,20 +1045,21 @@ export default function ActionCard({
                       const info = PLATFORMS.find((p) => p.id === account.platform);
                       if (!info) return null;
                       const accountKey = account.pfm_account_id || account.platform;
-                      const isSelected = selectedAccountIds.includes(accountKey);
+                      const expired = (account as any).expired === true;
+                      const isSelected = selectedAccountIds.includes(accountKey) && !expired;
                       const result = publishResults?.[account.platform];
 
                       return (
                         <label
                           key={accountKey}
-                          className={`flex items-center gap-2.5 p-2 rounded-md cursor-pointer transition-colors ${
-                            isSelected ? "bg-primary/5" : "hover:bg-muted/50"
+                          className={`flex items-center gap-2.5 p-2 rounded-md transition-colors ${
+                            expired ? "bg-amber-500/10 cursor-not-allowed" : isSelected ? "bg-primary/5 cursor-pointer" : "hover:bg-muted/50 cursor-pointer"
                           }`}
                         >
                           <Checkbox
                             checked={isSelected}
-                            onCheckedChange={() => toggleAccountSelection(accountKey)}
-                            disabled={isPublishing}
+                            onCheckedChange={() => !expired && toggleAccountSelection(accountKey)}
+                            disabled={isPublishing || expired}
                           />
                           <div
                             className={`w-6 h-6 rounded ${info.bgColor} flex items-center justify-center ${info.iconColor} shrink-0`}
@@ -1067,9 +1068,11 @@ export default function ActionCard({
                           </div>
                           <div className="flex-1 min-w-0">
                             <span className="text-xs font-medium block">{info.name}</span>
-                            {account.account_name && (
+                            {expired ? (
+                              <span className="text-[10px] font-medium text-amber-600 block truncate">conexão expirada — reconecte no Perfil</span>
+                            ) : account.account_name ? (
                               <span className="text-[10px] text-muted-foreground block truncate">{account.account_name}</span>
-                            )}
+                            ) : null}
                           </div>
                           {result && (
                             result.success ? (

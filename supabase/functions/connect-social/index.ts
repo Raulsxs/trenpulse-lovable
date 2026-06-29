@@ -93,6 +93,10 @@ Deno.serve(async (req) => {
             pfm_account_id: a.id,
             status: "connected",
             account_name: a.username || a.name || null,
+            // Validade do token: o front avisa "reconecte" antes do publish falhar (token IG/LinkedIn
+            // dura ~60 dias e não tem refresh → expira silencioso e o publish dá 400).
+            expires_at: a.access_token_expires_at || null,
+            expired: a.access_token_expires_at ? new Date(a.access_token_expires_at).getTime() < Date.now() : false,
           }));
 
         console.log(
