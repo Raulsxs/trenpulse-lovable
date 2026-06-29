@@ -149,8 +149,22 @@ PROIBIDO ABSOLUTO — NUNCA renderize a arte como um OBJETO FÍSICO 3D ou foto d
 
 A imagem gerada É o conteúdo final — uma ARTE GRÁFICA CHAPADA (flat design), 2D, vista totalmente de frente. Ela DEVE preencher 100% do quadro (full-bleed): o fundo/arte sangra até TODAS as bordas, sem nenhuma margem de cor sólida, sem moldura e sem espaço vazio em volta. Não é uma prévia de como ficaria dentro de um app nem a foto de um objeto.`;
 
-// Maikon (e outros) querem mais que texto puro — alguns elementos ilustrativos, com moderação.
+// Marcas COM referência de estilo: a ref manda no look; aqui só garantimos que não vire texto puro.
 const VISUAL_RICHNESS_RULE = `RECURSO VISUAL (além do texto): inclua ALGUNS elementos ilustrativos relevantes ao tema — ícones, uma ilustração central simples (ex.: órgão, objeto ou símbolo do assunto) ou formas que comuniquem a ideia visualmente. Com MODERAÇÃO: o objetivo é NÃO ser só texto, mas sem poluir nem virar uma cena complexa demais. O texto continua legível e protagonista; a ilustração apoia a mensagem.`;
+
+// SEM âncora de estilo (marca from_scratch — ex.: a "Inovações em Saúde" do Maikon — ou post sem
+// marca): não há referência definindo o look, então o padrão era um card seco de texto. Maikon pediu
+// posts ILUSTRADOS, com itens/elementos do tema. Aqui empurramos forte pra ilustração de verdade.
+const ILLUSTRATION_FORWARD_RULE = `ESTILO ILUSTRADO (PRIORIDADE ALTA): este post deve ser uma peça VISUAL rica, NÃO um card só de texto sobre fundo liso. Componha um elemento-herói claro do tema (ex.: um órgão, alimento, equipamento, pessoa estilizada, cenário ou símbolo do assunto) acompanhado de ALGUNS elementos/itens de apoio (ícones, objetos, formas) que reforçam a mensagem. O herói pode ser uma ilustração (vetorial/editorial/flat com profundidade) OU um render realista/3D do tema — o que comunicar melhor; evite apenas o card seco de texto. A arte comunica o tema; o texto fica integrado à composição, curto e legível, convivendo com a imagem (nunca sozinho num fundo vazio). Mantenha equilíbrio: rico em elementos, mas sem poluir.`;
+
+// A marca tem direção de estilo PRÓPRIA (tom visual, regras do/don't, nota visual ou style_guide)?
+// Se sim, o estilo da marca é a autoridade — não impomos a regra genérica "empurra ilustração" por cima
+// (ela brigaria com estilos específicos, ex.: o infográfico dark/premium que o Maikon quer na "Inovações").
+function brandHasStyleDirective(brand: any): boolean {
+  if (!brand) return false;
+  const prefs = brand.visual_preferences && typeof brand.visual_preferences === "object" ? brand.visual_preferences : null;
+  return !!(brand.do_rules || brand.visual_tone || brand.style_guide || prefs?.custom_notes);
+}
 
 const INTENTS = [
   "GENERATE",
@@ -909,7 +923,7 @@ REGRAS:
 ${hasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composição das imagens de referência anexadas (mas TRADUZA qualquer texto delas para pt-BR).\n" : ""}- NÃO inclua URLs, QR codes ou logotipos de terceiros.
 - Gere APENAS o design final — sem bordas externas, sem frames.
 ${storySpecificRules}
-${VISUAL_RICHNESS_RULE}
+${(hasStyleRefs || brandHasStyleDirective(brandSnapshot)) ? VISUAL_RICHNESS_RULE : ILLUSTRATION_FORWARD_RULE}
 ${NO_UI_MOCKUP_RULE}
 
 ${SAFE_AREA_RULES}`;
@@ -1363,7 +1377,7 @@ ${carouselHasStyleRefs ? "- FIDELIDADE: replique cores, tipografia e composiçã
 ${i === 0 ? "- Este é o COVER: título grande, impactante" : ""}
 ${slide.role === "cta" ? "- Este é o ÚLTIMO slide: chamada para ação clara" : ""}
 
-${VISUAL_RICHNESS_RULE}
+${(carouselHasStyleRefs || brandHasStyleDirective(brandSnapshot)) ? VISUAL_RICHNESS_RULE : ILLUSTRATION_FORWARD_RULE}
 ${NO_UI_MOCKUP_RULE}
 
 ${SAFE_AREA_RULES}
@@ -1507,6 +1521,57 @@ Responda APENAS em JSON: { "caption": "...", "hashtags": ["#..."] }`;
           .filter((u): u is string => !!u);
         const updatedSlides: any[] = slideResults.map((r) => r.updatedSlide);
 
+        // 8b. Variantes de legenda por plataforma (igual ao post único). Sem isto o carrossel só
+        // tinha 1 legenda: publicar no LinkedIn caía no fallback (legenda da plataforma selecionada),
+        // sem a variante LinkedIn otimizada NEM o bilíngue pt+en que o usuário ativou no Perfil.
+        let platformCaptions: Record<string, string> | null = null;
+        try {
+          const bilingualNote = secondaryLang && bilingualPlatforms.length > 0
+            ? `\n\nIMPORTANTE — LEGENDAS BILÍNGUES: Para as plataformas [${bilingualPlatforms.join(", ")}], a legenda DEVE ser bilíngue: primeiro o texto em português, depois uma linha "---" e o texto traduzido para ${secondaryLangName}. As outras plataformas ficam somente em português.`
+            : "";
+          const variantSourceRule = urlMatch?.[0] && !isStoryCarousel
+            ? `\nFONTE: Para instagram, linkedin, facebook, tiktok — termine a legenda com uma linha em branco e depois exatamente "🔗 Fonte: ${urlMatch[0]}". Para X (Twitter), inclua a URL no final como link nu (sem o prefixo "🔗 Fonte:") já que o limite de 280 chars é apertado.`
+            : "";
+          const variantNoBioRule = `\nPROIBIDO em TODAS as plataformas: nunca escreva "link na bio", "link no perfil", "arrasta pra cima", "swipe up", "veja mais nos stories" ou variações.`;
+
+          const variantPrompt = `Você é um copywriter especialista em cada rede social. Adapte a legenda de carrossel abaixo mantendo a essência mas otimizando RADICALMENTE para cada plataforma. NÃO é tradução — cada versão deve parecer nativa daquela rede.
+
+LEGENDA ORIGINAL:
+${caption}
+
+HASHTAGS: ${hashtags.join(" ")}
+
+REGRAS POR PLATAFORMA:
+- instagram: Gancho forte na 1a linha (pare o scroll). Tom ${userCtx?.brand_voice || "casual"}, emojis moderados. CTA (salve/compartilhe/arrasta pro lado). 8-12 hashtags NO FINAL (separados). Máx 2200 chars.
+- linkedin: Tom de especialista/thought leader. Comece com dado ou insight surpreendente. Parágrafos curtos. Pergunta no final para gerar debate. 3-5 hashtags discretos. Máx 3000 chars.
+- x: Conciso, opinião forte, provocativo. Máx 280 chars. 0-2 hashtags. Sem emojis excessivos.
+- tiktok: Super informal, enérgico, com urgência. CTA direto ("salve agora!", "manda pra alguém!"). Emojis ok. Máx 2200 chars.
+- facebook: Tom amigável e conversacional. Pergunta aberta no início OU final para comentários. Pode ser mais longo. Máx 2000 chars.
+${variantNoBioRule}${variantSourceRule}
+${bilingualNote}
+
+Responda APENAS em JSON:
+{ "instagram": "...", "linkedin": "...", "x": "...", "tiktok": "...", "facebook": "..." }`;
+
+          const variantResp = await aiGatewayFetch({
+            model: "openrouter/minimax-m-25",
+            messages: [{ role: "user", content: variantPrompt }],
+          });
+          if (variantResp.ok) {
+            const variantData = await variantResp.json();
+            const raw = variantData.choices?.[0]?.message?.content || "";
+            const parsedVariants = parseLlmJson<Record<string, string>>(raw);
+            if (parsedVariants) {
+              platformCaptions = parsedVariants;
+              console.log("[ai-chat] GENERATE_CAROUSEL: platform variants generated:", Object.keys(platformCaptions || {}).join(", "));
+            } else {
+              console.warn("[ai-chat] GENERATE_CAROUSEL: platform variants JSON parse failed");
+            }
+          }
+        } catch (variantErr: any) {
+          console.warn("[ai-chat] GENERATE_CAROUSEL: platform variants failed:", variantErr?.message);
+        }
+
         // 8. Save to generated_contents
         // NOTE: For story carousels we keep content_type="carousel" so the ActionCard's slide
         // navigation works as usual; the story_carousel flag in generation_metadata tells
@@ -1516,6 +1581,7 @@ Responda APENAS em JSON: { "caption": "...", "hashtags": ["#..."] }`;
             title: carouselTitle,
             caption,
             hashtags,
+            platformCaptions,
             slides: updatedSlides,
           },
           fallbackTitle: carouselTitle,

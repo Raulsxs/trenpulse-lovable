@@ -76,11 +76,8 @@ export default function AgentChat() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const storeKey = useRef<string>("");
-  const uiRef = useRef<Msg[]>([]);
   const toolBreak = useRef(false);   // separa texto pré/pós tool no mesmo balão
   const shownContent = useRef<Set<string>>(new Set()); // dedup ActionCard por content_id (1 card/conteúdo) — evita 2 canais realtime no mesmo content (crash)
-
-  useEffect(() => { uiRef.current = uiMessages; }, [uiMessages]);
 
   useEffect(() => {
     (async () => {
@@ -98,11 +95,18 @@ export default function AgentChat() {
               // a conversa salva quando havia o bug recria 2+ canais realtime e crasha na carga.
               const seen = new Set<string>();
               const cleaned = saved.ui.map((m: Msg) => {
-                if (m.action?.contentId) {
-                  if (seen.has(m.action.contentId)) return { ...m, action: undefined };
-                  seen.add(m.action.contentId);
+                let action = m.action;
+                if (action?.contentId) {
+                  if (seen.has(action.contentId)) action = undefined;
+                  else seen.add(action.contentId);
                 }
-                return m;
+                // Tool "rodando" (ok indefinido) só sobrevive se a sessão anterior foi interrompida
+                // no meio. Geração NÃO retoma ao recarregar → marca como concluída pra não ficar
+                // girando "Gerando imagem…" pra sempre (o bug do spinner fantasma ao voltar pra página).
+                const tools = m.tools?.some((t) => t.ok === undefined)
+                  ? m.tools.map((t) => (t.ok === undefined ? { ...t, ok: true } : t))
+                  : m.tools;
+                return { ...m, action, tools };
               });
               setUiMessages(cleaned);
               shownContent.current = seen;
@@ -115,10 +119,13 @@ export default function AgentChat() {
   }, []);
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }); }, [uiMessages, pendingConfirm]);
 
-  function persist() {
-    if (!storeKey.current) return;
-    try { localStorage.setItem(storeKey.current, JSON.stringify({ ui: uiRef.current, convo: convo.current })); } catch { /* ignore */ }
-  }
+  // Persiste só QUANDO o streaming termina (sending=false), via efeito — assim grava o estado JÁ
+  // commitado (tool concluída + ActionCard). O persist() antigo lia uiRef.current no finally, antes
+  // do React commitar os últimos eventos, salvando o frame "Gerando imagem…" → spinner fantasma.
+  useEffect(() => {
+    if (!storeKey.current || sending) return;
+    try { localStorage.setItem(storeKey.current, JSON.stringify({ ui: uiMessages, convo: convo.current })); } catch { /* ignore */ }
+  }, [uiMessages, sending]);
 
   const newId = () => (crypto?.randomUUID ? crypto.randomUUID() : String(Math.random()));
   const patchCur = (fn: (m: Msg) => Msg) =>
@@ -209,8 +216,7 @@ export default function AgentChat() {
     } catch (e: any) {
       if (e?.name !== "AbortError") toast.error(e?.message || "Falha na conexão com o agente");
     } finally {
-      setSending(false);
-      persist();
+      setSending(false); // dispara o efeito de persistência com o estado final já commitado
     }
   }
 
@@ -240,8 +246,7 @@ export default function AgentChat() {
     shownContent.current.clear();
     toolBreak.current = false;
     setUiMessages([]);
-    setPendingConfirm(null);
-    setTimeout(persist, 0);
+    setPendingConfirm(null); // o efeito de persistência grava o estado limpo (sending=false)
   }
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -327,7 +332,9 @@ export default function AgentChat() {
               {m.role === "assistant" && m.tools.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
                   {m.tools.map((t, i) => {
-                    const running = t.ok === undefined;
+                    // Só gira se há stream ativo. Sem isso, uma tool persistida com ok indefinido
+                    // (sessão interrompida) renderizaria o spinner "Gerando imagem…" pra sempre.
+                    const running = sending && t.ok === undefined;
                     const failed = t.ok === false && !t.cancelled;
                     return (
                       <span

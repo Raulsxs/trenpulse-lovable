@@ -354,9 +354,24 @@ export default function ActionCard({
       }
     } catch (err: any) {
       console.error("[ActionCard] publish error:", err);
-      toast.error("Erro ao publicar conteudo");
+      // supabase.functions.invoke joga um erro GENÉRICO ("Request failed with status code 400")
+      // quando a function devolve não-2xx — a mensagem amigável (PT) vem no CORPO da resposta.
+      // err.context é o Response; lemos o body pra mostrar a causa real, não o texto genérico.
+      let realMsg = err?.message || "Erro ao publicar conteúdo";
+      try {
+        if (err?.context && typeof err.context.json === "function") {
+          const body = await err.context.json();
+          if (body?.error) realMsg = body.error;
+        }
+      } catch { /* corpo não-JSON: mantém a msg genérica */ }
+      toast.error(realMsg);
+      // Indexa por PLATAFORMA (o display procura PLATFORMS.id === chave). Antes indexava por
+      // pfm_account_id → "undefined: ..." no lugar do nome da rede.
       const failResults: Record<string, { success: boolean; error?: string }> = {};
-      for (const p of selectedAccountIds) failResults[p] = { success: false, error: err.message };
+      for (const accId of selectedAccountIds) {
+        const plat = connectedAccounts.find((a) => a.pfm_account_id === accId)?.platform || accId;
+        failResults[plat] = { success: false, error: realMsg };
+      }
       setPublishResults(failResults);
     } finally {
       setIsPublishing(false);

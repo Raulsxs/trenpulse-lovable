@@ -12,6 +12,13 @@ dist
 dist-ssr
 *.local
 
+# Segredos — nunca commitar
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+
 supabase/.temp
 
 # Editor directories and files

@@ -162,8 +162,35 @@ Deno.serve(async (req) => {
 
     if (accountIds?.length) {
       // Specific accounts selected by user
+      let pool = connections;
+      // O modal lista contas via connect-social (PFM AO VIVO), mas aqui podemos ter carregado do DB
+      // (social_connections), que pode estar DEFASADO → os ids selecionados não batem, publishTargets
+      // fica vazio e devolvemos 400 ("Nenhuma conta selecionada"). Se faltar algum id, recarrega do
+      // PFM ao vivo e mescla (mantendo o filtro external_id === userId pra não vazar conta de outro).
+      const missing = accountIds.filter((id: string) => !pool.find((c: any) => c.pfm_account_id === id));
+      if (missing.length) {
+        try {
+          const pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts", {
+            headers: { "Authorization": `Bearer ${pfmApiKey}` },
+          });
+          if (pfmResp.ok) {
+            const pfmData = await pfmResp.json();
+            const known = new Set(pool.map((c: any) => c.pfm_account_id));
+            const live = (Array.isArray(pfmData?.data) ? pfmData.data : [])
+              .filter((a: any) => a.status === "connected" && a.external_id === userId)
+              .map((a: any) => ({ platform: a.platform, pfm_account_id: a.id, status: "connected" }))
+              .filter((c: any) => !known.has(c.pfm_account_id));
+            if (live.length) pool = [...pool, ...live];
+            console.log(`[publish-postforme] resolved ${missing.length} selected id(s) via live PFM; pool now ${pool.length}`);
+          } else {
+            console.warn(`[publish-postforme] live PFM resolve HTTP ${pfmResp.status}`);
+          }
+        } catch (e: any) {
+          console.warn("[publish-postforme] live PFM resolve failed:", e?.message);
+        }
+      }
       for (const accId of accountIds) {
-        const conn = connections.find((c: any) => c.pfm_account_id === accId);
+        const conn = pool.find((c: any) => c.pfm_account_id === accId);
         if (conn) publishTargets.push({ platform: conn.platform, pfm_account_id: accId });
       }
     } else {
