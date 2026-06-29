@@ -1,7 +1,10 @@
-// generate-video — vídeo animado via Grok (xai/grok-imagine-video no Replicate).
-// Estilo: animação EXPLICATIVA sobre um tema (motion graphics), seguindo a marca OU livre.
-// NUNCA avatar/pessoa/rosto. text-to-video (do tema) ou image-to-video (anima uma imagem).
-// Chamada interna (service_role) — reusada pela tool gerar_video do /agent. verify_jwt=false.
+// generate-video — vídeo animado via Replicate.
+// PRIMÁRIO: Kling v3 (cinematográfico 3D, ~115-130s — cabe na janela da Edge Function).
+// Selecionáveis via `videoModel`: "kling" (default) | "seedance" (mais cinematográfico, ~180s,
+// PODE estourar o limite) | "grok" (rápido ~30s, qualidade menor).
+// Estilo: animação EXPLICATIVA 3D sobre um tema. NUNCA avatar/pessoa/rosto. SEM texto baked
+// (modelo de vídeo erra ortografia pt-BR; a explicação vai na legenda). text-to-video (do tema)
+// ou image-to-video (anima uma imagem). Chamada interna (service_role). verify_jwt=false.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
@@ -10,30 +13,55 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-const GROK_SLUG = "xai/grok-imagine-video";
+// Modelos de vídeo no Replicate. maxMs = teto de poll (sob o limite ~150s da Edge Function).
+const VIDEO_MODELS: Record<string, { slug: string; maxMs: number }> = {
+  kling: { slug: "kwaivgi/kling-v3-video", maxMs: 145000 },
+  seedance: { slug: "bytedance/seedance-1.5-pro", maxMs: 145000 }, // ~180s: pode estourar; use com cautela
+  grok: { slug: "xai/grok-imagine-video", maxMs: 140000 },
+};
 
-/** Gera o vídeo no Grok (Prefer:wait + poll). Retorna URL do .mp4 ou null. */
-async function grokVideo(token: string, input: Record<string, unknown>): Promise<string | null> {
+/** Schema de input difere por modelo (nomes de parâmetro distintos). */
+function buildVideoInput(model: string, prompt: string, dur: number, aspectRatio: string, imageUrl?: string): Record<string, unknown> {
+  if (model === "kling") {
+    // Kling aceita só 5 ou 10s. mode "pro" = cinematográfico. start_image p/ image-to-video.
+    const input: Record<string, unknown> = { prompt, aspect_ratio: aspectRatio, duration: dur <= 7 ? 5 : 10, mode: "pro" };
+    if (imageUrl) input.start_image = imageUrl;
+    return input;
+  }
+  if (model === "seedance") {
+    // camera_fixed:false = câmera SE MOVE (o "mergulha no coração" que o Maikon quer).
+    const input: Record<string, unknown> = { prompt, aspect_ratio: aspectRatio, duration: dur, camera_fixed: false };
+    if (imageUrl) input.image = imageUrl;
+    return input;
+  }
+  // grok
+  const input: Record<string, unknown> = { prompt, duration: dur, aspect_ratio: aspectRatio, resolution: "720p" };
+  if (imageUrl) input.image = imageUrl;
+  return input;
+}
+
+/** Roda um modelo de vídeo no Replicate (Prefer:wait + poll). Retorna URL do .mp4 ou null. */
+async function replicateVideo(token: string, slug: string, input: Record<string, unknown>, maxMs: number): Promise<string | null> {
   try {
-    const res = await fetch(`https://api.replicate.com/v1/models/${GROK_SLUG}/predictions`, {
+    const res = await fetch(`https://api.replicate.com/v1/models/${slug}/predictions`, {
       method: "POST",
       headers: { Authorization: `Token ${token}`, "Content-Type": "application/json", Prefer: "wait" },
       body: JSON.stringify({ input }),
     });
-    if (!res.ok) { console.error(`[generate-video] Grok HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`); return null; }
+    if (!res.ok) { console.error(`[generate-video] ${slug} HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`); return null; }
     let pred = await res.json();
     const start = Date.now();
-    while (pred.status && !["succeeded", "failed", "canceled"].includes(pred.status) && Date.now() - start < 140000) {
+    while (pred.status && !["succeeded", "failed", "canceled"].includes(pred.status) && Date.now() - start < maxMs) {
       await new Promise((r) => setTimeout(r, 3000));
       const pr = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, { headers: { Authorization: `Token ${token}` } });
       if (!pr.ok) break;
       pred = await pr.json();
     }
-    if (pred.status !== "succeeded") { console.warn(`[generate-video] Grok status=${pred.status}`); return null; }
+    if (pred.status !== "succeeded") { console.warn(`[generate-video] ${slug} status=${pred.status}`); return null; }
     const out = Array.isArray(pred.output) ? pred.output[0] : pred.output;
     return typeof out === "string" ? out : (out?.url || null);
   } catch (e: any) {
-    console.error(`[generate-video] Grok exceção: ${e?.message}`);
+    console.error(`[generate-video] ${slug} exceção: ${e?.message}`);
     return null;
   }
 }
@@ -54,7 +82,7 @@ serve(async (req) => {
     if (!token) return new Response(JSON.stringify({ error: "REPLICATE_API_TOKEN ausente" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const body = await req.json();
-    const { userId, tema, prompt, imageUrl, duration = 10, aspectRatio = "9:16", brandId, platform = "instagram" } = body;
+    const { userId, tema, prompt, imageUrl, duration = 5, aspectRatio = "9:16", brandId, platform = "instagram", videoModel } = body;
     if (!userId || (!tema && !prompt && !imageUrl)) {
       return new Response(JSON.stringify({ error: "userId + (tema | prompt | imageUrl) obrigatórios" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
@@ -69,24 +97,23 @@ serve(async (req) => {
       }
     }
 
-    // Prompt de vídeo: animação CINEMATOGRÁFICA 3D que EXPLICA o tema (não motion graphics flat —
-    // o "flat" antigo matava o 3D que o Maikon quer: câmera mergulhando na anatomia, etc.).
-    // SEM pessoa/rosto e SEM TEXTO baked (modelo de vídeo erra ortografia pt-BR, ex.: "safenão";
-    // a explicação vai na legenda do post).
+    // Prompt de vídeo: animação CINEMATOGRÁFICA 3D que EXPLICA o tema (sem "flat", sem texto baked).
     const videoPrompt = (prompt as string) ||
       `Animação CINEMATOGRÁFICA e dinâmica em 3D que explica visualmente o tema: "${tema}". Câmera com movimento fluido que REVELA e explora o assunto (aproximação/dolly que mergulha no objeto do tema — ex.: a câmera entra no corpo e chega no órgão, ou percorre o processo). Mostre o ASSUNTO em si pela animação (anatomia, órgão, mecanismo, processo ou conceito do tema), com volume, profundidade, iluminação rica e materiais realistas — sensação premium, científica e educativa. Movimento suave e contínuo.
 PROIBIDO: pessoas, avatares, rostos ou mãos realistas. PROIBIDO renderizar TEXTO, letras, números ou legendas DENTRO do vídeo (texto em vídeo sai com erro de ortografia — a explicação vai na legenda do post).${brandBlock}`;
 
     const dur = Math.min(Math.max(parseInt(String(duration)) || 5, 1), 15);
-    const input: Record<string, unknown> = { prompt: videoPrompt, duration: dur, aspect_ratio: aspectRatio, resolution: "720p" };
-    if (imageUrl) input.image = imageUrl; // image-to-video: anima uma imagem já gerada
+    const model = (typeof videoModel === "string" && VIDEO_MODELS[videoModel]) ? videoModel : "kling";
+    const cfg = VIDEO_MODELS[model];
 
     const t0 = Date.now();
-    const videoUrl = await grokVideo(token, input);
+    const input = buildVideoInput(model, videoPrompt, dur, aspectRatio, imageUrl);
+    console.log(`[generate-video] model=${model} slug=${cfg.slug} dur=${dur} ar=${aspectRatio}`);
+    const videoUrl = await replicateVideo(token, cfg.slug, input, cfg.maxMs);
     if (!videoUrl) {
       return new Response(JSON.stringify({ error: "Falha ao gerar o vídeo. Tente de novo." }), { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
-    console.log(`[generate-video] ok em ${Date.now() - t0}ms: ${videoUrl}`);
+    console.log(`[generate-video] ok (${model}) em ${Date.now() - t0}ms: ${videoUrl}`);
 
     // Salva como conteúdo (content_type=video; ActionCard detecta .mp4 e renderiza <video>).
     const { data: content, error: insErr } = await svc.from("generated_contents").insert({
@@ -98,7 +125,7 @@ PROIBIDO: pessoas, avatares, rostos ou mãos realistas. PROIBIDO renderizar TEXT
       brand_id: brandId || null,
       platform,
       status: "draft",
-      generation_metadata: { model: GROK_SLUG, prompt: videoPrompt, duration: dur, aspect_ratio: aspectRatio, video_url: videoUrl },
+      generation_metadata: { model: cfg.slug, prompt: videoPrompt, duration: dur, aspect_ratio: aspectRatio, video_url: videoUrl },
     }).select("id").single();
     if (insErr) { console.error("[generate-video] insert error:", insErr.message); return new Response(JSON.stringify({ error: "Falha ao salvar o vídeo" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }); }
 

@@ -27,6 +27,31 @@
 
 import Anthropic from "npm:@anthropic-ai/sdk";
 
+/**
+ * Replicate (modelos Anthropic/Gemini) ÀS VEZES devolve a saída com UTF-8 DUPLO-ENCODADO (acentos,
+ * travessão e emoji vêm corrompidos). Isso vazava p/ as legendas publicadas. Aqui detectamos
+ * a assinatura (um byte-líder UTF-8 renderizado como char Latin-1 seguido de byte de continuação) e
+ * re-decodificamos. SEGURO: sem assinatura → retorna igual; se houver code point real >255 (multibyte
+ * legítimo) → não toca; se os bytes reinterpretados não forem UTF-8 válido → mantém o original.
+ */
+function fixDoubleEncodedUtf8(s: string): string {
+  if (!s) return s;
+  let hasSig = false;
+  for (let i = 0; i < s.length; i++) {
+    const a = s.charCodeAt(i);
+    if (a > 0xff) return s; // code point real >255 = multibyte legítimo, não mojibake
+    const b = i + 1 < s.length ? s.charCodeAt(i + 1) : 0;
+    if (a >= 0xc2 && a <= 0xf4 && b >= 0x80 && b <= 0xbf) hasSig = true;
+  }
+  if (!hasSig) return s;
+  try {
+    const bytes = Uint8Array.from(s, (c) => c.charCodeAt(0));
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    return s;
+  }
+}
+
 interface AIConfig {
   url: string;
   apiKey: string;
@@ -397,7 +422,7 @@ async function fetchVisionReplicate(
       pred = await pr.json();
     }
     if (pred.status !== "succeeded") return { ok: false, text: `status=${pred.status}`, status: 502 };
-    const text = Array.isArray(pred.output) ? pred.output.join("") : String(pred.output ?? "");
+    const text = fixDoubleEncodedUtf8(Array.isArray(pred.output) ? pred.output.join("") : String(pred.output ?? ""));
     if (!text.trim()) return { ok: false, text: "vazio", status: 200 };
     console.log(`[ai-gateway] vision Replicate(gemini-2.5-flash) ok: ${text.length} chars, ${input.images.length} imgs`);
     return { ok: true, text, status: 200 };
@@ -497,7 +522,7 @@ async function fetchClaudeReplicate(request: FetchAIRequest): Promise<FetchAIRes
       console.warn(`[ai-gateway] Replicate Haiku status=${pred.status}`);
       return { ok: false, status: 502, choices: [{ message: { content: "" } }] };
     }
-    const text = Array.isArray(pred.output) ? pred.output.join("") : String(pred.output ?? "");
+    const text = fixDoubleEncodedUtf8(Array.isArray(pred.output) ? pred.output.join("") : String(pred.output ?? ""));
     console.log(`[ai-gateway] Replicate Haiku ok: ${text.length} chars`);
     return { ok: !!text.trim(), status: 200, choices: [{ message: { content: text } }], raw: pred };
   } catch (e: any) {
