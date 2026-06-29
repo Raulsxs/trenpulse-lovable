@@ -124,6 +124,12 @@ async function extractArticleContent(rawUrl: string, tag: string): Promise<strin
       .replace(/&nbsp;/gi, " ")
       .replace(/\s+/g, " ")
       .trim();
+    // Página bloqueada/JS-shell costuma devolver pouco texto (menu/login). Trata como FALHA —
+    // assim o "" vira sinal confiável de "não li" e o guard anti-invenção pode pedir o texto.
+    if (text.length < 300) {
+      console.warn(`[ai-chat] ${tag}: HTML fetch só ${text.length} chars (provável página bloqueada/JS) — tratando como falha`);
+      return "";
+    }
     console.log(`[ai-chat] ${tag}: HTML fetch extracted ${text.length} chars`);
     return text.substring(0, 4000);
   } catch (err: any) {
@@ -744,6 +750,12 @@ Mensagem: "${message}"`;
         if (urlMatch) {
           articleContent = await extractArticleContent(urlMatch[0], "GENERATE");
         }
+        // Guard anti-invenção: se o link É o tema mas não conseguimos LER a página, NÃO inventamos
+        // um assunto (um artigo de "Bentall" virou "ponte de safena"). Pede o texto em vez de chutar.
+        if (urlMatch && !articleContent && message.replace(/https?:\/\/\S+/g, "").trim().length < 15) {
+          replyOverride = "Não consegui ler esse link — o site deve exigir login ou bloquear leitura automática (comum em artigos médicos ou com vídeo). Me manda o **texto** ou um **resumo do assunto** e eu crio o conteúdo certo, sem chutar. 🙏";
+          break;
+        }
 
         // 4. Get content dimensions
         const dims = getContentDimensions(platform, format);
@@ -1230,6 +1242,11 @@ Responda APENAS em JSON:
         const urlMatch = message.match(/https?:\/\/[^\s]+/);
         if (urlMatch) {
           articleContent = await extractArticleContent(urlMatch[0], "GENERATE_CAROUSEL");
+        }
+        // Guard anti-invenção (mesmo motivo do GENERATE): link como tema + página ilegível → pede o texto.
+        if (urlMatch && !articleContent && message.replace(/https?:\/\/\S+/g, "").trim().length < 15) {
+          replyOverride = "Não consegui ler esse link — o site deve exigir login ou bloquear leitura automática (comum em artigos médicos ou com vídeo). Me manda o **texto** ou um **resumo do assunto** e eu crio o carrossel certo, sem chutar. 🙏";
+          break;
         }
 
         // 4. Generate slide structure with minimax
