@@ -26,8 +26,8 @@ import { HelpCenterTrigger } from "@/components/onboarding/HelpCenterModal";
 import BuyCreditsModal from "@/components/billing/BuyCreditsModal";
 
 const SAVED_ACCOUNTS_KEY = "tp_saved_accounts";
-// Flag de rollout do assistente agêntico (/agent): por ora só o dono vê o link.
-const OWNER_EMAILS = ["raul.sxs27@gmail.com", "raul@trendpulse.app"];
+// Rollout do assistente agêntico (/agent): quem vê o link. Dono + operadores liberados.
+const OWNER_EMAILS = ["raul.sxs27@gmail.com", "raul@trendpulse.app", "padilhafelipe424@gmail.com"];
 
 interface SavedAccount {
   userId: string;
