@@ -29,6 +29,7 @@ interface ActionCardProps {
   headline?: string;
   scheduledAt?: string;
   messageId?: string;
+  refreshKey?: number;   // bumpa quando uma edição reusa o mesmo content_id → força re-fetch do preview
   onRegenerate?: () => void;
   onReject?: () => void;
   onAddMessage?: (content: string) => void;
@@ -175,6 +176,7 @@ export default function ActionCard({
   headline,
   scheduledAt,
   messageId,
+  refreshKey,
   onRegenerate,
   onReject,
   onAddMessage,
@@ -387,8 +389,17 @@ export default function ActionCard({
 
   // ── Fetch slide data for client-side rendering (same as studio) ──
   const bgLoadedRef = useRef(false);
+  const prevRefreshRef = useRef<number | undefined>(undefined);
   useEffect(() => {
-    if (contentType === "cron_config" || !contentId || bgLoadedRef.current) return;
+    if (contentType === "cron_config" || !contentId) return;
+    // Edição do /agent (editar_slide/editar_conteudo) reusa o mesmo content_id e bumpa refreshKey.
+    // O canal realtime já foi encerrado após a 1ª imagem, então destravamos o bgLoadedRef p/ re-buscar
+    // os slides/imagens atualizados. (Fix: "corrigiu mas não mostrou a imagem corrigida" — Felipe.)
+    if (refreshKey !== prevRefreshRef.current) {
+      prevRefreshRef.current = refreshKey;
+      bgLoadedRef.current = false;
+    }
+    if (bgLoadedRef.current) return;
 
     let cancelled = false;
     let phaseTimers: ReturnType<typeof setTimeout>[] = [];
@@ -565,7 +576,7 @@ export default function ActionCard({
       if (timeoutTimer) clearTimeout(timeoutTimer);
       phaseTimers.forEach(clearTimeout);
     };
-  }, [contentId, contentType]);
+  }, [contentId, contentType, refreshKey]);
 
   // ── Cron config card ──
   if (contentType === "cron_config") {
@@ -655,12 +666,24 @@ export default function ActionCard({
   const handleSchedule = async (date: Date) => {
     setIsScheduling(true);
     try {
+      // Agendar herda o MESMO seletor de contas do Publicar → agenda multi-plataforma.
+      // Guarda as contas escolhidas em scheduled_accounts; o instagram-scheduler publica nelas.
+      const selectedAccounts = connectedAccounts.filter(a => a.pfm_account_id && selectedAccountIds.includes(a.pfm_account_id));
+      const scheduledAccounts = selectedAccounts.length > 0
+        ? {
+            platforms: [...new Set(selectedAccounts.map(a => a.platform))],
+            accountIds: selectedAccounts.map(a => a.pfm_account_id).filter(Boolean),
+          }
+        : null;
       await supabase
         .from("generated_contents")
-        .update({ scheduled_at: date.toISOString(), status: "scheduled" })
+        .update({ scheduled_at: date.toISOString(), status: "scheduled", scheduled_accounts: scheduledAccounts })
         .eq("id", contentId);
-      toast.success("Conteúdo agendado!");
+      toast.success(scheduledAccounts
+        ? `Agendado em ${scheduledAccounts.accountIds.length} conta${scheduledAccounts.accountIds.length !== 1 ? "s" : ""}!`
+        : "Conteúdo agendado!");
       setScheduleOpen(false);
+      setPublishOpen(false);
     } catch {
       toast.error("Erro ao agendar");
     } finally {
@@ -1027,7 +1050,7 @@ export default function ActionCard({
                         ? "Publicado"
                         : publishHasPending
                           ? "Em processamento"
-                          : "Publicar agora"}
+                          : "Publicar"}
                     {!publishLocked && <ChevronDown className="w-3 h-3 ml-auto" />}
                   </Button>
                 </PopoverTrigger>
@@ -1096,23 +1119,32 @@ export default function ActionCard({
                         ))}
                     </div>
                   )}
-                  <Button
-                    size="sm"
-                    className="w-full text-xs"
-                    onClick={handlePublish}
-                    disabled={selectedAccountIds.length === 0 || isPublishing || publishLocked}
-                  >
-                    {isPublishing ? (
-                      <Loader2 className="w-3 h-3 animate-spin mr-1" />
-                    ) : (
-                      <Send className="w-3 h-3 mr-1" />
-                    )}
-                    {publishedSuccessfully
-                      ? "Já publicado"
-                      : publishHasPending
-                        ? "Em processamento"
-                        : `Publicar em ${selectedAccountIds.length} conta${selectedAccountIds.length !== 1 ? "s" : ""}`}
-                  </Button>
+                  {/* Ação final do seletor: Publicar agora OU Agendar (mesmas contas escolhidas acima). */}
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className="flex-1 text-xs"
+                      onClick={handlePublish}
+                      disabled={selectedAccountIds.length === 0 || isPublishing || publishLocked}
+                    >
+                      {isPublishing ? (
+                        <Loader2 className="w-3 h-3 animate-spin mr-1" />
+                      ) : (
+                        <Send className="w-3 h-3 mr-1" />
+                      )}
+                      {publishedSuccessfully ? "Publicado" : publishHasPending ? "Processando" : "Publicar"}
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="flex-1 text-xs"
+                      onClick={() => { setPublishOpen(false); setScheduleOpen(true); }}
+                      disabled={selectedAccountIds.length === 0 || isPublishing || publishLocked}
+                    >
+                      <CalendarDays className="w-3 h-3 mr-1" />
+                      Agendar
+                    </Button>
+                  </div>
                 </PopoverContent>
               </Popover>
             ) : (
@@ -1124,13 +1156,9 @@ export default function ActionCard({
                 title="Conecte uma rede social em Meu Perfil"
               >
                 <Send className="w-3 h-3" />
-                Publicar agora
+                Publicar
               </Button>
             )}
-            <Button size="sm" variant="outline" className="flex-1 text-xs" onClick={() => setScheduleOpen(true)}>
-              <CalendarDays className="w-3 h-3" />
-              Agendar
-            </Button>
             <Button
               size="sm"
               variant="outline"

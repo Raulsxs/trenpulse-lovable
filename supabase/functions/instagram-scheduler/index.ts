@@ -29,7 +29,7 @@ Deno.serve(async (req) => {
     // duplicate posts on 2026-04-27. The < 3 filter must actually exclude old failures.
     const { data: dueContents, error } = await supabase
       .from("generated_contents")
-      .select("id, user_id, platform, publish_attempts")
+      .select("id, user_id, platform, publish_attempts, scheduled_accounts")
       .eq("status", "scheduled")
       .lte("scheduled_at", now)
       .lt("publish_attempts", 3)
@@ -86,10 +86,23 @@ Deno.serve(async (req) => {
             "Authorization": `Bearer ${serviceKey}`,
             "apikey": serviceKey,
           },
-          body: JSON.stringify({
-            contentId: content.id,
-            platforms: [content.platform || "instagram"],
-          }),
+          // Agendamento multi-plataforma: se o usuário escolheu contas no modal de Agendar, elas ficam
+          // em scheduled_accounts ({platforms, accountIds}). Publica EXATAMENTE nelas. Sem seleção
+          // (agendamentos antigos), cai no legado = só a plataforma de criação.
+          body: JSON.stringify(
+            (content as any).scheduled_accounts?.accountIds?.length
+              ? {
+                  contentId: content.id,
+                  platforms: (content as any).scheduled_accounts.platforms?.length
+                    ? (content as any).scheduled_accounts.platforms
+                    : [content.platform || "instagram"],
+                  accountIds: (content as any).scheduled_accounts.accountIds,
+                }
+              : {
+                  contentId: content.id,
+                  platforms: [content.platform || "instagram"],
+                }
+          ),
         });
 
         const publishData = await publishResp.json();

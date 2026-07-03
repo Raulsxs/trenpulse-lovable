@@ -617,6 +617,14 @@ ${brandColorHint}
         promptText = `FORMATO OBRIGATÓRIO: ${dimLabel}. A imagem DEVE ser gerada neste formato exato.\n\n${basePromptText}`;
       }
 
+      // Marcador de página inconsistente entre slides é queixa recorrente (Felipe): o modelo de imagem
+      // às vezes desenha "1/5"/bolinha em uns slides e em outros não. Em carrossel/série (totalSlides>1)
+      // PROIBIMOS de vez — a numeração é do app, nunca da imagem; assim todos os slides ficam idênticos
+      // nesse aspecto. Post/story único (totalSlides=1, inclui o photo_backgrounds do Maikon) fica intocado.
+      if ((totalSlides || 1) > 1) {
+        promptText += `\n\nPROIBIDO ABSOLUTO — SEM NUMERAÇÃO DE SLIDE: não desenhe número de página, contador ("1/5", "01", "slide 2"), bolinhas/pontos de paginação, barra de progresso, seta nem texto de "próximo/arraste". A posição do slide é indicada pelo app, NUNCA dentro da imagem. Nenhum slide pode ter marcador — todos idênticos nesse aspecto.`;
+      }
+
       const refImages = contentParts
         .filter((p: any) => p.type === "image_url")
         .map((p: any) => p.image_url?.url)

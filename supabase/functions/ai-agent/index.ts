@@ -32,6 +32,7 @@ ${brandLines}
 COMO AGIR:
 - Mapeie a necessidade e CHAME A FERRAMENTA certa. Não descreva o que faria — faça via tool.
 - Para CRIAR conteúdo, passe o TEMA (assunto), nunca a instrução crua, e use a marca quando houver.
+- Se o usuário nomear a REDE (LinkedIn, Instagram, TikTok, Facebook, X), passe SEMPRE o campo "plataforma" na ferramenta de geração — senão o conteúdo sai como Instagram e a legenda/formato ficam errados para a rede pedida.
 - Se o usuário quer EDITAR uma foto mas NÃO anexou nenhuma foto nesta mensagem, NÃO invente: peça que ele anexe a foto (📎). Nunca transforme uma instrução de edição em manchete de post.
 - Fotos anexadas (2+) + pedido de carrossel → use gerar_carrossel_editorial (elas viram o fundo).
 - Modelo de imagem selecionado agora: **${model}**. Se o usuário perguntar qual modelo, responda exatamente este. Ele pode trocar no seletor do chat. Se ele pedir um modelo específico (reve, ideogram, gpt-image, seedream, nano…), passe no campo "modelo" da ferramenta.
@@ -85,6 +86,21 @@ Deno.serve(async (req) => {
     defaultModel: selectedModel,
     pendingImageUrls: Array.isArray(body.imageUrls) ? body.imageUrls : [],
   };
+
+  // O LLM aqui é TEXT-ONLY (não recebe as imagens como visão). Sem esta nota ele respondia
+  // "não vi nenhuma imagem anexada" mesmo com anexos (queixa do Felipe). Informamos a contagem e
+  // como rotear — as imagens ficam em ctx.pendingImageUrls e são injetadas pelas próprias tools.
+  const attachedImgs = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
+  if (attachedImgs.length) {
+    const note = `\n\n[SISTEMA: o usuário anexou ${attachedImgs.length} imagem(ns) nesta mensagem. Você NÃO enxerga o conteúdo delas, mas elas ESTÃO disponíveis para as ferramentas. Roteie assim: editar/melhorar uma foto anexada → editar_imagem; recriar um post no estilo de um print anexado → replicar_post; vários slides de um carrossel anexados + "recriar mantendo a identidade visual" → gerar_carrossel passando o TEMA (as imagens entram como referência de estilo automaticamente). Como você não lê as imagens, se o TEMA/assunto não estiver claro na fala, PERGUNTE antes de gerar — nunca invente o assunto.]`;
+    for (let i = messages.length - 1; i >= 0; i--) {
+      if (messages[i].role === "user") {
+        if (typeof messages[i].content === "string") messages[i].content += note;
+        else if (Array.isArray(messages[i].content)) messages[i].content.push({ type: "text", text: note });
+        break;
+      }
+    }
+  }
 
   const anthropic = new Anthropic({ apiKey: anthropicKey });
   const system = await buildSystemPrompt(userClient, selectedModel);

@@ -775,7 +775,7 @@ Mensagem: "${message}"`;
           try {
             const briefResp = await aiGatewayFetch({
               model: "openrouter/minimax-m-25",
-              messages: [{ role: "user", content: `Resuma o artigo abaixo num BRIEF pra um infográfico de Instagram em português brasileiro. Foque no ASSUNTO do artigo — NUNCA na fonte/jornal nem em "acesse/assine conteúdo". Responda SOMENTE JSON, sem texto antes ou depois: {"headline":"manchete forte, máx 8 palavras, sobre o tema","points":["3 pontos-chave bem curtos, cada um máx 8 palavras"]}\n\nARTIGO:\n${articleContent.substring(0, 2000)}` }],
+              messages: [{ role: "user", content: `Resuma o artigo abaixo num BRIEF pra um infográfico de Instagram em português brasileiro. Foque no ASSUNTO ESPECÍFICO do artigo (a técnica, procedimento ou caso concreto que ele descreve) — NÃO generalize para a área ampla, NUNCA cite a fonte/jornal nem "acesse/assine conteúdo". Use os termos técnicos específicos do artigo (traduzidos p/ pt-BR). Responda SOMENTE JSON, sem texto antes ou depois: {"headline":"manchete forte, máx 8 palavras, sobre o tema específico","points":["3 pontos-chave bem curtos, cada um máx 8 palavras"]}\n\nARTIGO:\n${articleContent.substring(0, 2000)}` }],
             });
             if (briefResp.ok) {
               const bd = await briefResp.json();
@@ -1237,6 +1237,17 @@ Responda APENAS em JSON:
           }
         }
 
+        // Imagens anexadas pelo usuário (ex.: slides de um carrossel existente via /agent) entram como
+        // REFERÊNCIA DE ESTILO para recriar o carrossel mantendo a identidade visual. Só quando NÃO é
+        // photo_backgrounds (lá as fotos têm outro papel). Espelha o caminho do GENERATE (replicar post).
+        const carouselReplicateRefs = (replicateRef && Array.isArray(imageUrls))
+          ? imageUrls.filter((u: string) => typeof u === "string" && u.startsWith("http"))
+          : [];
+        if (carouselReplicateRefs.length > 0 && !isPhotoBackground) {
+          referenceImageUrls = [...carouselReplicateRefs, ...referenceImageUrls].slice(0, 6);
+          console.log(`[ai-chat] GENERATE_CAROUSEL: replicar carrossel — ${carouselReplicateRefs.length} ref anexada(s)`);
+        }
+
         // 3. If message contains URL, fetch article content
         let articleContent = "";
         const urlMatch = message.match(/https?:\/\/[^\s]+/);
@@ -1272,7 +1283,8 @@ Responda APENAS em JSON:
         const structurePrompt = `Você é um estrategista de conteúdo especialista em carrosseis virais. Crie ${slideCount} slides.
 
 TEMA: ${userTopic}
-${userCtx?.business_niche ? `NICHO DO AUTOR: ${userCtx.business_niche}` : ""}
+${articleContent ? `FOCO OBRIGATÓRIO — NÃO GENERALIZE: o carrossel é EXATAMENTE sobre o assunto específico do artigo acima (a técnica, procedimento ou caso concreto que ele descreve), NUNCA sobre a área ampla. Ex.: se o artigo trata de "reparo de Tetralogia de Fallot com atresia pulmonar via válvula RAA", o tema é ISSO — jamais "cardiopatias congênitas" em geral. Use no título e nos slides os termos técnicos específicos do artigo (traduzidos para pt-BR), não abstrações do campo.` : ""}
+${userCtx?.business_niche ? `NICHO DO AUTOR: ${userCtx.business_niche} — use só como pano de fundo do tom, NUNCA para desviar o tema do assunto específico acima.` : ""}
 ${userCtx?.brand_voice ? `TOM DE VOZ DA MARCA: ${userCtx.brand_voice} — escreva o texto dos slides nessa voz.` : ""}
 ${Array.isArray(userCtx?.content_topics) && userCtx.content_topics.length ? `TEMAS RECORRENTES DO AUTOR: ${userCtx.content_topics.join(", ")} — use como contexto de fundo.` : ""}
 
@@ -2200,13 +2212,24 @@ ${SAFE_AREA_RULES}`;
         }
 
         if (newImageUrl) {
-          // Update the content with new image
-          const updatedSlides = Array.isArray(existing.slides) && existing.slides.length > 0
-            ? [{ ...existing.slides[0], image_url: newImageUrl, background_image_url: newImageUrl }]
+          // EDIT_CONTENT regenera SÓ a capa (slide 0). Se o conteúdo é um carrossel, os slides 2..N
+          // precisam ser PRESERVADOS — antes reconstruíamos slides=[capa] e apagávamos o resto (caso
+          // Maikon: um carrossel de 5 virou 1 slide ao pedir "isso no primeiro slide"). Agora só o
+          // índice 0 troca de imagem; os demais slides e suas imagens ficam intactos.
+          const existingSlides = Array.isArray(existing.slides) ? existing.slides : [];
+          const updatedSlides = existingSlides.length > 0
+            ? existingSlides.map((s: any, i: number) => i === 0
+                ? { ...s, image_url: newImageUrl, background_image_url: newImageUrl }
+                : s)
             : [{ headline: "", body: "", bullets: [], image_url: newImageUrl, background_image_url: newImageUrl, render_mode: "ai_full_design" }];
 
+          const existingImgs = Array.isArray(existing.image_urls) ? [...existing.image_urls] : [];
+          const updatedImageUrls = existingImgs.length > 0
+            ? existingImgs.map((u: string, i: number) => i === 0 ? newImageUrl : u)
+            : [newImageUrl];
+
           const updatePayload: Record<string, any> = {
-            image_urls: [newImageUrl],
+            image_urls: updatedImageUrls,
             slides: updatedSlides,
           };
           if (isAdapting) {

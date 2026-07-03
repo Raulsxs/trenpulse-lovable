@@ -43,7 +43,7 @@ const MODELS = [
 ];
 
 interface Tool { name: string; ok?: boolean; cancelled?: boolean }
-interface Action { contentId: string; contentType: any; platform?: string }
+interface Action { contentId: string; contentType: any; platform?: string; refreshKey?: number }
 interface Msg { id: string; role: "user" | "assistant"; text: string; tools: Tool[]; action?: Action }
 
 const SUGGESTIONS = [
@@ -157,11 +157,17 @@ export default function AgentChat() {
       case "action_result":
         if (evt.action_result?.content_id) {
           const cid = evt.action_result.content_id;
-          // Dedup: só 1 ActionCard por content_id. Edições reusam o mesmo id — o card existente
-          // atualiza sozinho via realtime. Dois cards no mesmo content = 2 canais = crash.
+          // Dedup: só 1 ActionCard por content_id (2 cards no mesmo content = 2 canais realtime = crash).
           if (!shownContent.current.has(cid)) {
             shownContent.current.add(cid);
             patchCur((m) => ({ ...m, action: { contentId: cid, contentType: evt.action_result.content_type || "post", platform: evt.action_result.platform } }));
+          } else {
+            // Edição reusa o mesmo content_id. O card NÃO se atualiza sozinho — o canal realtime já foi
+            // encerrado após carregar a 1ª imagem. Sem isto, "corrigiu mas não mostrou a imagem corrigida"
+            // (queixa do Felipe). Bump refreshKey no card existente → ActionCard re-busca o conteúdo.
+            setUiMessages((prev) => prev.map((m) => m.action?.contentId === cid
+              ? { ...m, action: { ...m.action, refreshKey: (m.action.refreshKey || 0) + 1 } }
+              : m));
           }
         }
         break;
@@ -366,7 +372,7 @@ export default function AgentChat() {
                 </div>
               )}
               {m.action && (
-                <ActionCard contentId={m.action.contentId} contentType={m.action.contentType} platform={m.action.platform} />
+                <ActionCard contentId={m.action.contentId} contentType={m.action.contentType} platform={m.action.platform} refreshKey={m.action.refreshKey} />
               )}
             </div>
           </div>

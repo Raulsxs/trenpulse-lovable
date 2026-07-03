@@ -75,6 +75,7 @@ export const AGENT_TOOLS = [
       type: "object",
       properties: {
         tema: { type: "string", description: "O ASSUNTO do post (não uma instrução). Ex.: 'hábitos para mais energia'." },
+        plataforma: { type: "string", enum: ["instagram", "linkedin", "facebook", "tiktok", "x"], description: "Preencha quando o usuário nomear a rede (ex.: 'post pro LinkedIn'). Define formato/legenda da plataforma. Omitir = instagram." },
         brandId: { type: "string", description: "ID da marca a aplicar (opcional; usa a marca padrão se omitido)." },
         modelo: { type: "string", enum: ["gpt-image-2", "reve", "ideogram", "seedream", "imagen-fast", "nano-banana", "qwen", "recraft", "flux-pro"], description: "Só preencha se o usuário pedir um modelo específico. Senão o app usa o selecionado no chat." },
       },
@@ -89,6 +90,7 @@ export const AGENT_TOOLS = [
       properties: {
         tema: { type: "string" },
         slides: { type: "integer", minimum: 3, maximum: 10, description: "Nº de slides (padrão 5)." },
+        plataforma: { type: "string", enum: ["instagram", "linkedin", "facebook", "tiktok", "x"], description: "Preencha quando o usuário nomear a rede (ex.: 'carrossel pro LinkedIn'). Define formato/legenda da plataforma. Omitir = instagram." },
         brandId: { type: "string" },
         modelo: { type: "string", enum: ["gpt-image-2", "reve", "ideogram", "seedream", "imagen-fast", "nano-banana", "qwen", "recraft", "flux-pro"], description: "Só preencha se o usuário pedir um modelo específico." },
       },
@@ -100,7 +102,11 @@ export const AGENT_TOOLS = [
     description: "Cria um Story 9:16 vertical sobre um tema. Chame quando o usuário pede story.",
     input_schema: {
       type: "object",
-      properties: { tema: { type: "string" }, brandId: { type: "string" } },
+      properties: {
+        tema: { type: "string" },
+        plataforma: { type: "string", enum: ["instagram", "linkedin", "facebook", "tiktok"], description: "Preencha quando o usuário nomear a rede. Omitir = instagram." },
+        brandId: { type: "string" },
+      },
       required: ["tema"],
     },
   },
@@ -150,15 +156,15 @@ export const AGENT_TOOLS = [
   },
   {
     name: "editar_imagem",
-    description: "Edita uma FOTO que o usuário ANEXOU (image-to-image): ex.: 'melhore a nitidez', 'troque o fundo'. Chame SOMENTE quando há uma foto anexada nesta mensagem. Se o usuário descreve uma edição mas NÃO anexou foto, NÃO chame — peça a foto.",
+    description: "Edita uma FOTO que o usuário ANEXOU (image-to-image): ex.: 'melhore a nitidez', 'troque o fundo'. Chame quando há foto anexada nesta mensagem (a foto anexada é usada automaticamente — não precisa da URL). Se o usuário descreve uma edição mas NÃO anexou foto, NÃO chame — peça a foto.",
     input_schema: {
       type: "object",
       properties: {
         instrucao: { type: "string", description: "O que fazer com a foto." },
-        foto_url: { type: "string", description: "URL da foto anexada a editar." },
+        foto_url: { type: "string", description: "Opcional — deixe vazio; a foto anexada é usada automaticamente." },
         brandId: { type: "string" },
       },
-      required: ["instrucao", "foto_url"],
+      required: ["instrucao"],
     },
   },
   {
@@ -197,15 +203,15 @@ export const AGENT_TOOLS = [
   },
   {
     name: "replicar_post",
-    description: "Recria um post parecido com um POST DE REFERÊNCIA anexado, no estilo da marca. Chame quando o usuário anexa um print/post e diz 'faça parecido com este'.",
+    description: "Recria um post parecido com um POST DE REFERÊNCIA anexado, no estilo da marca (o print anexado é usado automaticamente — não precisa da URL). Chame quando o usuário anexa um print/post e diz 'faça parecido com este'.",
     input_schema: {
       type: "object",
       properties: {
         tema: { type: "string", description: "Tema/ajuste do novo post." },
-        post_referencia_url: { type: "string" },
+        post_referencia_url: { type: "string", description: "Opcional — deixe vazio; o print anexado é usado automaticamente." },
         brandId: { type: "string" },
       },
-      required: ["post_referencia_url"],
+      required: [],
     },
   },
   {
@@ -310,11 +316,15 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
   const model = input?.modelo || ctx.defaultModel || undefined;
   switch (name) {
     case "gerar_post":
-      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "post", brandId, model }), "Post");
-    case "gerar_carrossel":
-      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_CAROUSEL", format: "carousel", brandId, model, generationParams: input.slides ? { slideCount: input.slides } : undefined }), "Carrossel");
+      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "post", platform: input.plataforma, brandId, model }), "Post");
+    case "gerar_carrossel": {
+      // Imagens anexadas viram REFERÊNCIA DE ESTILO (recriar carrossel mantendo a identidade visual —
+      // caso Felipe). O LLM não conhece as URLs; puxamos de ctx.pendingImageUrls.
+      const refFotos = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
+      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_CAROUSEL", format: "carousel", platform: input.plataforma, brandId, model, imageUrls: refFotos.length ? refFotos : undefined, replicateRef: refFotos.length ? true : undefined, generationParams: input.slides ? { slideCount: input.slides } : undefined }), "Carrossel");
+    }
     case "gerar_story":
-      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "story", brandId }), "Story");
+      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "story", platform: input.plataforma, brandId }), "Story");
     case "gerar_tweet_card":
       return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_TWEET_CARD", brandId }), "Tweet card");
     case "gerar_video": {
@@ -337,8 +347,13 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
     }
     case "imagem_livre":
       return genResult(await callAiChat(ctx, { message: input.descricao, intent_hint: "FREE_IMAGE", model }), "Imagem");
-    case "editar_imagem":
-      return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "GENERATE", format: "post", brandId, model, imageUrls: [input.foto_url], replicateRef: true }), "Imagem editada");
+    case "editar_imagem": {
+      // O LLM não conhece a URL da foto anexada — cai pra ctx.pendingImageUrls (queixa do Felipe:
+      // "não identifica imagem anexada"). Antes exigia input.foto_url, que o modelo não tinha como preencher.
+      const foto = input.foto_url || (ctx.pendingImageUrls || []).find((u) => typeof u === "string" && u.startsWith("http"));
+      if (!foto) return { ok: false, content: "Nenhuma foto anexada nesta mensagem. Peça ao usuário para anexar a foto (📎) e tente de novo." };
+      return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "GENERATE", format: "post", brandId, model, imageUrls: [foto], replicateRef: true }), "Imagem editada");
+    }
     case "editar_conteudo":
       return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "EDIT_CONTENT", contentId: input.contentId, editInstruction: input.instrucao, generationParams: { contentId: input.contentId } }), "Conteúdo ajustado");
     case "editar_slide": {
@@ -417,8 +432,11 @@ Texto em pt-BR impecável e legível. Responda APENAS com a imagem.`;
       const modelo = action ? (MODEL_BY_ACTION[action] || action) : "padrão (GPT-Image 2)";
       return { ok: true, content: `"${c.title || c.content_type}" — ${c.content_type}${c.slide_count ? ` (${c.slide_count} slides)` : ""}, ${c.platform || "instagram"}. Modelo de imagem: **${modelo}**.${gm.prompt ? ` Prompt: "${String(gm.prompt).slice(0, 160)}".` : ""}` };
     }
-    case "replicar_post":
-      return genResult(await callAiChat(ctx, { message: input.tema || "Recrie um post parecido com este, no estilo da marca.", intent_hint: "GENERATE", format: "post", brandId, model, imageUrls: [input.post_referencia_url], replicateRef: true }), "Post replicado");
+    case "replicar_post": {
+      const ref = input.post_referencia_url || (ctx.pendingImageUrls || []).find((u) => typeof u === "string" && u.startsWith("http"));
+      if (!ref) return { ok: false, content: "Nenhum post de referência anexado. Peça ao usuário para anexar o print (📎) e tente de novo." };
+      return genResult(await callAiChat(ctx, { message: input.tema || "Recrie um post parecido com este, no estilo da marca.", intent_hint: "GENERATE", format: "post", brandId, model, imageUrls: [ref], replicateRef: true }), "Post replicado");
+    }
     case "link_para_post":
       return genResult(await callAiChat(ctx, { message: input.url, intent_hint: "LINK_PARA_POST", brandId }), "Post do link");
 
