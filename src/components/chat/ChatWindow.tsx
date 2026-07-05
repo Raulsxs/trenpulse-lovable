@@ -839,7 +839,11 @@ export default function ChatWindow({ initialPrefill }: { initialPrefill?: string
           message: text,
           brandId: selectedBrandId || null,
           history: recentHistory,
-          ...(attachedImages.length ? { imageUrls: attachedImages } : {}),
+          // replicateRef: sem esta flag o ai-chat IGNORAVA a imagem anexada no GENERATE (o Maikon
+          // mandava um PNG p/ "gerar algo parecido" e nada acontecia). Com ela, a imagem vira
+          // referência de estilo (image-to-image). O carrossel editorial de 2+ fotos não é afetado
+          // (aquele caminho usa as fotos como fundo, independente desta flag).
+          ...(attachedImages.length ? { imageUrls: attachedImages, replicateRef: true } : {}),
           ...extraParams,
         },
       });
