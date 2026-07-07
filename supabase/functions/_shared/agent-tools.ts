@@ -315,16 +315,21 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
   // Modelo: o que o usuário nomeou na fala (input.modelo) vence o selecionado no chat (defaultModel).
   const model = input?.modelo || ctx.defaultModel || undefined;
   switch (name) {
-    case "gerar_post":
-      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "post", platform: input.plataforma, brandId, model }), "Post");
+    case "gerar_post": {
+      // Imagem anexada vira referência de estilo (image-to-image), igual gerar_carrossel.
+      const refs = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
+      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "post", platform: input.plataforma, brandId, model, imageUrls: refs.length ? refs : undefined, replicateRef: refs.length ? true : undefined }), "Post");
+    }
     case "gerar_carrossel": {
       // Imagens anexadas viram REFERÊNCIA DE ESTILO (recriar carrossel mantendo a identidade visual —
       // caso Felipe). O LLM não conhece as URLs; puxamos de ctx.pendingImageUrls.
       const refFotos = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
       return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_CAROUSEL", format: "carousel", platform: input.plataforma, brandId, model, imageUrls: refFotos.length ? refFotos : undefined, replicateRef: refFotos.length ? true : undefined, generationParams: input.slides ? { slideCount: input.slides } : undefined }), "Carrossel");
     }
-    case "gerar_story":
-      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "story", platform: input.plataforma, brandId }), "Story");
+    case "gerar_story": {
+      const refs = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
+      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "story", platform: input.plataforma, brandId, model, imageUrls: refs.length ? refs : undefined, replicateRef: refs.length ? true : undefined }), "Story");
+    }
     case "gerar_tweet_card":
       return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_TWEET_CARD", brandId }), "Tweet card");
     case "gerar_video": {

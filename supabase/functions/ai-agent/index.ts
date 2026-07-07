@@ -87,20 +87,61 @@ Deno.serve(async (req) => {
     pendingImageUrls: Array.isArray(body.imageUrls) ? body.imageUrls : [],
   };
 
-  // O LLM aqui é TEXT-ONLY (não recebe as imagens como visão). Sem esta nota ele respondia
-  // "não vi nenhuma imagem anexada" mesmo com anexos (queixa do Felipe). Informamos a contagem e
-  // como rotear — as imagens ficam em ctx.pendingImageUrls e são injetadas pelas próprias tools.
+  // Texto limpo do turno novo do usuário — capturado ANTES da injeção de visão (que reescreve o
+  // content do último turno). Usado no log de auditoria.
+  const incomingUserText = typeof body.message === "string" && body.message
+    ? body.message
+    : (() => {
+        const src = Array.isArray(body.messages) ? body.messages : [];
+        for (let i = src.length - 1; i >= 0; i--) {
+          if (src[i].role === "user") {
+            const c = src[i].content;
+            return typeof c === "string" ? c
+              : Array.isArray(c) ? c.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n") : "";
+          }
+        }
+        return "";
+      })();
+
+  // VISÃO: as imagens anexadas viram blocos de imagem no turno do usuário para o Claude ENXERGAR
+  // o conteúdo delas (Haiku 4.5 é multimodal). Antes o agente era text-only e "não via a imagem"
+  // (caso Maikon: mandou infográfico de skills de IA + pediu p/ saúde; sem ver a imagem, a IA leu só
+  // "skills para saúde" e gerou soft-skills de médico, perdendo que o tema era skills de IA). Agora ele
+  // vê a referência e entende o pedido. As imagens também seguem em ctx.pendingImageUrls p/ as tools
+  // usarem como referência de estilo na geração.
   const attachedImgs = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
   if (attachedImgs.length) {
-    const note = `\n\n[SISTEMA: o usuário anexou ${attachedImgs.length} imagem(ns) nesta mensagem. Você NÃO enxerga o conteúdo delas, mas elas ESTÃO disponíveis para as ferramentas. Roteie assim: editar/melhorar uma foto anexada → editar_imagem; recriar um post no estilo de um print anexado → replicar_post; vários slides de um carrossel anexados + "recriar mantendo a identidade visual" → gerar_carrossel passando o TEMA (as imagens entram como referência de estilo automaticamente). Como você não lê as imagens, se o TEMA/assunto não estiver claro na fala, PERGUNTE antes de gerar — nunca invente o assunto.]`;
+    const note = `[SISTEMA: as ${attachedImgs.length} imagem(ns) acima foram anexadas pelo usuário. ANALISE o conteúdo delas para entender o pedido (tema, estilo, o que recriar). Elas também ficam disponíveis como referência para as ferramentas de geração/edição — passe um TEMA claro. Se o assunto continuar ambíguo mesmo vendo a imagem, PERGUNTE antes de gerar.]`;
     for (let i = messages.length - 1; i >= 0; i--) {
       if (messages[i].role === "user") {
-        if (typeof messages[i].content === "string") messages[i].content += note;
-        else if (Array.isArray(messages[i].content)) messages[i].content.push({ type: "text", text: note });
+        const orig = messages[i].content;
+        const origText = typeof orig === "string"
+          ? orig
+          : Array.isArray(orig) ? orig.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n") : "";
+        messages[i].content = [
+          ...(origText ? [{ type: "text", text: origText }] : []),
+          ...attachedImgs.map((url) => ({ type: "image", source: { type: "url", url } })),
+          { type: "text", text: note },
+        ];
         break;
       }
     }
   }
+
+  // Auditoria: persiste cada turno do agente (o /agent guarda a conversa só no localStorage do
+  // navegador; sem isto o dono não consegue auditar o que os clientes em teste fazem). Escrita via
+  // service_role (ignora RLS). Fire-and-forget: se falhar, loga e segue — nunca derruba o stream.
+  const svcKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const svcLog = svcKey ? createClient(supabaseUrl, svcKey) : null;
+  const logTurn = async (role: string, content: string, toolCalls: any = null, imageCount = 0) => {
+    if (!svcLog) return;
+    try {
+      await svcLog.from("agent_message_log").insert({
+        user_id: user.id, role, content: (content || "").slice(0, 20000),
+        tool_calls: toolCalls, image_count: imageCount,
+      });
+    } catch (e: any) { console.warn("[ai-agent] log falhou:", e?.message); }
+  };
 
   const anthropic = new Anthropic({ apiKey: anthropicKey });
   const system = await buildSystemPrompt(userClient, selectedModel);
@@ -109,6 +150,10 @@ Deno.serve(async (req) => {
   const stream = new ReadableStream({
     async start(controller) {
       try {
+        // Auditoria: registra o turno do usuário (menos no resume de confirmação, que não traz msg nova).
+        if (!body.confirm?.tool_use_id && incomingUserText) {
+          await logTurn("user", incomingUserText, null, attachedImgs.length);
+        }
         // Resume pós-confirmação: executa (ou cancela) o tool gated e segue o loop.
         if (body.confirm?.tool_use_id) {
           const c = body.confirm;
@@ -134,6 +179,13 @@ Deno.serve(async (req) => {
           msgStream.on("text", (delta: string) => sse(controller, enc, { type: "text", delta }));
           const final = await msgStream.finalMessage();
           messages.push({ role: "assistant", content: final.content });
+
+          // Auditoria: texto da resposta + ferramentas chamadas neste round.
+          {
+            const asstText = final.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
+            const calls = final.content.filter((b: any) => b.type === "tool_use").map((b: any) => ({ name: b.name, input: b.input }));
+            await logTurn("assistant", asstText, calls.length ? calls : null, 0);
+          }
 
           const toolUses = final.content.filter((b: any) => b.type === "tool_use");
           if (final.stop_reason !== "tool_use" || toolUses.length === 0) {
