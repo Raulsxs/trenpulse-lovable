@@ -443,7 +443,8 @@ Responda SOMENTE JSON: {"title":"título curto interno","caption":"a legenda com
       return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "GENERATE", format: "post", brandId, model, imageUrls: [foto], replicateRef: true }), "Imagem editada");
     }
     case "editar_conteudo":
-      return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "EDIT_CONTENT", contentId: input.contentId, editInstruction: input.instrucao, generationParams: { contentId: input.contentId } }), "Conteúdo ajustado");
+      // model: a edição usa o mesmo modelo selecionado (senão cai no default e perde qualidade vs a original).
+      return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "EDIT_CONTENT", contentId: input.contentId, editInstruction: input.instrucao, model, generationParams: { contentId: input.contentId } }), "Conteúdo ajustado");
     case "editar_slide": {
       const SLIDE_EDIT_COST = 8; // mesma fonte do débito spend_credits abaixo
       const idx = Math.max(0, (Number(input.slide) || 1) - 1); // usuário conta de 1

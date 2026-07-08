@@ -2188,6 +2188,9 @@ ${SAFE_AREA_RULES}`;
             headers: internalHeaders,
             body: JSON.stringify({
               userId,
+              // Passa o modelo escolhido: sem isto a edição caía no modelo DEFAULT, que podia ser
+              // inferior ao da geração original → 2ª versão com menos qualidade (queixa do Felipe).
+              model: requestModel,
               slide: { role: "cover", headline: existing.slides?.[0]?.headline || "", body: "" },
               slideIndex: 0,
               totalSlides: 1,
