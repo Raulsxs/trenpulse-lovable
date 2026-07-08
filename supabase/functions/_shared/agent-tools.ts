@@ -60,6 +60,7 @@ export function estimateToolCost(name: string, input: any): number {
     case "gerar_carrossel": return 8 * slides * mult;
     case "gerar_carrossel_editorial": return 4 * 5 * mult;
     case "gerar_tweet_card": return 5;
+    case "postar_imagem_com_legenda": return 3; // só legenda (Haiku), usa a imagem do usuário as-is
     case "gerar_video": return Math.min(15, Math.max(3, input?.duracao || 5)) * 7; // ~$0.05/s × margem
     default: return 0;
   }
@@ -117,6 +118,19 @@ export const AGENT_TOOLS = [
       type: "object",
       properties: { tema: { type: "string" }, brandId: { type: "string" } },
       required: ["tema"],
+    },
+  },
+  {
+    name: "postar_imagem_com_legenda",
+    description: "Publica a IMAGEM ANEXADA COMO ESTÁ (sem redesenhar/gerar nova imagem) e escreve só uma legenda. Chame quando o usuário quer postar a PRÓPRIA imagem original — ex.: um CERTIFICADO/diploma (post de conquista no LinkedIn), foto de evento, print, arte já pronta. NÃO use quando ele quer que a IA CRIE/desenhe uma imagem nova (aí é gerar_post). Barato: só gera texto. A imagem é a anexada nesta mensagem (não precisa de URL).",
+    input_schema: {
+      type: "object",
+      properties: {
+        contexto: { type: "string", description: "O que a imagem representa / detalhes pra legenda. Ex.: 'certificado do CS50 de Harvard, curso de IA com Python, 12 projetos' ou 'foto do congresso de cardiologia 2026'." },
+        plataforma: { type: "string", enum: ["linkedin", "instagram", "facebook", "x"], description: "Rede alvo. Certificado/conquista costuma ser LinkedIn. Omitir = linkedin." },
+        brandId: { type: "string" },
+      },
+      required: ["contexto"],
     },
   },
   {
@@ -332,6 +346,75 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
     }
     case "gerar_tweet_card":
       return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_TWEET_CARD", brandId }), "Tweet card");
+    case "postar_imagem_com_legenda": {
+      const COST = 3;
+      // Imagem anexada as-is (não regenera). O LLM não conhece a URL — pega de pendingImageUrls.
+      const img = (ctx.pendingImageUrls || []).find((u) => typeof u === "string" && u.startsWith("http"));
+      if (!img) return { ok: false, content: "Nenhuma imagem anexada nesta mensagem. Peça ao usuário para anexar a imagem (📎) que ele quer postar." };
+
+      const { data: creds } = await ctx.userClient.from("user_credits").select("balance").maybeSingle();
+      const balance = Number(creds?.balance ?? 0);
+      if (balance < COST) return { ok: false, content: `Saldo insuficiente (precisa de ${COST} créditos, você tem ${balance}). Recarregue em Perfil → Créditos.` };
+
+      const plataforma = input.plataforma || "linkedin";
+      // Tom de voz da marca (best-effort) pra a legenda sair na voz do usuário.
+      let voice = "";
+      try {
+        const { data: uc } = await ctx.userClient.from("ai_user_context").select("business_niche, brand_voice").maybeSingle();
+        if (uc) voice = `Nicho: ${uc.business_niche || "?"}. Tom de voz: ${uc.brand_voice || "profissional e acessível"}.`;
+      } catch { /* opcional */ }
+
+      const capPrompt = `Você é copywriter de redes sociais. Escreva a legenda de um post para ${plataforma === "linkedin" ? "LinkedIn" : plataforma} sobre a imagem que o usuário está postando (a IMAGEM é o visual — não a descreva literalmente, contextualize).
+CONTEXTO DO USUÁRIO: ${input.contexto}
+${voice}
+Se for um CERTIFICADO/conquista: tom de celebração autêntica (1ª pessoa), o que aprendeu, por que importa, gratidão — sem soar arrogante. Gancho forte na 1ª linha, parágrafos curtos, CTA leve (pergunta pra engajar). ${plataforma === "linkedin" ? "Máx 3000 chars, 3-5 hashtags." : "Máx 2200 chars, 8-12 hashtags."}
+Responda SOMENTE JSON: {"title":"título curto interno","caption":"a legenda completa","hashtags":["#..."]}`;
+      let title = "Post com imagem", caption = "", hashtags: string[] = [];
+      try {
+        const r = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": ctx.anthropicKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1200, messages: [{ role: "user", content: capPrompt }] }),
+        });
+        const d = await r.json();
+        if (!r.ok) return { ok: false, content: `Não consegui gerar a legenda agora (${d?.error?.message || r.status}). Tente de novo.` };
+        const raw = (d.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+        const m = raw.match(/\{[\s\S]*\}/);
+        if (m) { const p = JSON.parse(m[0]); title = p.title || title; caption = p.caption || ""; hashtags = Array.isArray(p.hashtags) ? p.hashtags : []; }
+        if (!caption) caption = raw.trim();
+      } catch (e: any) { return { ok: false, content: `Erro ao gerar a legenda: ${e?.message || e}` }; }
+
+      // Salva usando a imagem ORIGINAL do usuário (image_urls + slides[0] p/ o preview do card).
+      const { data: inserted, error: insErr } = await ctx.userClient.from("generated_contents").insert({
+        user_id: ctx.userId,
+        title,
+        content_type: "post",
+        caption,
+        hashtags: hashtags.length ? hashtags : null,
+        image_urls: [img],
+        slides: [{ role: "cover", headline: "", body: "", bullets: [], image_url: img, background_image_url: img, render_mode: "user_image" }],
+        slide_count: 1,
+        status: "draft",
+        platform: plataforma,
+        visual_mode: "user_image",
+        brand_id: input.brandId || ctx.defaultBrandId || null,
+        generation_metadata: { action: "post_user_image", contexto: String(input.contexto || "").slice(0, 500) },
+      }).select("id").maybeSingle();
+      if (insErr || !inserted?.id) return { ok: false, content: `Não consegui salvar o post: ${insErr?.message || "erro"}.` };
+
+      try {
+        const { error: spendErr } = await ctx.userClient.rpc("spend_credits", { p_user: ctx.userId, p_amount: COST, p_generation_id: inserted.id, p_metadata: { action: "post_user_image" } });
+        if (spendErr) console.error(`[agent-tools] postar_imagem_com_legenda: spend_credits FALHOU (post entregue sem cobrança) user=${ctx.userId} content=${inserted.id}:`, spendErr.message || spendErr);
+      } catch (e: any) {
+        console.error(`[agent-tools] postar_imagem_com_legenda: spend_credits LANÇOU user=${ctx.userId} content=${inserted.id}:`, e?.message || e);
+      }
+
+      return {
+        ok: true,
+        content: `Post pronto com a imagem original + legenda (content_id=${inserted.id}). Pré-visualização pronta. Confirme em 1 frase e ofereça publicar/agendar; não repita a legenda.`,
+        action_result: { content_id: inserted.id, content_type: "post", platform: plataforma },
+      };
+    }
     case "gerar_video": {
       const res = await fetch(`${ctx.supabaseUrl}/functions/v1/generate-video`, {
         method: "POST",
