@@ -30,6 +30,11 @@ import SlideTemplateRenderer, { getTemplateForSlide } from "@/components/content
 import SaveBackgroundTemplateModal from "@/components/content/SaveBackgroundTemplateModal";
 import ImageUpload from "@/components/content/ImageUpload";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useConnectedAccounts } from "@/hooks/useConnectedAccounts";
+import { PLATFORMS } from "@/components/profile/SocialConnections";
+import { ChevronDown } from "lucide-react";
 import {
   ArrowLeft,
   Check,
@@ -163,6 +168,13 @@ const ContentPreview = () => {
   const [isSaveBgTemplateOpen, setIsSaveBgTemplateOpen] = useState(false);
   const [saveBgSingleIndex, setSaveBgSingleIndex] = useState<number | undefined>(undefined);
   const [isPublishing, setIsPublishing] = useState(false);
+  // Seleção de rede pro publicar/agendar (ponto do Felipe): antes era hardcoded no Instagram.
+  const { accounts: connectedAccounts } = useConnectedAccounts();
+  const [pubSelectedAccountIds, setPubSelectedAccountIds] = useState<string[]>([]);
+  const [publishPopoverOpen, setPublishPopoverOpen] = useState(false);
+  const pubValidAccounts = connectedAccounts.filter((a) => a.pfm_account_id && !a.expired);
+  const togglePubAccount = (accId: string) =>
+    setPubSelectedAccountIds((prev) => (prev.includes(accId) ? prev.filter((x) => x !== accId) : [...prev, accId]));
   const [editCaption, setEditCaption] = useState("");
   const [editHashtags, setEditHashtags] = useState("");
   const [isEditingCaption, setIsEditingCaption] = useState(false);
@@ -411,6 +423,14 @@ const ContentPreview = () => {
     return () => clearInterval(interval);
   }, [hasActiveJobForContent, fetchContent]);
 
+  // Pré-seleciona as contas de rede da plataforma do conteúdo (ou todas as válidas) pro publicar/agendar.
+  useEffect(() => {
+    if (!content) return;
+    const match = pubValidAccounts.filter((a) => a.platform === content.platform).map((a) => a.pfm_account_id!);
+    setPubSelectedAccountIds(match.length ? match : pubValidAccounts.map((a) => a.pfm_account_id!));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content?.id, connectedAccounts]);
+
   // Fallback polling: if content was recently created (< 3 min) and has no images, poll DB
   useEffect(() => {
     if (hasActiveJobForContent) return; // already polling via active jobs
@@ -592,7 +612,7 @@ const ContentPreview = () => {
     }
   };
 
-  const handleSchedule = async (scheduledDate: Date) => {
+  const handleSchedule = async (scheduledDate: Date, selectedAccountIds?: string[]) => {
     if (!id) return;
     
     // Close modal immediately and show progress sheet
@@ -620,11 +640,19 @@ const ContentPreview = () => {
 
       setScheduleProgress({ open: true, step: "scheduling" });
 
+      // Contas escolhidas no modal → o scheduler publica nelas (multi-rede). Fallback = null (legado).
+      const acctIds = selectedAccountIds?.length ? selectedAccountIds : pubSelectedAccountIds;
+      const chosen = connectedAccounts.filter((a) => a.pfm_account_id && acctIds.includes(a.pfm_account_id));
+      const scheduledAccounts = chosen.length
+        ? { platforms: [...new Set(chosen.map((a) => a.platform))], accountIds: chosen.map((a) => a.pfm_account_id!) }
+        : null;
+
       const updatePayload: Record<string, any> = {
         scheduled_at: scheduledDate.toISOString(),
         status: "scheduled",
         publish_attempts: 0,
         publish_error: null,
+        scheduled_accounts: scheduledAccounts,
         updated_at: new Date().toISOString(),
       };
       if (compositeUrls && compositeUrls.length > 0) {
@@ -669,15 +697,23 @@ const ContentPreview = () => {
         );
       }
 
-      const platformName = content?.platform === "linkedin" ? "LinkedIn" : "Instagram";
+      // Publica nas contas escolhidas (multi-rede); fallback = plataforma de criação.
+      const chosen = connectedAccounts.filter((a) => a.pfm_account_id && pubSelectedAccountIds.includes(a.pfm_account_id));
+      const publishBody = chosen.length
+        ? { contentId: id, platforms: [...new Set(chosen.map((a) => a.platform))], accountIds: chosen.map((a) => a.pfm_account_id!) }
+        : { contentId: id, platforms: [content?.platform || "instagram"] };
+      const platformName = chosen.length
+        ? `${chosen.length} rede${chosen.length > 1 ? "s" : ""}`
+        : (content?.platform === "linkedin" ? "LinkedIn" : "Instagram");
 
       const { data, error } = await supabase.functions.invoke("publish-postforme", {
-        body: { contentId: id, platforms: [content?.platform || "instagram"] },
+        body: publishBody,
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
       setContent(prev => prev ? { ...prev, status: "published" } : null);
-      toast.success(`Publicado no ${platformName} com sucesso! 🎉`);
+      setPublishPopoverOpen(false);
+      toast.success(`Publicado em ${platformName} com sucesso! 🎉`);
     } catch (error) {
       console.error("Publish error:", error);
       toast.error("Erro ao publicar", {
@@ -687,6 +723,57 @@ const ContentPreview = () => {
       setIsPublishing(false);
     }
   };
+
+  // Botão "Publicar Agora" com seleção de rede (popover) — reusado nos estados approved/scheduled.
+  // Substitui o botão antigo travado em content.platform==="instagram" com ícone fixo (queixa do Felipe).
+  const publishNowButton = (
+    <Popover open={publishPopoverOpen} onOpenChange={setPublishPopoverOpen}>
+      <PopoverTrigger asChild>
+        <Button className="gap-2" disabled={isPublishing}>
+          {isPublishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+          {isPublishing ? "Publicando..." : "Publicar Agora"}
+          {!isPublishing && <ChevronDown className="w-3.5 h-3.5" />}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-3" align="start">
+        <p className="text-xs font-medium mb-2">Publicar em:</p>
+        {pubValidAccounts.length === 0 ? (
+          <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs">
+            <p className="text-amber-700 font-medium mb-1">Nenhuma rede conectada e ativa.</p>
+            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => navigate("/profile")}>Conectar no Perfil</Button>
+          </div>
+        ) : (
+          <>
+            <div className="space-y-1 mb-3">
+              {connectedAccounts.map((account) => {
+                const info = PLATFORMS.find((p) => p.id === account.platform);
+                if (!info) return null;
+                const key = account.pfm_account_id || account.platform;
+                const expired = account.expired === true;
+                const isSelected = pubSelectedAccountIds.includes(key) && !expired;
+                return (
+                  <label key={key} className={`flex items-center gap-2 p-1.5 rounded-md transition-colors ${expired ? "bg-amber-500/10 cursor-not-allowed" : isSelected ? "bg-primary/5 cursor-pointer" : "hover:bg-muted/50 cursor-pointer"}`}>
+                    <Checkbox checked={isSelected} onCheckedChange={() => !expired && account.pfm_account_id && togglePubAccount(key)} disabled={isPublishing || expired} />
+                    <div className={`w-5 h-5 rounded ${info.bgColor} flex items-center justify-center ${info.iconColor} shrink-0`}>
+                      <info.icon className="w-3 h-3" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-medium block leading-tight">{info.name}</span>
+                      {expired ? <span className="text-[10px] font-medium text-amber-600 block truncate">expirada — reconecte</span> : account.account_name ? <span className="text-[10px] text-muted-foreground block truncate">{account.account_name}</span> : null}
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+            <Button size="sm" className="w-full text-xs" onClick={handlePublishNow} disabled={isPublishing || pubSelectedAccountIds.length === 0}>
+              {isPublishing ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Send className="w-3.5 h-3.5 mr-1" />}
+              Publicar em {pubSelectedAccountIds.length} conta{pubSelectedAccountIds.length !== 1 ? "s" : ""}
+            </Button>
+          </>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
 
   const handleSaveEdit = async (index: number, headline: string, body: string, imagePrompt: string) => {
     const updatedSlides = [...slides];
@@ -1630,21 +1717,8 @@ const ContentPreview = () => {
 
           {content.status === "approved" && (
             <>
-              {content.platform === "instagram" && slides.length > 0 && (
-                <Button
-                  className="gap-2 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white"
-                  onClick={handlePublishNow}
-                  disabled={isPublishing}
-                >
-                  {isPublishing ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Instagram className="w-4 h-4" />
-                  )}
-                  {isPublishing ? "Publicando..." : "Publicar Agora"}
-                </Button>
-              )}
-              <Button className="gap-2" variant={content.platform === "instagram" ? "outline" : "default"} onClick={handleGoToDownload}>
+              {slides.length > 0 && publishNowButton}
+              <Button className="gap-2" variant="outline" onClick={handleGoToDownload}>
                 <Download className="w-4 h-4" />
                 Baixar Agora
               </Button>
@@ -1674,20 +1748,7 @@ const ContentPreview = () => {
                 <CalendarClock className="w-4 h-4 mr-1.5" />
                 Agendado para {content.scheduled_at ? format(new Date(content.scheduled_at), "dd/MM 'às' HH:mm", { locale: ptBR }) : ""}
               </Badge>
-              {content.platform === "instagram" && slides.length > 0 && (
-                <Button
-                  className="gap-2 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white"
-                  onClick={handlePublishNow}
-                  disabled={isPublishing}
-                >
-                  {isPublishing ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Instagram className="w-4 h-4" />
-                  )}
-                  {isPublishing ? "Publicando..." : "Publicar Agora"}
-                </Button>
-              )}
+              {slides.length > 0 && publishNowButton}
               <Button className="gap-2" variant="outline" onClick={handleGoToDownload}>
                 <Download className="w-4 h-4" />
                 Baixar Agora
@@ -1750,6 +1811,9 @@ const ContentPreview = () => {
           onClose={() => setIsScheduleModalOpen(false)}
           onSchedule={handleSchedule}
           isScheduling={isScheduling}
+          connectedAccounts={connectedAccounts}
+          preSelectedAccountIds={pubSelectedAccountIds}
+          onReconnect={() => navigate("/profile")}
         />
 
         {/* Save Background Template Modal */}

@@ -86,7 +86,9 @@ const HOUR_HEIGHT = 52; // px per hour row — compact for usability
 
 const Calendar = () => {
   const navigate = useNavigate();
-  const [viewMode, setViewMode] = useState<ViewMode>("week");
+  // Mês por padrão: visão de semana escondia agendamentos futuros (ex.: pra semana que vem),
+  // que parecia "não aparece no calendário" (queixa do Felipe). Mês mostra o cronograma inteiro.
+  const [viewMode, setViewMode] = useState<ViewMode>("month");
   const [currentDate, setCurrentDate] = useState(new Date());
   const [contents, setContents] = useState<CalendarContent[]>([]);
   const [backlog, setBacklog] = useState<CalendarContent[]>([]);
