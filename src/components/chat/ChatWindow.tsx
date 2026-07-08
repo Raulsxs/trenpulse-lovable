@@ -79,12 +79,12 @@ const buildCompletionMsg = (data: { name?: string; handle?: string; niche?: stri
 // dropdown pra primeira fileira. Ícones lucide (não emoji): tom de ferramenta, não brinquedo.
 // Custos espelham credit_pricing (caso típico: carrossel 5 slides, editorial 4).
 const QUICK_ACTIONS = [
-  { icon: ImageIcon, label: "Post", cost: 8, template: "Crie um post para Instagram sobre: " },
-  { icon: GalleryHorizontalEnd, label: "Carrossel", cost: 40, template: "Crie um carrossel de 5 slides educativos e visualmente impactantes para Instagram sobre: " },
-  { icon: Newspaper, label: "Editorial", cost: 16, template: "Crie um carrossel editorial cinematográfico sobre: " },
-  { icon: Smartphone, label: "Story", cost: 20, template: "Crie um story para Instagram sobre: " },
-  { icon: MessageSquareQuote, label: "Tweet", cost: 5, template: "Crie um tweet card visual sobre: " },
-  { icon: Linkedin, label: "LinkedIn", cost: 8, template: "Crie um post para LinkedIn sobre: " },
+  { icon: ImageIcon, label: "Post", cost: 10, template: "Crie um post para Instagram sobre: " },
+  { icon: GalleryHorizontalEnd, label: "Carrossel", cost: 50, template: "Crie um carrossel de 5 slides educativos e visualmente impactantes para Instagram sobre: " },
+  { icon: Newspaper, label: "Editorial", cost: 20, template: "Crie um carrossel editorial cinematográfico sobre: " },
+  { icon: Smartphone, label: "Story", cost: 25, template: "Crie um story para Instagram sobre: " },
+  { icon: MessageSquareQuote, label: "Tweet", cost: 6, template: "Crie um tweet card visual sobre: " },
+  { icon: Linkedin, label: "LinkedIn", cost: 10, template: "Crie um post para LinkedIn sobre: " },
 ];
 
 // Default prompt templates: richer prompts for better results

@@ -49,19 +49,20 @@ export function estimateToolCost(name: string, input: any): number {
   const slides = Math.min(10, Math.max(3, input?.slides || 5));
   const mult = modelCostMultiplier(input?.modelo);
   switch (name) {
+    // Estimativa do GATE de confirmação — deve espelhar credit_pricing (pricing 3x, 2026-07-08).
     case "gerar_post":
     case "imagem_livre":
     case "editar_imagem":
     case "editar_conteudo":
-    case "editar_slide":      // debita 8 no dispatch — antes caía no default 0 (estimativa mentia)
+    case "editar_slide":      // debita 10 no dispatch (era 8) — alinhado ao post 3x
     case "replicar_post":
-    case "link_para_post": return 8 * mult;
-    case "gerar_story": return 20 * mult;
-    case "gerar_carrossel": return 8 * slides * mult;
-    case "gerar_carrossel_editorial": return 4 * 5 * mult;
-    case "gerar_tweet_card": return 5;
-    case "postar_imagem_com_legenda": return 3; // só legenda (Haiku), usa a imagem do usuário as-is
-    case "gerar_video": return Math.min(15, Math.max(3, input?.duracao || 5)) * 7; // ~$0.05/s × margem
+    case "link_para_post": return 10 * mult;
+    case "gerar_story": return 25 * mult;
+    case "gerar_carrossel": return 10 * slides * mult;
+    case "gerar_carrossel_editorial": return 5 * 5 * mult;
+    case "gerar_tweet_card": return 6;
+    case "postar_imagem_com_legenda": return 4; // só legenda (Haiku), usa a imagem do usuário as-is
+    case "gerar_video": return Math.min(15, Math.max(3, input?.duracao || 5)) * 9; // ~$0.05/s × margem 3x
     default: return 0;
   }
 }
@@ -347,7 +348,7 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
     case "gerar_tweet_card":
       return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_TWEET_CARD", brandId }), "Tweet card");
     case "postar_imagem_com_legenda": {
-      const COST = 3;
+      const COST = 4; // pricing 3x (2026-07-08): só legenda, usa a imagem do usuário
       // Imagem anexada as-is (não regenera). O LLM não conhece a URL — pega de pendingImageUrls.
       const img = (ctx.pendingImageUrls || []).find((u) => typeof u === "string" && u.startsWith("http"));
       if (!img) return { ok: false, content: "Nenhuma imagem anexada nesta mensagem. Peça ao usuário para anexar a imagem (📎) que ele quer postar." };
@@ -446,7 +447,7 @@ Responda SOMENTE JSON: {"title":"título curto interno","caption":"a legenda com
       // model: a edição usa o mesmo modelo selecionado (senão cai no default e perde qualidade vs a original).
       return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "EDIT_CONTENT", contentId: input.contentId, editInstruction: input.instrucao, model, generationParams: { contentId: input.contentId } }), "Conteúdo ajustado");
     case "editar_slide": {
-      const SLIDE_EDIT_COST = 8; // mesma fonte do débito spend_credits abaixo
+      const SLIDE_EDIT_COST = 10; // pricing 3x (2026-07-08): alinhado ao post (10cr)
       const idx = Math.max(0, (Number(input.slide) || 1) - 1); // usuário conta de 1
       // Checa saldo ANTES de gastar a geração (mesma fonte que spend_credits afeta: user_credits.balance).
       // Evita o furo de "gera o slide e depois descobre que não dá pra debitar".

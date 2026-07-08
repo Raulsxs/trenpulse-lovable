@@ -31,16 +31,12 @@ const TOOL_LABEL: Record<string, string> = {
   agendar_conteudo: "Agendando…", publicar: "Publicando…",
 };
 
+// 3 níveis amigáveis (o leigo escolhe por benefício, não por nome de modelo). O id continua sendo
+// o modelo real que o backend entende. Econômico=seedream, Padrão=gpt-image-2, Premium=nano-banana.
 const MODELS = [
-  { id: "gpt-image-2", label: "GPT-Image · texto + marca" },
-  { id: "reve", label: "Reve · texto pt-BR impecável" },
-  { id: "ideogram", label: "Ideogram · copia estilo" },
-  { id: "seedream", label: "Seedream · rápido" },
-  { id: "imagen-fast", label: "Imagen · rápido" },
-  { id: "nano-banana", label: "Nano Banana · 9:16/premium" },
-  { id: "qwen", label: "Qwen · fotos" },
-  { id: "recraft", label: "Recraft · design" },
-  { id: "flux-pro", label: "Flux Pro · fotorrealismo" },
+  { id: "seedream", label: "Econômico · mais posts pelo mesmo valor" },
+  { id: "gpt-image-2", label: "Padrão · melhor texto (recomendado)" },
+  { id: "nano-banana", label: "Premium · máxima qualidade" },
 ];
 
 interface Tool { name: string; ok?: boolean; cancelled?: boolean }

@@ -44,15 +44,15 @@ const MODELS: {
   // Os que NÃO recebem (imagen/recraft/flux/reve) não conseguem copiar o estilo 1:1.
   acceptsRefs: boolean;
 }[] = [
-  { id: "gpt-image-2", name: "GPT-Image 2", forte: "Texto pt-BR perfeito, design gráfico", cost: 8, speed: "~30s", icon: Crown, tag: "Recomendado", tone: "text-primary", sample: "/showcase/gpt_post.jpg", acceptsRefs: true },
-  { id: "imagen-fast", name: "Imagen 4 Fast", forte: "Google — pronto em segundos, acentos certos", cost: 3, speed: "~5s", icon: Rocket, tag: "Mais rápido", tone: "text-blue-600", sample: "/showcase/imagen_post.jpg", acceptsRefs: false },
-  { id: "ideogram", name: "Ideogram v3", forte: "Design gráfico + copiar estilo da marca", cost: 4, speed: "~10s", icon: PenTool, tone: "text-fuchsia-600", sample: "/showcase/ideogram_post.jpg", acceptsRefs: true },
-  { id: "recraft", name: "Recraft v3", forte: "Tipografia e design SOTA, card limpo", cost: 5, speed: "~10s", icon: Layers, tone: "text-orange-600", sample: "/showcase/recraft_post.jpg", acceptsRefs: false },
-  { id: "flux-pro", name: "Flux 1.1 Pro", forte: "Fotorrealismo premium (Black Forest Labs)", cost: 5, speed: "~5s", icon: Aperture, tone: "text-violet-600", sample: "/showcase/flux_post.jpg", acceptsRefs: false },
-  { id: "seedream", name: "Seedream 4.0", forte: "Rápido e barato, texto bom", cost: 4, speed: "~10s", icon: Zap, tone: "text-[hsl(var(--credit))]", sample: "/showcase/seedream_post.jpg", acceptsRefs: true },
-  { id: "nano-banana", name: "Nano Banana Pro", forte: "Premium, melhor pra 9:16", cost: 20, speed: "~40s", icon: Gauge, tone: "text-accent", sample: "/showcase/nano_story.jpg", acceptsRefs: true },
-  { id: "qwen", name: "Qwen", forte: "Fotos e cenas realistas (sem texto)", cost: 5, speed: "~10s", icon: Camera, tone: "text-emerald-600", sample: "/showcase/qwen_photo.jpg", noText: true, acceptsRefs: true },
-  { id: "reve", name: "Reve", forte: "Texto pt-BR impecável, estilo minimalista", cost: 3, speed: "~10s", icon: Type, tone: "text-sky-600", sample: "/showcase/reve_post.jpg", acceptsRefs: false },
+  { id: "gpt-image-2", name: "GPT-Image 2", forte: "Texto pt-BR perfeito, design gráfico", cost: 10, speed: "~30s", icon: Crown, tag: "Recomendado", tone: "text-primary", sample: "/showcase/gpt_post.jpg", acceptsRefs: true },
+  { id: "imagen-fast", name: "Imagen 4 Fast", forte: "Google — pronto em segundos, acentos certos", cost: 4, speed: "~5s", icon: Rocket, tag: "Mais rápido", tone: "text-blue-600", sample: "/showcase/imagen_post.jpg", acceptsRefs: false },
+  { id: "ideogram", name: "Ideogram v3", forte: "Design gráfico + copiar estilo da marca", cost: 5, speed: "~10s", icon: PenTool, tone: "text-fuchsia-600", sample: "/showcase/ideogram_post.jpg", acceptsRefs: true },
+  { id: "recraft", name: "Recraft v3", forte: "Tipografia e design SOTA, card limpo", cost: 6, speed: "~10s", icon: Layers, tone: "text-orange-600", sample: "/showcase/recraft_post.jpg", acceptsRefs: false },
+  { id: "flux-pro", name: "Flux 1.1 Pro", forte: "Fotorrealismo premium (Black Forest Labs)", cost: 6, speed: "~5s", icon: Aperture, tone: "text-violet-600", sample: "/showcase/flux_post.jpg", acceptsRefs: false },
+  { id: "seedream", name: "Seedream 4.0", forte: "Rápido e barato, texto bom", cost: 5, speed: "~10s", icon: Zap, tone: "text-[hsl(var(--credit))]", sample: "/showcase/seedream_post.jpg", acceptsRefs: true },
+  { id: "nano-banana", name: "Nano Banana Pro", forte: "Premium, melhor pra 9:16", cost: 25, speed: "~40s", icon: Gauge, tone: "text-accent", sample: "/showcase/nano_story.jpg", acceptsRefs: true },
+  { id: "qwen", name: "Qwen", forte: "Fotos e cenas realistas (sem texto)", cost: 6, speed: "~10s", icon: Camera, tone: "text-emerald-600", sample: "/showcase/qwen_photo.jpg", noText: true, acceptsRefs: true },
+  { id: "reve", name: "Reve", forte: "Texto pt-BR impecável, estilo minimalista", cost: 4, speed: "~10s", icon: Type, tone: "text-sky-600", sample: "/showcase/reve_post.jpg", acceptsRefs: false },
 ];
 
 const DIAL: { id: string; label: string; hint: string }[] = [
