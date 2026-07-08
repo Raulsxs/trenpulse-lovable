@@ -32,6 +32,7 @@ import {
   Loader2,
   Filter,
   Send,
+  Sparkles,
 } from "lucide-react";
 
 import SlideTemplateRenderer from "@/components/content/SlideTemplateRenderer";
@@ -771,9 +772,12 @@ const Calendar = () => {
                   <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
                 </div>
               ) : backlog.length === 0 ? (
-                <p className="text-xs text-muted-foreground text-center py-4">
-                  Nenhum conteúdo pendente
-                </p>
+                <div className="text-center py-6 px-2">
+                  <p className="text-xs text-muted-foreground mb-3">Nenhum conteúdo pendente para agendar.</p>
+                  <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => navigate("/chat")}>
+                    <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Criar conteúdo
+                  </Button>
+                </div>
               ) : (
                 backlog.map(item => <ContentCard key={item.id} item={item} />)
               )}

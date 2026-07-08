@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { useBrandExamples, useAddBrandExample, useDeleteBrandExample, useUpdateBrandExample, useBrandCategories, useCreateBrandCategory } from "@/hooks/useStudio";
 import { supabase } from "@/integrations/supabase/client";
 import { Upload, Image, X, Edit, Sparkles, Loader2, Plus, Layers } from "lucide-react";
@@ -63,6 +64,7 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
   const [viewerIndex, setViewerIndex] = useState<number | null>(null);
 
   // Edit dialog state
+  const [deleteTargetId, setDeleteTargetId] = useState<string | null>(null);
   const [editingExample, setEditingExample] = useState<any>(null);
   const [editType, setEditType] = useState("post");
   const [editSubtype, setEditSubtype] = useState<string>("");
@@ -186,10 +188,12 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
     setEditorOpen(true);
   };
 
-  const handleDelete = async (id: string) => {
-    if (confirm("Remover este exemplo?")) {
-      await deleteExample.mutateAsync({ id, brandId });
-    }
+  // confirm() nativo não respeita o tema (cara de amador). Trocado por AlertDialog controlado.
+  const handleDelete = (id: string) => setDeleteTargetId(id);
+  const confirmDelete = async () => {
+    if (!deleteTargetId) return;
+    await deleteExample.mutateAsync({ id: deleteTargetId, brandId });
+    setDeleteTargetId(null);
   };
 
   const openEdit = (example: any) => {
@@ -635,6 +639,23 @@ export default function BrandExamples({ brandId, brandName, onAnalyzeStyle, isAn
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={!!deleteTargetId} onOpenChange={(o) => !o && setDeleteTargetId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remover este exemplo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta ação não pode ser desfeita. O exemplo será removido da marca.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Remover
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
     </>
   );
