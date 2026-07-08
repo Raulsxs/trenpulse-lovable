@@ -29,7 +29,7 @@ const SHOWCASES: Showcase[] = [
     badge: "Novidade",
     title: "Vídeos animados que explicam um tema",
     desc: "Transforme um assunto num reel animado — sem gravar, sem avatar. A IA cria a animação que explica o tema, no estilo da sua marca.",
-    image: "/showcase/nano_story.png",
+    image: "/showcase/nano_story.jpg",
     cta: "Criar um vídeo",
     route: "/agent",
     prompt: "Cria um vídeo animado de 10s explicando um tema do meu nicho",
@@ -39,7 +39,7 @@ const SHOWCASES: Showcase[] = [
     badge: "Recurso",
     title: "Carrossel editorial com as suas fotos",
     desc: "Suas fotos (de um evento, bastidor, atendimento) viram um carrossel cinematográfico com manchetes de impacto e as cores da sua marca.",
-    image: "/showcase/nano_editorial.png",
+    image: "/showcase/nano_editorial.jpg",
     cta: "Testar editorial",
     route: "/agent",
     prompt: "Quero um carrossel editorial com fotos minhas",
@@ -49,7 +49,7 @@ const SHOWCASES: Showcase[] = [
     badge: "Recurso",
     title: "Tweet cards (estilo print do X)",
     desc: "Vire qualquer ideia num carrossel de cards estilo print de tweet, com o seu @ e avatar. Ótimo pra frases de autoridade.",
-    image: "/showcase/gpt_post.png",
+    image: "/showcase/gpt_post.jpg",
     cta: "Testar tweet card",
     route: "/agent",
     prompt: "Cria um tweet card com uma frase de autoridade do meu nicho",
@@ -94,8 +94,13 @@ export default function FeatureSpotlight() {
   return (
     <Dialog open onOpenChange={(o) => !o && dismiss(active.key)}>
       <DialogContent className="p-0 overflow-hidden max-w-md gap-0 border-border">
-        <div className="relative h-56 bg-muted">
-          <img src={active.image} alt="" className="w-full h-full object-cover" />
+        <div className="relative h-56 bg-gradient-to-br from-primary/15 via-primary/5 to-accent/10">
+          <img
+            src={active.image}
+            alt=""
+            className="w-full h-full object-cover"
+            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }}
+          />
           <span className="absolute top-3 left-3 inline-flex items-center gap-1 rounded-full bg-primary text-primary-foreground text-[11px] font-semibold px-2.5 py-1 shadow-sm">
             <Sparkles className="w-3 h-3" /> {active.badge}
           </span>
