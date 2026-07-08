@@ -96,12 +96,24 @@ export default function Onboarding() {
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => {
+    supabase.auth.getSession().then(async ({ data }) => {
       if (!data.session) {
         navigate("/auth");
         return;
       }
-      setUserId(data.session.user.id);
+      const uid = data.session.user.id;
+      // Self-guard: quem JÁ concluiu o onboarding não deve vê-lo de novo (blinda contra chegar aqui
+      // por link antigo/back). Só trata como concluído quando a query CONFIRMA (evita bounce por race).
+      const { data: ctx, error } = await supabase
+        .from("ai_user_context")
+        .select("onboarding_done")
+        .eq("user_id", uid)
+        .maybeSingle();
+      if (!error && ctx?.onboarding_done) {
+        navigate("/chat", { replace: true });
+        return;
+      }
+      setUserId(uid);
     });
   }, [navigate]);
 

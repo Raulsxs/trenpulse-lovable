@@ -45,22 +45,11 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  // Redirect new users to onboarding
-  useEffect(() => {
-    if (!user || location.pathname === "/onboarding" || location.pathname === "/pricing") return;
-
-    supabase
-      .from("ai_user_context")
-      .select("onboarding_done")
-      .eq("user_id", user.id)
-      .maybeSingle()
-      .then(({ data }) => {
-        // Redirect if onboarding not completed (regardless of niche being set)
-        if (!data || !data.onboarding_done) {
-          navigate("/onboarding");
-        }
-      });
-  }, [user, location.pathname, navigate]);
+  // NOTA: o auto-redirect pro /onboarding foi REMOVIDO. Ele rodava em toda navegação e tratava
+  // uma falha transitória da query (data:null por race/erro/RLS) como "usuário novo", jogando
+  // usuários EXISTENTES pro onboarding por engano (bug recorrente — a flag do Raul era true e mesmo
+  // assim ele era redirecionado). Novos cadastros já caem no /onboarding pelo emailRedirectTo do
+  // signup; a própria página faz self-guard. Sem redirect forçado aqui = sem bounce indevido.
 
   if (loading) {
     return (
