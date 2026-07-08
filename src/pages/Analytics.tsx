@@ -362,7 +362,7 @@ export default function Analytics() {
             {topContent.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 <p className="text-sm">Publique conteúdo para ver métricas de engagement aqui.</p>
-                <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate("/chat")}>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate("/agent")}>
                   Criar conteúdo
                 </Button>
               </div>

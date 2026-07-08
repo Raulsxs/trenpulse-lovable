@@ -776,7 +776,7 @@ const Calendar = () => {
               ) : backlog.length === 0 ? (
                 <div className="text-center py-6 px-2">
                   <p className="text-xs text-muted-foreground mb-3">Nenhum conteúdo pendente para agendar.</p>
-                  <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => navigate("/chat")}>
+                  <Button size="sm" variant="outline" className="text-xs h-8" onClick={() => navigate("/agent")}>
                     <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Criar conteúdo
                   </Button>
                 </div>

@@ -110,7 +110,7 @@ export default function Onboarding() {
         .eq("user_id", uid)
         .maybeSingle();
       if (!error && ctx?.onboarding_done) {
-        navigate("/chat", { replace: true });
+        navigate("/agent", { replace: true });
         return;
       }
       setUserId(uid);
@@ -137,11 +137,10 @@ export default function Onboarding() {
         },
         { onConflict: "user_id" },
       );
-      // Home híbrida: conta nova (passou pelo onboarding) cai no Studio — a vitrine de
-      // modelos/formatos. Contas existentes nunca chegam aqui e seguem no chat (Index → /chat).
-      // Prefill = prompt pré-armado do nicho (editável, não envia sozinho).
+      // Conta nova (passou pelo onboarding) cai no Assistente (/agent) — a experiência padrão.
+      // Prefill = prompt pré-armado do nicho (editável, não envia sozinho; o AgentChat lê location.state).
       const prefill = !skipped && mockupHeadline ? mockupHeadline : undefined;
-      navigate("/studio", prefill ? { state: { prefill } } : undefined);
+      navigate("/agent", prefill ? { state: { prefill } } : undefined);
     } finally {
       setSaving(false);
     }

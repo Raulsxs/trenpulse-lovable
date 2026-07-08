@@ -14,7 +14,6 @@ import {
   Sparkles,
   Wand2,
   CalendarDays,
-  MessageSquare,
   BarChart3,
   UserPlus,
   LayoutGrid,
@@ -37,10 +36,12 @@ interface SavedAccount {
   refreshToken: string;
 }
 
-// Primary: what 90% of users need daily
+// Primary: what 90% of users need daily.
+// O Assistente (/agent) é a experiência PADRÃO pra todos (Maikon vai divulgar). O antigo
+// "Assistente IA" (/chat) saiu do menu — a rota segue viva, mas não é mais o caminho principal.
 const primaryItems = [
+  { icon: Bot, label: "Assistente", href: "/agent" },
   { icon: Wand2, label: "Studio", href: "/studio" },
-  { icon: MessageSquare, label: "Assistente IA", href: "/chat" },
   { icon: CalendarDays, label: "Calendário", href: "/calendar" },
   { icon: FileText, label: "Meus Conteúdos", href: "/contents" },
 ];
@@ -61,8 +62,8 @@ const Sidebar = () => {
   const [currentEmail, setCurrentEmail] = useState<string>("");
   const { balance, refresh: refreshCredits } = useCredits();
   const [buyOpen, setBuyOpen] = useState(false);
-  const isOwner = OWNER_EMAILS.includes((currentEmail || "").toLowerCase());
-  const primaryNav = isOwner ? [{ icon: Bot, label: "Assistente (beta)", href: "/agent" }, ...primaryItems] : primaryItems;
+  // O /agent agora é primário pra todos (não há mais gate por email). primaryNav = primaryItems.
+  const primaryNav = primaryItems;
 
   useEffect(() => {
     const saveSession = (session: { user: { id: string; email?: string; user_metadata?: { name?: string } }; access_token: string; refresh_token: string } | null) => {
@@ -165,7 +166,7 @@ const Sidebar = () => {
       }
 
       toast.success(`Trocado para ${account.name}`);
-      window.location.href = "/chat";
+      window.location.href = "/agent";
     } catch {
       // setSession may have wiped the original session — try to restore it
       let sessionRestored = false;
@@ -204,7 +205,7 @@ const Sidebar = () => {
     <aside className="w-64 h-full min-h-0 gradient-sidebar border-r border-sidebar-border flex flex-col overflow-hidden">
       {/* Logo */}
       <div className="shrink-0 p-6 border-b border-sidebar-border">
-        <Link to="/chat" className="flex items-center gap-3">
+        <Link to="/agent" className="flex items-center gap-3">
           <div className="w-10 h-10 bg-sidebar-primary rounded-lg flex items-center justify-center">
             <TrendingUp className="w-6 h-6 text-white" />
           </div>
