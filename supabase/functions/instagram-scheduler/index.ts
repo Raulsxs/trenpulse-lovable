@@ -256,11 +256,60 @@ Deno.serve(async (req) => {
       console.error("[scheduler] recurring loop fatal:", err?.message);
     }
 
+    // ── Reconciliação do "processing" travado ────────────────────────────
+    // Publicação que o PFM aceitou mas não confirmou na hora vira status="processing" com
+    // generation_metadata.pfm_pending = [{post_id, account_id, platform}]. Sem reconciliar, ficava
+    // "em processamento" pra sempre. Aqui reconsultamos o PFM e resolvemos published/failed.
+    const reconResults: Array<{ id: string; status: string }> = [];
+    try {
+      const pfmApiKey = Deno.env.get("POSTFORME_API_KEY");
+      const { data: stuck } = await supabase
+        .from("generated_contents")
+        .select("id, generation_metadata")
+        .eq("status", "processing")
+        .not("generation_metadata->pfm_pending", "is", null)
+        .limit(20);
+
+      for (const c of stuck || []) {
+        const pend = ((c as any).generation_metadata?.pfm_pending || []) as Array<{ post_id: string; account_id: string; platform: string }>;
+        if (!pfmApiKey || !pend.length) continue;
+        let anySuccess = false, anyFail = false, stillPending = false;
+        let firstErr = "";
+        for (const p of pend) {
+          try {
+            const url = `https://api.postforme.dev/v1/social-post-results?post_id=${encodeURIComponent(p.post_id)}&social_account_id=${encodeURIComponent(p.account_id)}`;
+            const resp = await fetch(url, { headers: { Authorization: `Bearer ${pfmApiKey}` } });
+            if (!resp.ok) { stillPending = true; continue; }
+            const data = await resp.json();
+            const items = Array.isArray(data?.data) ? data.data : Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [];
+            const ours = items[0];
+            if (!ours) { stillPending = true; continue; }
+            if (ours.success === true) anySuccess = true;
+            else if (ours.success === false) { anyFail = true; firstErr = typeof ours.error === "string" ? ours.error : (ours.error?.message || "Rejeitado pela plataforma"); }
+            else stillPending = true;
+          } catch { stillPending = true; }
+        }
+        // Resolve só quando não há mais nada pendente (evita marcar cedo demais).
+        if (!stillPending && anySuccess) {
+          await supabase.from("generated_contents").update({ status: "published", published_at: new Date().toISOString() }).eq("id", c.id);
+          reconResults.push({ id: c.id, status: "published" });
+        } else if (!stillPending && anyFail) {
+          await supabase.from("generated_contents").update({ status: "failed", publish_error: firstErr || "Publicação rejeitada" }).eq("id", c.id);
+          reconResults.push({ id: c.id, status: "failed" });
+        }
+        // Ainda pendente → deixa como processing pro próximo tick reconsultar.
+      }
+    } catch (err: any) {
+      console.error("[scheduler] reconciliação processing falhou:", err?.message);
+    }
+
     return new Response(JSON.stringify({
       processed: results.length,
       results,
       recurring_processed: recurringResults.length,
       recurring_results: recurringResults,
+      reconciled: reconResults.length,
+      reconciled_results: reconResults,
     }), {
       status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });

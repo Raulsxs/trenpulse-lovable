@@ -359,6 +359,8 @@ Deno.serve(async (req) => {
               platform: target.platform,
               success: false,
               pending: true,
+              accountId: target.pfm_account_id,
+              postId: sliceResults.find(r => r.pending)?.postId,
               error: `${sliceResults.filter(r => r.pending).length} de ${mediaUrls.length} stories em processamento. Verifique sua conta em alguns minutos.`,
             } as any);
           } else {
@@ -373,7 +375,8 @@ Deno.serve(async (req) => {
           }
         } else {
           const r = await publishOne(target, mediaUrls, false, "");
-          results.push({ platform: target.platform, ...r } as any);
+          // accountId no resultado → permite reconciliar o "processing" depois (poll precisa do social_account_id).
+          results.push({ platform: target.platform, accountId: target.pfm_account_id, ...r } as any);
         }
       } catch (pubErr: any) {
         console.error(`[publish-postforme] Error on ${target.platform}:`, pubErr?.message);
@@ -392,7 +395,15 @@ Deno.serve(async (req) => {
         scheduled_at: scheduledAt || null,
       }).eq("id", contentId);
     } else if (anyPending && !scheduledAt) {
-      await svc.from("generated_contents").update({ status: "processing" }).eq("id", contentId);
+      // Guarda o que ficou pendente (post_id + account_id) pra reconciliação: sem isto o "processing"
+      // travava pra sempre. O scheduler reconsulta o PFM depois e resolve pra published/failed.
+      const pfmPending = results
+        .filter((r: any) => r.pending === true && r.postId && r.accountId)
+        .map((r: any) => ({ post_id: r.postId, account_id: r.accountId, platform: r.platform }));
+      await svc.from("generated_contents").update({
+        status: "processing",
+        generation_metadata: { ...(content.generation_metadata || {}), pfm_pending: pfmPending, pfm_pending_at: new Date().toISOString() },
+      }).eq("id", contentId);
     }
 
     const successCount = results.filter(r => r.success).length;
