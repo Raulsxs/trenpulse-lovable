@@ -292,11 +292,15 @@ const Calendar = () => {
       const scheduled = (scheduledData as unknown as CalendarContent[]) || [];
       setContents(scheduled);
 
+      // Backlog = conteúdo pronto e ainda não agendado. Inclui "draft" (estado padrão de geração):
+      // antes só mostrava "approved", então o conteúdo recém-gerado não aparecia no calendário
+      // (queixa do Felipe: "não aparece o agendamento"). Draft com scheduled_at não existe (agendar
+      // vira status=scheduled), então o filtro scheduled_at IS NULL mantém só o backlog real.
       let backlogQuery = supabase
         .from("generated_contents")
         .select("id, title, content_type, status, scheduled_at, created_at, updated_at, brand_id, template_set_id, template_id, templates(name, category), slides, caption, brand_snapshot, image_urls, platform")
         .eq("user_id", user.id)
-        .eq("status", "approved")
+        .in("status", ["draft", "approved"])
         .is("scheduled_at", null)
         .order("created_at", { ascending: false })
         .limit(20);

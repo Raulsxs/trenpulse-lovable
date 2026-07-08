@@ -11,10 +11,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks } from "lucide-react";
+import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload } from "lucide-react";
 import ActionCard from "@/components/chat/ActionCard";
 import ConfirmAction from "@/components/chat/ConfirmAction";
 import { useCredits } from "@/hooks/useCredits";
+import { isSupportedDocument, extractDocumentText, truncateForPrompt } from "@/lib/documentExtract";
 
 const SUPABASE_URL = "https://qdmhqxpazffmaxleyzxs.supabase.co";
 const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InFkbWhxeHBhemZmbWF4bGV5enhzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzMxNTI0OTQsImV4cCI6MjA4ODcyODQ5NH0.HlS0S8B1iqfO0MeUIKl8xu5unlK5jx6kvtPkcRklxuo";
@@ -62,6 +63,11 @@ export default function AgentChat() {
   const [model, setModel] = useState<string>("gpt-image-2");
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
+  // Documento (PDF/DOCX/TXT/MD) anexado como briefing — injeta o texto na próxima mensagem.
+  const [doc, setDoc] = useState<{ name: string; text: string } | null>(null);
+  const [extractingDoc, setExtractingDoc] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const dragDepth = useRef(0);
   const [pendingConfirm, setPendingConfirm] = useState<any>(null);
   const { balance } = useCredits();
   const location = useLocation();
@@ -228,12 +234,21 @@ export default function AgentChat() {
 
   async function handleSend() {
     const text = input.trim();
-    if (!text || sending) return;
+    // Permite enviar só com documento anexado (sem digitar) — o briefing carrega o pedido.
+    if ((!text && !doc) || sending) return;
     setInput("");
     const photosNow = [...photos];
     setPhotos([]);
-    setUiMessages((ms) => [...ms, { id: newId(), role: "user", text, tools: [] }]);
-    convo.current = [...convo.current, { role: "user", content: text }];
+    const docNow = doc;
+    setDoc(null);
+    // Texto que a IA vê: o digitado + o conteúdo do documento no padrão """...""" (o agente já lê isso).
+    const sendText = docNow
+      ? `${text || `Use o documento "${docNow.name}" como base para criar o conteúdo.`}\n\nDOCUMENTO "${docNow.name}":\n"""\n${docNow.text}\n"""`
+      : text;
+    // No balão do usuário mostramos o texto digitado + um marcador do anexo (não o texto cru gigante).
+    const bubble = docNow ? `${text}${text ? "\n\n" : ""}📎 ${docNow.name}`.trim() : text;
+    setUiMessages((ms) => [...ms, { id: newId(), role: "user", text: bubble, tools: [] }]);
+    convo.current = [...convo.current, { role: "user", content: sendText }];
     await streamAgent({ messages: convo.current, brandId: brandId || undefined, model, imageUrls: photosNow });
   }
 
@@ -255,9 +270,7 @@ export default function AgentChat() {
     setPendingConfirm(null); // o efeito de persistência grava o estado limpo (sending=false)
   }
 
-  async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(e.target.files || []);
-    if (e.target) e.target.value = "";
+  async function uploadImages(files: File[]) {
     if (!files.length) return;
     setUploading(true);
     try {
@@ -279,10 +292,68 @@ export default function AgentChat() {
     }
   }
 
+  async function extractDoc(file: File) {
+    setExtractingDoc(true);
+    try {
+      const text = await extractDocumentText(file);
+      if (!text) { toast.error("Não consegui extrair texto desse documento."); return; }
+      setDoc({ name: file.name, text: truncateForPrompt(text) });
+      toast.success(`"${file.name}" carregado como briefing`);
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao ler o documento");
+    } finally {
+      setExtractingDoc(false);
+    }
+  }
+
+  // Roteia arquivos: imagens → upload (referência); documento (PDF/DOCX/TXT/MD) → briefing de texto.
+  async function handleFiles(files: File[]) {
+    if (!files.length) return;
+    const imgs = files.filter((f) => f.type.startsWith("image/"));
+    const docFile = files.find(isSupportedDocument);
+    if (imgs.length) await uploadImages(imgs);
+    if (docFile) await extractDoc(docFile);
+    if (!imgs.length && !docFile) toast.error("Formato não suportado. Use imagem, PDF, DOCX, TXT ou MD.");
+  }
+
+  function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = Array.from(e.target.files || []);
+    if (e.target) e.target.value = "";
+    handleFiles(files);
+  }
+
+  function onDragEnter(e: React.DragEvent) {
+    if (!Array.from(e.dataTransfer?.types || []).includes("Files")) return;
+    e.preventDefault(); dragDepth.current += 1; setDragging(true);
+  }
+  function onDragOver(e: React.DragEvent) {
+    if (Array.from(e.dataTransfer?.types || []).includes("Files")) e.preventDefault();
+  }
+  function onDragLeave() { dragDepth.current = Math.max(0, dragDepth.current - 1); if (dragDepth.current === 0) setDragging(false); }
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault(); dragDepth.current = 0; setDragging(false);
+    if (sending) return;
+    handleFiles(Array.from(e.dataTransfer.files || []));
+  }
+
   const lastId = uiMessages[uiMessages.length - 1]?.id;
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-0px)] max-w-3xl mx-auto w-full">
+    <div
+      className="relative flex flex-col h-[calc(100dvh-0px)] max-w-3xl mx-auto w-full"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDragLeave={onDragLeave}
+      onDrop={onDrop}
+    >
+      {dragging && (
+        <div className="absolute inset-0 z-30 flex items-center justify-center bg-primary/5 backdrop-blur-sm border-2 border-dashed border-primary/50 rounded-xl pointer-events-none">
+          <div className="flex flex-col items-center gap-2 text-primary">
+            <Upload className="w-8 h-8" />
+            <p className="text-sm font-semibold">Solte aqui — imagem, PDF, artigo ou documento</p>
+          </div>
+        </div>
+      )}
       <header className="flex items-center gap-2.5 px-3 sm:px-4 py-2.5 border-b border-border">
         <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
           <Bot className="w-[18px] h-[18px] text-primary" />
@@ -385,14 +456,26 @@ export default function AgentChat() {
       </div>
 
       <div className="border-t border-border p-2.5 sm:p-3 space-y-2">
-        {photos.length > 0 && (
-          <div className="flex gap-2 flex-wrap">
+        {(photos.length > 0 || doc || extractingDoc) && (
+          <div className="flex gap-2 flex-wrap items-center">
             {photos.map((u, i) => (
               <div key={i} className="relative">
                 <img src={u} alt="" className="w-12 h-12 rounded-md object-cover border border-border" />
                 <button onClick={() => setPhotos(photos.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 bg-background border border-border rounded-full p-0.5 shadow-sm hover:text-destructive transition-colors"><X className="w-3 h-3" /></button>
               </div>
             ))}
+            {extractingDoc && (
+              <div className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-muted/40 text-xs text-muted-foreground">
+                <Loader2 className="w-3.5 h-3.5 animate-spin" /> Lendo documento…
+              </div>
+            )}
+            {doc && (
+              <div className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-card text-xs">
+                <FileText className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="max-w-[160px] truncate">{doc.name}</span>
+                <button onClick={() => setDoc(null)} className="hover:text-destructive transition-colors"><X className="w-3 h-3" /></button>
+              </div>
+            )}
           </div>
         )}
         <div className="rounded-xl border border-border bg-card overflow-hidden focus-within:border-primary/50 transition-colors">
@@ -415,14 +498,14 @@ export default function AgentChat() {
               {MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
             <label className="inline-flex items-center gap-1 h-8 text-xs text-muted-foreground border border-border rounded-md px-2 cursor-pointer hover:border-primary/40 hover:text-foreground transition-colors">
-              {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
-              <span className="hidden sm:inline">Fotos</span>
-              <input type="file" accept="image/*" multiple className="hidden" onChange={handleUpload} disabled={uploading} />
+              {uploading || extractingDoc ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
+              <span className="hidden sm:inline">Anexar</span>
+              <input type="file" accept="image/*,.pdf,.docx,.txt,.md" multiple className="hidden" onChange={handleUpload} disabled={uploading || extractingDoc} />
             </label>
             {sending ? (
               <Button onClick={handleStop} variant="outline" size="sm" className="ml-auto h-8 gap-1.5"><Square className="w-3.5 h-3.5" /> Parar</Button>
             ) : (
-              <Button onClick={handleSend} disabled={!input.trim()} size="sm" className="ml-auto h-8 gap-1.5"><Send className="w-4 h-4" /> Enviar</Button>
+              <Button onClick={handleSend} disabled={!input.trim() && !doc} size="sm" className="ml-auto h-8 gap-1.5"><Send className="w-4 h-4" /> Enviar</Button>
             )}
           </div>
         </div>

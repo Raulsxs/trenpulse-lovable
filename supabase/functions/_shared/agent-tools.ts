@@ -469,10 +469,14 @@ Responda SOMENTE JSON: {"title":"título curto interno","caption":"a legenda com
         brandRefs = (refs || []).map((r: any) => r.image_url).filter(Boolean);
       }
       const refImgs = [anchorUrl, ...brandRefs].filter(Boolean).slice(0, 6);
-      const prompt = `Refaça ESTE slide de um carrossel aplicando o ajuste: "${input.instrucao}".
+      const prompt = `Você refaz UM slide de um carrossel fazendo uma EDIÇÃO PONTUAL — mexa SÓ no que o ajuste pede, preserve o resto.
+
+>>> AJUSTE PEDIDO (é isto, exatamente, que deve mudar): "${input.instrucao}"
+
+Conteúdo do slide (mantenha estes textos, salvo se o ajuste mandar trocá-los):
 Headline: ${slide.headline || ""}${slide.body ? `\nBody: ${slide.body}` : ""}${slide.bullets?.length ? `\nBullets: ${slide.bullets.join("; ")}` : ""}
 ${anchorUrl ? "A 1ª imagem anexada é OUTRO slide do MESMO carrossel — replique FIELMENTE o estilo dela (paleta, tipografia, layout, fundo, clima) para ficar consistente." : ""}
-Texto em pt-BR impecável e legível. Responda APENAS com a imagem.`;
+REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um elemento (cor, título, palavra, fundo), mexa só nele e preserve todo o resto. Se ambíguo, interprete de forma conservadora (a que menos altera). Texto em pt-BR impecável e legível. Responda APENAS com a imagem.`;
       const res = await fetch(`${ctx.supabaseUrl}/functions/v1/generate-slide-images`, {
         method: "POST",
         headers: { Authorization: ctx.userAuthHeader, apikey: ctx.anonKey, "Content-Type": "application/json" },

@@ -2162,18 +2162,19 @@ ${NO_UI_MOCKUP_RULE}
 ${SAFE_AREA_RULES}`
           : `FORMATO OBRIGATÓRIO: ${dimLabel}. Gere a imagem EXATAMENTE neste formato.
 
-Você está editando uma imagem de ${platformLabel} (${existingFormat}).
-A imagem de referência fornecida é o conteúdo atual — use-a como base visual.
+Você está fazendo uma EDIÇÃO PONTUAL de uma imagem de ${platformLabel} (${existingFormat}). A imagem de referência anexada é o conteúdo ATUAL — ela é a BASE. NÃO redesenhe do zero: parta dela e mexa só no que foi pedido.
 
-O QUE MUDAR: ${instruction}
+>>> AJUSTE PEDIDO PELO USUÁRIO (é isto, exatamente, que deve mudar): "${instruction}"
+
 ${editBrandContext ? `\nIDENTIDADE VISUAL DA MARCA (mantenha estas referências na edição):\n${editBrandContext}\n` : ""}
-REGRAS:
-- Aplique APENAS a mudança pedida acima. Mantenha tudo o mais igual possível.
-- Se pede mudança de cor: altere a cor mantendo layout e texto.
-- Se pede mudança de texto: altere o texto mantendo estilo visual.
-- Se pede mudança visual/estilo: altere o visual mantendo os textos.
-- Mantenha qualidade profissional, tipografia legível e identidade do conteúdo.
-- NÃO inclua URLs, QR codes ou logotipos externos.
+REGRAS DE FIDELIDADE (edição assertiva):
+- Faça EXATAMENTE o que o ajuste pede — nem mais, nem menos. Se ele cita um elemento específico (o título, uma cor, uma palavra, o fundo), mexa SÓ nesse elemento.
+- Preserve TODO o resto idêntico à imagem base: composição, posição dos elementos, demais textos, paleta, tipografia, ilustrações. Um leitor deve reconhecer que é a MESMA peça, só com o ajuste aplicado.
+- Mudança de cor → só a cor do que foi citado muda; layout e textos ficam iguais.
+- Mudança de texto → troca só o texto citado, mantendo fonte, tamanho e posição.
+- Mudança de estilo/visual → ajusta o visual mantendo os textos e a mensagem.
+- Se o pedido for ambíguo, faça a interpretação MAIS CONSERVADORA (a que menos altera a peça).
+- NÃO inclua URLs, QR codes ou logotipos externos. Tipografia legível, qualidade profissional.
 
 ${NO_UI_MOCKUP_RULE}
 
