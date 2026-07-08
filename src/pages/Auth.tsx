@@ -50,6 +50,9 @@ const Auth = () => {
   const [savedAccounts, setSavedAccounts] = useState<SavedAccount[]>([]);
   const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showSignupPassword, setShowSignupPassword] = useState(false);
+  // Email pra o qual mandamos a confirmação (mostra a tela "confirme seu email" pós-signup).
+  const [signupEmailSent, setSignupEmailSent] = useState<string | null>(null);
+  const [isResending, setIsResending] = useState(false);
 
   useEffect(() => {
     // If redirected here due to expired session, go straight to login form
@@ -69,7 +72,8 @@ const Auth = () => {
   const handleGoogleLogin = async () => {
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options: { redirectTo: window.location.origin + "/dashboard" },
+      // /dashboard NÃO existe como rota (cai no NotFound). Manda pro /chat (destino padrão pós-login).
+      options: { redirectTo: window.location.origin + "/chat" },
     });
   };
 
@@ -172,7 +176,9 @@ const Auth = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      const redirectUrl = `${window.location.origin}/dashboard`;
+      // /dashboard NÃO existe (cai no NotFound → 404 após confirmar email). Novo usuário vai pro
+      // /onboarding, que capta a sessão do hash e guia o primeiro acesso.
+      const redirectUrl = `${window.location.origin}/onboarding`;
       const { error } = await supabase.auth.signUp({
         email,
         password,
@@ -182,11 +188,31 @@ const Auth = () => {
         },
       });
       if (error) throw error;
-      toast.success("Conta criada com sucesso! Verifique seu email.");
+      // Estado dedicado de "confirme seu email" (P0-3) em vez de só um toast que some.
+      setSignupEmailSent(email);
+      toast.success("Conta criada! Confirme seu email para entrar.");
     } catch (error: any) {
       toast.error(error.message || "Erro ao criar conta");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleResendConfirmation = async () => {
+    if (!signupEmailSent) return;
+    setIsResending(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: "signup",
+        email: signupEmailSent,
+        options: { emailRedirectTo: `${window.location.origin}/onboarding` },
+      });
+      if (error) throw error;
+      toast.success("Email reenviado! Confira sua caixa de entrada e o spam.");
+    } catch (error: any) {
+      toast.error(error.message || "Não consegui reenviar agora. Tente em alguns minutos.");
+    } finally {
+      setIsResending(false);
     }
   };
 
@@ -291,7 +317,42 @@ const Auth = () => {
           </div>
 
           <Card className="shadow-card border-border/50">
-            {mode === "accounts" ? (
+            {signupEmailSent ? (
+              <>
+                <CardHeader className="text-center pb-2">
+                  <div className="mx-auto mb-3 w-14 h-14 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Sparkles className="w-7 h-7 text-primary" />
+                  </div>
+                  <CardTitle className="text-2xl font-heading">Confirme seu email</CardTitle>
+                  <CardDescription>
+                    Enviamos um link de confirmação para <span className="font-medium text-foreground">{signupEmailSent}</span>. Clique nele para ativar sua conta e entrar.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-lg bg-muted/50 p-3 text-sm text-muted-foreground">
+                    Não recebeu? Verifique a pasta de <span className="font-medium">spam</span> ou reenvie abaixo.
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full gap-2"
+                    onClick={handleResendConfirmation}
+                    disabled={isResending}
+                  >
+                    {isResending ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                    {isResending ? "Reenviando..." : "Reenviar email de confirmação"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="w-full"
+                    onClick={() => { setSignupEmailSent(null); setMode("login"); }}
+                  >
+                    Voltar para o login
+                  </Button>
+                </CardContent>
+              </>
+            ) : mode === "accounts" ? (
               <>
                 <CardHeader className="text-center pb-2">
                   <CardTitle className="text-2xl font-heading">Bem-vindo de volta</CardTitle>

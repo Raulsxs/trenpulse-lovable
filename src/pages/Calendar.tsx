@@ -8,8 +8,11 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Calendar as CalendarPicker } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useConnectedAccounts } from "@/hooks/useConnectedAccounts";
+import { PLATFORMS } from "@/components/profile/SocialConnections";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -28,6 +31,7 @@ import {
   Trash2,
   Loader2,
   Filter,
+  Send,
 } from "lucide-react";
 
 import SlideTemplateRenderer from "@/components/content/SlideTemplateRenderer";
@@ -97,6 +101,19 @@ const Calendar = () => {
   const [rescheduleHour, setRescheduleHour] = useState("09");
   const [rescheduleMinute, setRescheduleMinute] = useState("00");
   const [isRescheduling, setIsRescheduling] = useState(false);
+  // Seleção de rede pro publicar/reagendar (ponto do Felipe). Reusa o hook cacheado das conexões.
+  const { accounts: connectedAccounts } = useConnectedAccounts();
+  const [calSelectedAccountIds, setCalSelectedAccountIds] = useState<string[]>([]);
+  const calValidAccounts = connectedAccounts.filter((a) => a.pfm_account_id && !a.expired);
+  // Ao abrir um conteúdo, pré-seleciona as contas da plataforma dele (ou todas as válidas).
+  useEffect(() => {
+    if (!selectedContent) return;
+    const match = calValidAccounts.filter((a) => a.platform === selectedContent.platform).map((a) => a.pfm_account_id!);
+    setCalSelectedAccountIds(match.length ? match : calValidAccounts.map((a) => a.pfm_account_id!));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedContent?.id, connectedAccounts]);
+  const toggleCalAccount = (id: string) =>
+    setCalSelectedAccountIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
 
   const weekScrollRef = useRef<HTMLDivElement>(null);
   const hasScrolledRef = useRef(false);
@@ -149,9 +166,14 @@ const Calendar = () => {
     try {
       const newDate = new Date(rescheduleDate);
       newDate.setHours(parseInt(rescheduleHour), parseInt(rescheduleMinute), 0, 0);
+      // Grava as contas escolhidas → o scheduler publica nelas (não só na plataforma de criação).
+      const chosen = connectedAccounts.filter((a) => a.pfm_account_id && calSelectedAccountIds.includes(a.pfm_account_id));
+      const scheduledAccounts = chosen.length
+        ? { platforms: [...new Set(chosen.map((a) => a.platform))], accountIds: chosen.map((a) => a.pfm_account_id!) }
+        : null;
       const { error } = await supabase
         .from("generated_contents")
-        .update({ scheduled_at: newDate.toISOString(), status: "scheduled", publish_attempts: 0, publish_error: null })
+        .update({ scheduled_at: newDate.toISOString(), status: "scheduled", publish_attempts: 0, publish_error: null, scheduled_accounts: scheduledAccounts })
         .eq("id", selectedContent.id);
       if (error) throw error;
       toast.success("Conteúdo reagendado!", {
@@ -395,15 +417,22 @@ const Calendar = () => {
         content.id,
       );
 
-      const platformName = content.platform === "linkedin" ? "LinkedIn" : "Instagram";
+      // Publica nas contas escolhidas (múltiplas redes); fallback = plataforma de criação.
+      const chosen = connectedAccounts.filter((a) => a.pfm_account_id && calSelectedAccountIds.includes(a.pfm_account_id));
+      const publishBody = chosen.length
+        ? { contentId: content.id, platforms: [...new Set(chosen.map((a) => a.platform))], accountIds: chosen.map((a) => a.pfm_account_id!) }
+        : { contentId: content.id, platforms: [content.platform || "instagram"] };
+      const platformName = chosen.length
+        ? `${chosen.length} rede${chosen.length > 1 ? "s" : ""}`
+        : (content.platform === "linkedin" ? "LinkedIn" : "Instagram");
 
-      toast.info(`Publicando no ${platformName}...`, { duration: 8000 });
+      toast.info(`Publicando em ${platformName}...`, { duration: 8000 });
       const { data, error } = await supabase.functions.invoke("publish-postforme", {
-        body: { contentId: content.id, platforms: [content.platform || "instagram"] },
+        body: publishBody,
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      toast.success(`Publicado no ${platformName} com sucesso! 🎉`);
+      toast.success(`Publicado em ${platformName} com sucesso! 🎉`);
       setSelectedContent(null);
       fetchData();
     } catch (error) {
@@ -1070,6 +1099,56 @@ const Calendar = () => {
                 <Separator />
 
                 {/* Reschedule */}
+                {(selectedContent.status === "approved" || selectedContent.status === "scheduled") && (
+                  <div className="space-y-2">
+                    <Label className="flex items-center gap-1.5 text-sm font-medium">
+                      <Send className="w-3.5 h-3.5" />
+                      Publicar em
+                    </Label>
+                    {calValidAccounts.length === 0 ? (
+                      <div className="rounded-lg border border-amber-500/40 bg-amber-500/5 p-2.5 text-xs">
+                        <p className="text-amber-700 font-medium mb-1">Nenhuma rede conectada e ativa.</p>
+                        <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => navigate("/profile")}>Conectar no Perfil</Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {connectedAccounts.map((account) => {
+                          const info = PLATFORMS.find((p) => p.id === account.platform);
+                          if (!info) return null;
+                          const key = account.pfm_account_id || account.platform;
+                          const expired = account.expired === true;
+                          const isSelected = calSelectedAccountIds.includes(key) && !expired;
+                          return (
+                            <label
+                              key={key}
+                              className={`flex items-center gap-2 p-1.5 rounded-md transition-colors ${
+                                expired ? "bg-amber-500/10 cursor-not-allowed" : isSelected ? "bg-primary/5 cursor-pointer" : "hover:bg-muted/50 cursor-pointer"
+                              }`}
+                            >
+                              <Checkbox
+                                checked={isSelected}
+                                onCheckedChange={() => !expired && account.pfm_account_id && toggleCalAccount(key)}
+                                disabled={expired}
+                              />
+                              <div className={`w-5 h-5 rounded ${info.bgColor} flex items-center justify-center ${info.iconColor} shrink-0`}>
+                                <info.icon className="w-3 h-3" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <span className="text-xs font-medium block leading-tight">{info.name}</span>
+                                {expired ? (
+                                  <span className="text-[10px] font-medium text-amber-600 block truncate">expirada — reconecte no Perfil</span>
+                                ) : account.account_name ? (
+                                  <span className="text-[10px] text-muted-foreground block truncate">{account.account_name}</span>
+                                ) : null}
+                              </div>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 <div className="space-y-3">
                   <Label className="flex items-center gap-1.5 text-sm font-medium">
                     <CalendarClock className="w-3.5 h-3.5" />
@@ -1126,7 +1205,7 @@ const Calendar = () => {
                     <Button
                       size="sm"
                       className="ml-auto gap-1.5"
-                      disabled={!rescheduleDate || isRescheduling}
+                      disabled={!rescheduleDate || isRescheduling || calSelectedAccountIds.length === 0}
                       onClick={handleReschedule}
                     >
                       {isRescheduling ? (
@@ -1160,7 +1239,7 @@ const Calendar = () => {
                             : "bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700"
                         }`}
                         onClick={() => handlePublishNow(selectedContent)}
-                        disabled={isPublishing}
+                        disabled={isPublishing || calSelectedAccountIds.length === 0}
                       >
                         {isPublishing ? (
                           <Loader2 className="w-4 h-4 animate-spin" />
