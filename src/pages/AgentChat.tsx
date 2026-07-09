@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload, Info } from "lucide-react";
+import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload, ChevronDown, Palette } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ActionCard from "@/components/chat/ActionCard";
 import ConfirmAction from "@/components/chat/ConfirmAction";
@@ -34,10 +34,12 @@ const TOOL_LABEL: Record<string, string> = {
 
 // 3 níveis amigáveis (o leigo escolhe por benefício, não por nome de modelo). O id continua sendo
 // o modelo real que o backend entende. Econômico=seedream, Padrão=gpt-image-2, Premium=nano-banana.
+// 3 níveis amigáveis + o MODELO real descrito (o cliente vê que é GPT, Seedream, etc.).
+// dot = cor do nível; engine = nome técnico pra transparência. id = modelo real que o backend usa.
 const MODELS = [
-  { id: "seedream", label: "Econômico" },
-  { id: "gpt-image-2", label: "Padrão (recomendado)" },
-  { id: "nano-banana", label: "Premium" },
+  { id: "seedream", tier: "Econômico", engine: "Seedream 4.0", desc: "Mais posts pelo mesmo valor", dot: "bg-emerald-500" },
+  { id: "gpt-image-2", tier: "Padrão", engine: "GPT-Image 2", desc: "Melhor texto e fidelidade à marca", dot: "bg-primary", recommended: true },
+  { id: "nano-banana", tier: "Premium", engine: "Nano Banana Pro", desc: "Máxima qualidade — ideal 9:16", dot: "bg-fuchsia-500" },
 ];
 
 interface Tool { name: string; ok?: boolean; cancelled?: boolean }
@@ -65,6 +67,8 @@ export default function AgentChat() {
   const [extractingDoc, setExtractingDoc] = useState(false);
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
+  const [brandOpen, setBrandOpen] = useState(false);
+  const [modelOpen, setModelOpen] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<any>(null);
   const { balance } = useCredits();
   const location = useLocation();
@@ -486,39 +490,65 @@ export default function AgentChat() {
           />
           <div className="flex flex-wrap items-center gap-2 px-2.5 py-2 border-t border-border/60 bg-muted/20">
             {brands.length > 0 && (
-              <select value={brandId} onChange={(e) => setBrandId(e.target.value)} title="Marca aplicada" className="h-8 text-xs bg-background border border-border rounded-md px-2 max-w-[110px] sm:max-w-[140px] focus-visible:outline-none focus-visible:border-primary/50 transition-colors">
-                <option value="">Sem marca</option>
-                {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
-              </select>
+              <Popover open={brandOpen} onOpenChange={setBrandOpen}>
+                <PopoverTrigger asChild>
+                  <button type="button" className="group inline-flex items-center gap-1.5 h-8 rounded-lg border border-border bg-background px-2.5 text-xs font-medium hover:border-primary/50 hover:bg-muted/40 transition-all max-w-[130px] sm:max-w-[160px]">
+                    <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="truncate">{brands.find((b) => b.id === brandId)?.name || "Sem marca"}</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-auto transition-transform group-data-[state=open]:rotate-180" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" side="top" sideOffset={8} className="w-56 p-1.5 rounded-xl shadow-lg">
+                  <p className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Marca aplicada</p>
+                  {[{ id: "", name: "Sem marca" }, ...brands].map((b) => {
+                    const active = (brandId || "") === b.id;
+                    return (
+                      <button key={b.id || "none"} type="button" onClick={() => { setBrandId(b.id); setBrandOpen(false); }}
+                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-left transition-colors ${active ? "bg-primary/10 text-primary font-semibold" : "hover:bg-muted"}`}>
+                        <span className="flex-1 truncate">{b.name}</span>
+                        {active && <Check className="w-3.5 h-3.5 shrink-0" />}
+                      </button>
+                    );
+                  })}
+                </PopoverContent>
+              </Popover>
             )}
-            <select value={model} onChange={(e) => setModel(e.target.value)} title="Modo de geração" className="h-8 text-xs bg-background border border-border rounded-md px-2 max-w-[120px] sm:max-w-[160px] focus-visible:outline-none focus-visible:border-primary/50 transition-colors">
-              {MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-            </select>
-            <Popover>
-              <PopoverTrigger asChild>
-                <button type="button" title="O que são os modos?" className="inline-flex items-center justify-center h-8 w-7 text-muted-foreground hover:text-foreground transition-colors" aria-label="Sobre os modos de geração">
-                  <Info className="w-3.5 h-3.5" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" side="top" className="w-72 p-3 text-xs">
-                <p className="font-semibold mb-2 text-foreground">Modos de geração</p>
-                <ul className="space-y-2">
-                  <li className="flex gap-2">
-                    <span className="text-[hsl(var(--credit))] font-bold shrink-0">Econômico</span>
-                    <span className="text-muted-foreground">Mais barato — rende o dobro de posts pelo mesmo valor. Ótimo pra volume.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="text-primary font-bold shrink-0">Padrão</span>
-                    <span className="text-muted-foreground">Recomendado. Melhor texto em português e fidelidade à sua marca.</span>
-                  </li>
-                  <li className="flex gap-2">
-                    <span className="text-accent font-bold shrink-0">Premium</span>
-                    <span className="text-muted-foreground">Máxima qualidade, ideal pra story/vertical (9:16). Consome mais créditos.</span>
-                  </li>
-                </ul>
-                <p className="text-[11px] text-muted-foreground mt-2 pt-2 border-t border-border">Story e vídeo usam o melhor modelo automaticamente, seja qual for o modo.</p>
-              </PopoverContent>
-            </Popover>
+            {(() => {
+              const sel = MODELS.find((m) => m.id === model) || MODELS[1];
+              return (
+                <Popover open={modelOpen} onOpenChange={setModelOpen}>
+                  <PopoverTrigger asChild>
+                    <button type="button" className="group inline-flex items-center gap-1.5 h-8 rounded-lg border border-border bg-background px-2.5 text-xs font-medium hover:border-primary/50 hover:bg-muted/40 transition-all">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${sel.dot}`} />
+                      <span className="truncate">{sel.tier}</span>
+                      <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 transition-transform group-data-[state=open]:rotate-180" />
+                    </button>
+                  </PopoverTrigger>
+                  <PopoverContent align="start" side="top" sideOffset={8} className="w-72 p-1.5 rounded-xl shadow-lg">
+                    <p className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Modo de geração</p>
+                    {MODELS.map((m) => {
+                      const active = m.id === model;
+                      return (
+                        <button key={m.id} type="button" onClick={() => { setModel(m.id); setModelOpen(false); }}
+                          className={`flex w-full items-start gap-2.5 rounded-lg px-2 py-2 text-left transition-colors ${active ? "bg-primary/5 ring-1 ring-primary/20" : "hover:bg-muted"}`}>
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1 ${m.dot}`} />
+                          <span className="flex-1 min-w-0">
+                            <span className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-semibold text-foreground">{m.tier}</span>
+                              <span className="text-[10px] text-muted-foreground">· {m.engine}</span>
+                              {m.recommended && <span className="text-[9px] font-bold uppercase tracking-wide text-primary bg-primary/10 rounded px-1 py-px">rec</span>}
+                            </span>
+                            <span className="block text-[11px] text-muted-foreground leading-snug mt-0.5">{m.desc}</span>
+                          </span>
+                          {active && <Check className="w-4 h-4 text-primary shrink-0 mt-0.5" />}
+                        </button>
+                      );
+                    })}
+                    <p className="text-[11px] text-muted-foreground mt-1 mx-1 pt-2 border-t border-border">Story e vídeo usam o melhor modelo automaticamente, seja qual for o modo.</p>
+                  </PopoverContent>
+                </Popover>
+              );
+            })()}
             <label className="inline-flex items-center gap-1 h-8 text-xs text-muted-foreground border border-border rounded-md px-2 cursor-pointer hover:border-primary/40 hover:text-foreground transition-colors">
               {uploading || extractingDoc ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">Anexar</span>
