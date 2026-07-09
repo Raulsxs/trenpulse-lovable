@@ -226,13 +226,14 @@ const Sidebar = () => {
                 key={item.href}
                 to={item.href}
                 className={cn(
-                  "flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200",
+                  "group relative flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-all duration-200",
                   isActive
-                    ? "bg-sidebar-accent text-sidebar-primary"
-                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                    ? "bg-sidebar-accent text-sidebar-primary font-semibold shadow-sm"
+                    : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground hover:translate-x-0.5"
                 )}
               >
-                <item.icon className="w-5 h-5" />
+                {isActive && <span className="absolute left-0 top-1/2 -translate-y-1/2 h-6 w-1 rounded-r-full bg-sidebar-primary" />}
+                <item.icon className={cn("w-5 h-5 transition-transform duration-200", !isActive && "group-hover:scale-110")} />
                 {item.label}
               </Link>
             );
@@ -251,13 +252,13 @@ const Sidebar = () => {
                 key={item.href}
                 to={item.href}
                 className={cn(
-                  "flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
+                  "group flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all duration-200",
                   isActive
-                    ? "bg-sidebar-accent text-sidebar-primary"
-                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground"
+                    ? "bg-sidebar-accent text-sidebar-primary font-semibold"
+                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent/50 hover:text-sidebar-foreground hover:translate-x-0.5"
                 )}
               >
-                <item.icon className="w-4 h-4" />
+                <item.icon className={cn("w-4 h-4 transition-transform duration-200", !isActive && "group-hover:scale-110")} />
                 {item.label}
               </Link>
             );
