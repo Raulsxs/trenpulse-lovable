@@ -58,8 +58,9 @@ export default function AgentChat() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
-  const [brandId, setBrandId] = useState<string>("");
-  const [model, setModel] = useState<string>("gpt-image-2");
+  // Modo e marca PERSISTEM entre sessões (quem prefere Econômico / uma marca fixa não re-seleciona toda vez).
+  const [brandId, setBrandId] = useState<string>(() => { try { return localStorage.getItem("tp_agent_brand") || ""; } catch { return ""; } });
+  const [model, setModel] = useState<string>(() => { try { return localStorage.getItem("tp_agent_model") || "gpt-image-2"; } catch { return "gpt-image-2"; } });
   const [photos, setPhotos] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   // Documento (PDF/DOCX/TXT/MD) anexado como briefing — injeta o texto na próxima mensagem.
@@ -78,6 +79,10 @@ export default function AgentChat() {
     if (typeof pf === "string" && pf) setInput(pf);
   }, [location.state]);
 
+  // Persiste a escolha de modo/marca pra próxima sessão.
+  useEffect(() => { try { localStorage.setItem("tp_agent_model", model); } catch { /* ignore */ } }, [model]);
+  useEffect(() => { try { localStorage.setItem("tp_agent_brand", brandId); } catch { /* ignore */ } }, [brandId]);
+
   const convo = useRef<any[]>([]);        // messages Anthropic (continuidade)
   const curId = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -89,7 +94,11 @@ export default function AgentChat() {
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("brands").select("id, name").limit(20);
-      if (data) setBrands(data as any);
+      if (data) {
+        setBrands(data as any);
+        // Marca persistida foi deletada? volta pra "Sem marca" (evita id fantasma no seletor).
+        setBrandId((prev) => (prev && !data.some((b: any) => b.id === prev) ? "" : prev));
+      }
       const { data: { user } } = await supabase.auth.getUser();
       if (user) {
         storeKey.current = `tp_agent_${user.id}`;
