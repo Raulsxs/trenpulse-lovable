@@ -11,7 +11,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload } from "lucide-react";
+import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload, Info } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ActionCard from "@/components/chat/ActionCard";
 import ConfirmAction from "@/components/chat/ConfirmAction";
 import { useCredits } from "@/hooks/useCredits";
@@ -34,9 +35,9 @@ const TOOL_LABEL: Record<string, string> = {
 // 3 níveis amigáveis (o leigo escolhe por benefício, não por nome de modelo). O id continua sendo
 // o modelo real que o backend entende. Econômico=seedream, Padrão=gpt-image-2, Premium=nano-banana.
 const MODELS = [
-  { id: "seedream", label: "Econômico · mais posts pelo mesmo valor" },
-  { id: "gpt-image-2", label: "Padrão · melhor texto (recomendado)" },
-  { id: "nano-banana", label: "Premium · máxima qualidade" },
+  { id: "seedream", label: "Econômico" },
+  { id: "gpt-image-2", label: "Padrão (recomendado)" },
+  { id: "nano-banana", label: "Premium" },
 ];
 
 interface Tool { name: string; ok?: boolean; cancelled?: boolean }
@@ -490,9 +491,34 @@ export default function AgentChat() {
                 {brands.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
               </select>
             )}
-            <select value={model} onChange={(e) => setModel(e.target.value)} title="Modelo de imagem" className="h-8 text-xs bg-background border border-border rounded-md px-2 max-w-[120px] sm:max-w-[160px] focus-visible:outline-none focus-visible:border-primary/50 transition-colors">
+            <select value={model} onChange={(e) => setModel(e.target.value)} title="Modo de geração" className="h-8 text-xs bg-background border border-border rounded-md px-2 max-w-[120px] sm:max-w-[160px] focus-visible:outline-none focus-visible:border-primary/50 transition-colors">
               {MODELS.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
             </select>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button type="button" title="O que são os modos?" className="inline-flex items-center justify-center h-8 w-7 text-muted-foreground hover:text-foreground transition-colors" aria-label="Sobre os modos de geração">
+                  <Info className="w-3.5 h-3.5" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" side="top" className="w-72 p-3 text-xs">
+                <p className="font-semibold mb-2 text-foreground">Modos de geração</p>
+                <ul className="space-y-2">
+                  <li className="flex gap-2">
+                    <span className="text-[hsl(var(--credit))] font-bold shrink-0">Econômico</span>
+                    <span className="text-muted-foreground">Mais barato — rende o dobro de posts pelo mesmo valor. Ótimo pra volume.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-primary font-bold shrink-0">Padrão</span>
+                    <span className="text-muted-foreground">Recomendado. Melhor texto em português e fidelidade à sua marca.</span>
+                  </li>
+                  <li className="flex gap-2">
+                    <span className="text-accent font-bold shrink-0">Premium</span>
+                    <span className="text-muted-foreground">Máxima qualidade, ideal pra story/vertical (9:16). Consome mais créditos.</span>
+                  </li>
+                </ul>
+                <p className="text-[11px] text-muted-foreground mt-2 pt-2 border-t border-border">Story e vídeo usam o melhor modelo automaticamente, seja qual for o modo.</p>
+              </PopoverContent>
+            </Popover>
             <label className="inline-flex items-center gap-1 h-8 text-xs text-muted-foreground border border-border rounded-md px-2 cursor-pointer hover:border-primary/40 hover:text-foreground transition-colors">
               {uploading || extractingDoc ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">Anexar</span>
