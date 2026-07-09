@@ -381,22 +381,23 @@ export default function AgentChat() {
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 sm:px-4 py-5 space-y-4">
         {uiMessages.length === 0 && (
-          <div className="max-w-md mx-auto pt-8 sm:pt-12">
-            <div className="w-11 h-11 rounded-xl bg-accent/10 flex items-center justify-center mb-4">
+          <div className="max-w-md mx-auto pt-8 sm:pt-12 animate-in fade-in duration-500">
+            <div className="w-11 h-11 rounded-xl bg-accent/10 flex items-center justify-center mb-4 animate-in zoom-in-50 duration-500">
               <Sparkles className="w-5 h-5 text-accent" />
             </div>
             <h2 className="text-lg font-bold leading-snug">Do prompt ao feed.</h2>
             <p className="text-sm text-muted-foreground mt-1 mb-5">Descreva o que você quer postar. Eu gero, aplico a marca, agendo e publico pra você.</p>
             <div className="grid sm:grid-cols-2 gap-2">
-              {SUGGESTIONS.map((s) => {
+              {SUGGESTIONS.map((s, i) => {
                 const Icon = s.icon;
                 return (
                   <button
                     key={s.text}
                     onClick={() => setInput(s.text)}
-                    className="group flex items-start gap-2.5 text-left text-[13px] leading-snug rounded-lg border border-border bg-card px-3 py-2.5 hover:border-primary/50 hover:bg-primary/[0.03] transition-colors duration-150"
+                    style={{ animationDelay: `${100 + i * 60}ms` }}
+                    className="group flex items-start gap-2.5 text-left text-[13px] leading-snug rounded-lg border border-border bg-card px-3 py-2.5 shadow-sm hover:border-primary/50 hover:bg-primary/[0.03] hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 transition-all duration-200 animate-in fade-in slide-in-from-bottom-2 fill-mode-backwards"
                   >
-                    <Icon className="w-4 h-4 mt-px text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
+                    <Icon className="w-4 h-4 mt-px text-muted-foreground group-hover:text-primary group-hover:scale-110 transition-all shrink-0" />
                     <span>{s.text}</span>
                   </button>
                 );
@@ -405,7 +406,7 @@ export default function AgentChat() {
           </div>
         )}
         {uiMessages.map((m) => (
-          <div key={m.id} className={m.role === "user" ? "flex justify-end" : "flex justify-start"}>
+          <div key={m.id} className={`animate-in fade-in slide-in-from-bottom-2 duration-300 ${m.role === "user" ? "flex justify-end" : "flex justify-start"}`}>
             <div className={m.role === "user" ? "max-w-[85%] rounded-2xl rounded-br-sm bg-primary text-primary-foreground px-3.5 py-2 text-sm whitespace-pre-wrap shadow-sm" : "max-w-[90%] sm:max-w-[88%] space-y-2"}>
               {m.role === "assistant" && m.tools.length > 0 && (
                 <div className="flex flex-wrap gap-1.5">
@@ -557,7 +558,7 @@ export default function AgentChat() {
             {sending ? (
               <Button onClick={handleStop} variant="outline" size="sm" className="ml-auto h-8 gap-1.5"><Square className="w-3.5 h-3.5" /> Parar</Button>
             ) : (
-              <Button onClick={handleSend} disabled={!input.trim() && !doc} size="sm" className="ml-auto h-8 gap-1.5"><Send className="w-4 h-4" /> Enviar</Button>
+              <Button onClick={handleSend} disabled={!input.trim() && !doc} size="sm" className="ml-auto h-8 gap-1.5 transition-all hover:shadow-md active:scale-95"><Send className="w-4 h-4" /> Enviar</Button>
             )}
           </div>
         </div>
