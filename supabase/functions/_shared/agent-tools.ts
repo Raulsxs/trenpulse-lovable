@@ -244,6 +244,16 @@ export const AGENT_TOOLS = [
     },
   },
   {
+    name: "mostrar_conteudo",
+    description: "Reexibe o CARD de preview de um conteúdo já gerado (SEM gerar nada, SEM custo). Chame quando o usuário pede pra VER/receber de novo um conteúdo: 'me envia o conteúdo', 'me manda o card', 'mostra o post', 'cadê a imagem', 'reexibe o último'. Usa o content_id do histórico; se não houver, mostra a última geração do usuário.",
+    input_schema: {
+      type: "object",
+      properties: {
+        contentId: { type: "string", description: "ID do conteúdo (do histórico). OPCIONAL: omita para mostrar a última geração." },
+      },
+    },
+  },
+  {
     name: "replicar_post",
     description: "Recria um post parecido com um POST DE REFERÊNCIA anexado, no estilo da marca (o print anexado é usado automaticamente — não precisa da URL). Chame quando o usuário anexa um print/post e diz 'faça parecido com este'.",
     input_schema: {
@@ -717,6 +727,29 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
       };
       const modelo = action ? (MODEL_BY_ACTION[action] || action) : "padrão (GPT-Image 2)";
       return { ok: true, content: `"${c.title || c.content_type}" — ${c.content_type}${c.slide_count ? ` (${c.slide_count} slides)` : ""}, ${c.platform || "instagram"}. Modelo de imagem: **${modelo}**.${gm.prompt ? ` Prompt: "${String(gm.prompt).slice(0, 160)}".` : ""}` };
+    }
+    case "mostrar_conteudo": {
+      const SEL = "id, content_type, platform, image_urls, slides";
+      const hasImg = (r: any): boolean => {
+        const arr = Array.isArray(r?.image_urls) ? r.image_urls.filter((u: any) => typeof u === "string" && u) : [];
+        return !!(arr[0] || (Array.isArray(r?.slides) && (r.slides[0]?.image_url || r.slides[0]?.background_image_url)));
+      };
+      let row: any = null;
+      if (input.contentId) {
+        const { data } = await ctx.userClient.from("generated_contents").select(SEL).eq("id", input.contentId).maybeSingle();
+        if (data) row = data;
+      }
+      if (!row) {
+        const { data: recents } = await ctx.userClient.from("generated_contents").select(SEL)
+          .order("created_at", { ascending: false }).limit(8);
+        row = (recents || []).find(hasImg) || (recents || [])[0] || null;
+      }
+      if (!row) return { ok: false, content: "Você ainda não tem nenhum conteúdo gerado pra mostrar. Crie um post/carrossel primeiro." };
+      return {
+        ok: true,
+        content: `Mostrando o card do conteúdo (content_id=${row.id}). O preview aparece no chat; confirme em 1 frase e ofereça publicar/agendar.`,
+        action_result: { content_id: row.id, content_type: row.content_type || "post", platform: row.platform },
+      };
     }
     case "replicar_post": {
       const ref = input.post_referencia_url || (ctx.pendingImageUrls || []).find((u) => typeof u === "string" && u.startsWith("http"));
