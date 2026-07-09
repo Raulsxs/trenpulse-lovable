@@ -887,7 +887,7 @@ export default function ActionCard({
 
   return (
     <>
-      <Card className="mt-2 overflow-hidden border-border/50 bg-card">
+      <Card className="mt-2 overflow-hidden border-border/50 bg-card shadow-sm hover:shadow-md transition-shadow duration-300 animate-in fade-in slide-in-from-bottom-2 duration-300">
         {/* Client-side preview — SAME renderer as Studio for pixel-perfect match */}
         <div className="p-3 pb-0" ref={previewContainerRef}>
           <div
