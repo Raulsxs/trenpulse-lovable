@@ -178,12 +178,21 @@ export default function AgentChat() {
             shownContent.current.add(cid);
             patchCur((m) => ({ ...m, action: { contentId: cid, contentType: evt.action_result.content_type || "post", platform: evt.action_result.platform } }));
           } else {
-            // Edição reusa o mesmo content_id. O card NÃO se atualiza sozinho — o canal realtime já foi
-            // encerrado após carregar a 1ª imagem. Sem isto, "corrigiu mas não mostrou a imagem corrigida"
-            // (queixa do Felipe). Bump refreshKey no card existente → ActionCard re-busca o conteúdo.
-            setUiMessages((prev) => prev.map((m) => m.action?.contentId === cid
-              ? { ...m, action: { ...m.action, refreshKey: (m.action.refreshKey || 0) + 1 } }
-              : m));
+            // Edição reusa o mesmo content_id. NÃO cria um 2º card (2 canais realtime no mesmo content =
+            // crash): MOVE o card pra a mensagem ATUAL (embaixo, à vista) e remove do lugar antigo. Antes
+            // só dava refreshKey++ no card lá em cima (fora da tela) → "editou mas não mostrou o card, nem
+            // soube que regenerou". Mover mantém 1 card só, refetcha o conteúdo atualizado e mostra no
+            // ponto da edição.
+            setUiMessages((prev) => {
+              let prevKey = 0;
+              const stripped = prev.map((m) => {
+                if (m.action?.contentId === cid) { prevKey = m.action.refreshKey || 0; return { ...m, action: undefined }; }
+                return m;
+              });
+              return stripped.map((m) => m.id === curId.current
+                ? { ...m, action: { contentId: cid, contentType: evt.action_result.content_type || "post", platform: evt.action_result.platform, refreshKey: prevKey + 1 } }
+                : m);
+            });
           }
         }
         break;

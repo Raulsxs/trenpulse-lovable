@@ -62,6 +62,8 @@ export function estimateToolCost(name: string, input: any): number {
     case "gerar_carrossel_editorial": return 5 * 5 * mult;
     case "gerar_tweet_card": return 6;
     case "postar_imagem_com_legenda": return 4; // só legenda (Haiku), usa a imagem do usuário as-is
+    case "adaptar_para_rede": return 4; // só legenda (Haiku), reaproveita imagem já gerada
+    case "editar_legenda": return 2; // só texto, não regenera imagem
     case "gerar_video": return Math.min(15, Math.max(3, input?.duracao || 5)) * 9; // ~$0.05/s × margem 3x
     default: return 0;
   }
@@ -123,7 +125,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "postar_imagem_com_legenda",
-    description: "Publica a IMAGEM ANEXADA COMO ESTÁ (sem redesenhar/gerar nova imagem) e escreve só uma legenda. Chame quando o usuário quer postar a PRÓPRIA imagem original — ex.: um CERTIFICADO/diploma (post de conquista no LinkedIn), foto de evento, print, arte já pronta. NÃO use quando ele quer que a IA CRIE/desenhe uma imagem nova (aí é gerar_post). Barato: só gera texto. A imagem é a anexada nesta mensagem (não precisa de URL).",
+    description: "Publica a IMAGEM QUE O USUÁRIO ANEXOU (📎) NESTA MENSAGEM, como está (sem redesenhar/gerar nova imagem), e escreve só uma legenda. Chame quando o usuário anexa a PRÓPRIA imagem original — ex.: um CERTIFICADO/diploma (post de conquista no LinkedIn), foto de evento, print, arte já pronta. NÃO use quando ele quer que a IA CRIE/desenhe uma imagem nova (aí é gerar_post). NÃO use para uma imagem que VOCÊ gerou antes nesta conversa — para reaproveitar o que você já gerou, use adaptar_para_rede. Barato: só gera texto. A imagem é a anexada nesta mensagem (não precisa de URL).",
     input_schema: {
       type: "object",
       properties: {
@@ -132,6 +134,19 @@ export const AGENT_TOOLS = [
         brandId: { type: "string" },
       },
       required: ["contexto"],
+    },
+  },
+  {
+    name: "adaptar_para_rede",
+    description: "Reaproveita um conteúdo que VOCÊ JÁ GEROU nesta conversa e cria uma versão para OUTRA rede. Chame quando o usuário diz 'transforme esse post em LinkedIn', 'faz uma versão da última imagem pro LinkedIn/Instagram/X', 'poste o que a gente gerou no LinkedIn'. REUSA a MESMA imagem já gerada (NÃO regenera nem redesenha) e escreve uma legenda otimizada para a rede alvo, salvando um novo rascunho. Você JÁ TEM o content_id — ele aparece como 'content_id=...' nos resultados das ferramentas anteriores desta conversa; use o mais recente. NUNCA peça para o usuário anexar a imagem: ela já existe. Barato: só gera texto.",
+    input_schema: {
+      type: "object",
+      properties: {
+        contentId: { type: "string", description: "ID do conteúdo já gerado (aparece como content_id=... nos resultados anteriores desta conversa). Use o mais recente quando o usuário diz 'esse'/'a última'. OPCIONAL: se não houver id no histórico (ex.: conversa nova), OMITA — a ferramenta usa a última geração do usuário automaticamente." },
+        plataforma: { type: "string", enum: ["linkedin", "instagram", "facebook", "tiktok", "x"], description: "Rede alvo da nova versão." },
+        ajuste: { type: "string", description: "Observação opcional sobre ângulo/tom da nova legenda." },
+      },
+      required: ["plataforma"],
     },
   },
   {
@@ -192,6 +207,18 @@ export const AGENT_TOOLS = [
         instrucao: { type: "string", description: "Ex.: 'deixe o texto maior', 'cores mais vibrantes'." },
       },
       required: ["contentId", "instrucao"],
+    },
+  },
+  {
+    name: "editar_legenda",
+    description: "Reescreve APENAS a legenda/texto de um conteúdo já gerado, SEM tocar na imagem (barato, NÃO regenera imagem — o Haiku VÊ a imagem e reescreve o texto ancorado nela). Chame quando o usuário quer mudar só o TEXTO/legenda: 'muda a legenda', 'reescreve o texto', 'a legenda deveria falar de X', 'muda o ângulo do texto', 'legenda mais curta'. NÃO use para mudar a imagem/fonte/cores/layout (aí é editar_conteudo, que REGENERA a imagem). Usa o content_id do histórico; se não houver, usa a última geração do usuário.",
+    input_schema: {
+      type: "object",
+      properties: {
+        contentId: { type: "string", description: "ID do conteúdo (aparece nos resultados anteriores). OPCIONAL: omita para usar a última geração do usuário." },
+        instrucao: { type: "string", description: "O que a nova legenda deve dizer/mudar. Ex.: 'foca nos 20% finais e usabilidade, tom realista'." },
+      },
+      required: ["instrucao"],
     },
   },
   {
@@ -365,7 +392,7 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
         if (uc) voice = `Nicho: ${uc.business_niche || "?"}. Tom de voz: ${uc.brand_voice || "profissional e acessível"}.`;
       } catch { /* opcional */ }
 
-      const capPrompt = `Você é copywriter de redes sociais. Escreva a legenda de um post para ${plataforma === "linkedin" ? "LinkedIn" : plataforma} sobre a imagem que o usuário está postando (a IMAGEM é o visual — não a descreva literalmente, contextualize).
+      const capPrompt = `Você é copywriter de redes sociais. Escreva a legenda de um post para ${plataforma === "linkedin" ? "LinkedIn" : plataforma} sobre a imagem que o usuário está postando. A imagem vai ANEXADA nesta mensagem: LEIA o que ela mostra e ancore a legenda no assunto REAL dela (não a descreva literalmente, contextualize; não invente um tema diferente do que a imagem mostra).
 CONTEXTO DO USUÁRIO: ${input.contexto}
 ${voice}
 Se for um CERTIFICADO/conquista: tom de celebração autêntica (1ª pessoa), o que aprendeu, por que importa, gratidão — sem soar arrogante. Gancho forte na 1ª linha, parágrafos curtos, CTA leve (pergunta pra engajar). ${plataforma === "linkedin" ? "Máx 3000 chars, 3-5 hashtags." : "Máx 2200 chars, 8-12 hashtags."}
@@ -375,7 +402,8 @@ Responda SOMENTE JSON: {"title":"título curto interno","caption":"a legenda com
         const r = await fetch("https://api.anthropic.com/v1/messages", {
           method: "POST",
           headers: { "x-api-key": ctx.anthropicKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-          body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1200, messages: [{ role: "user", content: capPrompt }] }),
+          // Multimodal: o Haiku VÊ a imagem anexada pra ancorar a legenda no que ela mostra.
+          body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1200, messages: [{ role: "user", content: [{ type: "text", text: capPrompt }, { type: "image", source: { type: "url", url: img } }] }] }),
         });
         const d = await r.json();
         if (!r.ok) return { ok: false, content: `Não consegui gerar a legenda agora (${d?.error?.message || r.status}). Tente de novo.` };
@@ -416,6 +444,97 @@ Responda SOMENTE JSON: {"title":"título curto interno","caption":"a legenda com
         action_result: { content_id: inserted.id, content_type: "post", platform: plataforma },
       };
     }
+    case "adaptar_para_rede": {
+      const COST = 4; // só legenda; reaproveita a imagem já gerada (não regenera)
+      // Carrega o conteúdo que o agente já gerou nesta conversa. A imagem existe no banco — não
+      // depende de anexo (era o furo: "transforme esse post em LinkedIn" caía em postar_imagem_com_legenda,
+      // que exige upload, e o agente pedia pra re-anexar a imagem que ele mesmo tinha acabado de gerar).
+      const SEL = "id, title, caption, hashtags, image_urls, slides, slide_count, brand_id, content_type";
+      const pickImg = (row: any): string | null => {
+        const arr = Array.isArray(row?.image_urls) ? row.image_urls.filter((u: any) => typeof u === "string" && u) : [];
+        return arr[0] || (Array.isArray(row?.slides) && (row.slides[0]?.image_url || row.slides[0]?.background_image_url)) || null;
+      };
+      let src: any = null;
+      if (input.contentId) {
+        const { data } = await ctx.userClient.from("generated_contents").select(SEL).eq("id", input.contentId).maybeSingle();
+        if (data && pickImg(data)) src = data;
+      }
+      // Fallback: sem id no contexto (ou id sem imagem) → pega a última geração COM imagem do usuário.
+      // Resolve "adapta a última imagem" quando o content_id não circulou (ex.: conversa nova). RLS
+      // garante que só vê o próprio conteúdo.
+      if (!src) {
+        const { data: recents } = await ctx.userClient.from("generated_contents").select(SEL)
+          .order("created_at", { ascending: false }).limit(8);
+        src = (recents || []).find((r: any) => pickImg(r)) || null;
+      }
+      if (!src) return { ok: false, content: "Você ainda não gerou nenhum conteúdo com imagem pra adaptar. Crie um post/carrossel primeiro." };
+      const imgs = Array.isArray(src.image_urls) ? src.image_urls.filter((u: any) => typeof u === "string" && u) : [];
+      const firstImg = pickImg(src)!;
+
+      const { data: creds } = await ctx.userClient.from("user_credits").select("balance").maybeSingle();
+      const balance = Number(creds?.balance ?? 0);
+      if (balance < COST) return { ok: false, content: `Saldo insuficiente (precisa de ${COST} créditos, você tem ${balance}). Recarregue em Perfil → Créditos.` };
+
+      const plataforma = input.plataforma || "linkedin";
+      let voice = "";
+      try {
+        const { data: uc } = await ctx.userClient.from("ai_user_context").select("business_niche, brand_voice").maybeSingle();
+        if (uc) voice = `Nicho: ${uc.business_niche || "?"}. Tom de voz: ${uc.brand_voice || "profissional e acessível"}.`;
+      } catch { /* opcional */ }
+
+      const capPrompt = `Você é copywriter de redes sociais. Adapte um conteúdo já criado para ${plataforma === "linkedin" ? "LinkedIn" : plataforma}. A imagem vai ANEXADA nesta mensagem: LEIA o texto/elementos dela e escreva a legenda sobre o que ela REALMENTE mostra. Se a imagem trata de um assunto específico, escreva sobre ESSE assunto — NUNCA troque por copy genérica do nicho. Reescreva no tom e formato da rede alvo, sem copiar a legenda original literalmente.
+CONTEÚDO ORIGINAL (referência do assunto): título "${src.title || ""}"; legenda: "${String(src.caption || "").slice(0, 1500)}".
+${input.ajuste ? `AJUSTE PEDIDO: ${input.ajuste}` : ""}
+${voice}
+Gancho forte na 1ª linha, parágrafos curtos, CTA leve. ${plataforma === "linkedin" ? "Tom profissional/educativo. Máx 3000 chars, 3-5 hashtags." : plataforma === "x" ? "Bem curto e direto. Máx 280 chars, 1-2 hashtags." : "Máx 2200 chars, 8-12 hashtags."}
+Responda SOMENTE JSON: {"title":"título curto interno","caption":"a legenda completa","hashtags":["#..."]}`;
+      let title = src.title || "Versão adaptada", caption = "", hashtags: string[] = [];
+      try {
+        const r = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": ctx.anthropicKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          // Multimodal: o Haiku VÊ a imagem pra a legenda falar do que ela mostra (senão vira filler do nicho — bug: infográfico "softwares travam 80%" virou legenda genérica de "consultoria").
+          body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1200, messages: [{ role: "user", content: [{ type: "text", text: capPrompt }, { type: "image", source: { type: "url", url: firstImg } }] }] }),
+        });
+        const d = await r.json();
+        if (!r.ok) return { ok: false, content: `Não consegui gerar a legenda agora (${d?.error?.message || r.status}). Tente de novo.` };
+        const raw = (d.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+        const m = raw.match(/\{[\s\S]*\}/);
+        if (m) { const p = JSON.parse(m[0]); title = p.title || title; caption = p.caption || ""; hashtags = Array.isArray(p.hashtags) ? p.hashtags : []; }
+        if (!caption) caption = raw.trim();
+      } catch (e: any) { return { ok: false, content: `Erro ao gerar a legenda: ${e?.message || e}` }; }
+
+      // Novo rascunho reaproveitando a MESMA imagem/slides — só muda plataforma + legenda.
+      const { data: inserted, error: insErr } = await ctx.userClient.from("generated_contents").insert({
+        user_id: ctx.userId,
+        title,
+        content_type: src.content_type || "post",
+        caption,
+        hashtags: hashtags.length ? hashtags : null,
+        image_urls: imgs.length ? imgs : [firstImg],
+        slides: src.slides ?? [{ role: "cover", headline: "", body: "", bullets: [], image_url: firstImg, background_image_url: firstImg, render_mode: "user_image" }],
+        slide_count: src.slide_count || (Array.isArray(src.slides) ? src.slides.length : 1) || 1,
+        status: "draft",
+        platform: plataforma,
+        visual_mode: "user_image",
+        brand_id: src.brand_id || ctx.defaultBrandId || null,
+        generation_metadata: { action: "adapt_platform", source_content_id: src.id, plataforma },
+      }).select("id").maybeSingle();
+      if (insErr || !inserted?.id) return { ok: false, content: `Não consegui salvar a versão adaptada: ${insErr?.message || "erro"}.` };
+
+      try {
+        const { error: spendErr } = await ctx.userClient.rpc("spend_credits", { p_user: ctx.userId, p_amount: COST, p_generation_id: inserted.id, p_metadata: { action: "adapt_platform", source: src.id } });
+        if (spendErr) console.error(`[agent-tools] adaptar_para_rede: spend_credits FALHOU (versão entregue sem cobrança) user=${ctx.userId} content=${inserted.id}:`, spendErr.message || spendErr);
+      } catch (e: any) {
+        console.error(`[agent-tools] adaptar_para_rede: spend_credits LANÇOU user=${ctx.userId} content=${inserted.id}:`, e?.message || e);
+      }
+
+      return {
+        ok: true,
+        content: `Versão para ${plataforma} pronta reaproveitando a mesma imagem (content_id=${inserted.id}). Pré-visualização pronta. Confirme em 1 frase e ofereça publicar/agendar; não repita a legenda.`,
+        action_result: { content_id: inserted.id, content_type: src.content_type || "post", platform: plataforma },
+      };
+    }
     case "gerar_video": {
       const res = await fetch(`${ctx.supabaseUrl}/functions/v1/generate-video`, {
         method: "POST",
@@ -446,6 +565,79 @@ Responda SOMENTE JSON: {"title":"título curto interno","caption":"a legenda com
     case "editar_conteudo":
       // model: a edição usa o mesmo modelo selecionado (senão cai no default e perde qualidade vs a original).
       return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "EDIT_CONTENT", contentId: input.contentId, editInstruction: input.instrucao, model, generationParams: { contentId: input.contentId } }), "Conteúdo ajustado");
+    case "editar_legenda": {
+      const COST = 2; // só reescreve texto; NÃO regenera imagem (barato)
+      const SEL = "id, title, caption, hashtags, image_urls, slides, brand_id, content_type, platform";
+      const pickImg = (row: any): string | null => {
+        const arr = Array.isArray(row?.image_urls) ? row.image_urls.filter((u: any) => typeof u === "string" && u) : [];
+        return arr[0] || (Array.isArray(row?.slides) && (row.slides[0]?.image_url || row.slides[0]?.background_image_url)) || null;
+      };
+      let src: any = null;
+      if (input.contentId) {
+        const { data } = await ctx.userClient.from("generated_contents").select(SEL).eq("id", input.contentId).maybeSingle();
+        if (data) src = data;
+      }
+      if (!src) {
+        const { data: recents } = await ctx.userClient.from("generated_contents").select(SEL)
+          .order("created_at", { ascending: false }).limit(8);
+        src = (recents || [])[0] || null;
+      }
+      if (!src) return { ok: false, content: "Não achei um conteúdo pra reescrever a legenda. Gere algo primeiro." };
+
+      const { data: creds } = await ctx.userClient.from("user_credits").select("balance").maybeSingle();
+      const balance = Number(creds?.balance ?? 0);
+      if (balance < COST) return { ok: false, content: `Saldo insuficiente (precisa de ${COST} créditos, você tem ${balance}). Recarregue em Perfil → Créditos.` };
+
+      const plataforma = src.platform || "instagram";
+      let voice = "";
+      try {
+        const { data: uc } = await ctx.userClient.from("ai_user_context").select("business_niche, brand_voice").maybeSingle();
+        if (uc) voice = `Nicho: ${uc.business_niche || "?"}. Tom de voz: ${uc.brand_voice || "profissional e acessível"}.`;
+      } catch { /* opcional */ }
+
+      const img = pickImg(src);
+      const capPrompt = `Você é copywriter de redes sociais. Reescreva SÓ a legenda de um post para ${plataforma === "linkedin" ? "LinkedIn" : plataforma}${img ? " (a imagem vai ANEXADA — leia o que ela mostra e ancore a legenda no assunto REAL dela; não invente tema diferente do que a imagem mostra)" : ""}.
+LEGENDA ATUAL: "${String(src.caption || "").slice(0, 1500)}"
+O QUE MUDAR (siga à risca): ${input.instrucao}
+${voice}
+Gancho forte na 1ª linha, parágrafos curtos, CTA leve. ${plataforma === "linkedin" ? "Máx 3000 chars, 3-5 hashtags." : plataforma === "x" ? "Bem curto. Máx 280 chars, 1-2 hashtags." : "Máx 2200 chars, 8-12 hashtags."}
+Responda SOMENTE JSON: {"caption":"a legenda completa","hashtags":["#..."]}`;
+      const userContent: any[] = [{ type: "text", text: capPrompt }];
+      if (img) userContent.push({ type: "image", source: { type: "url", url: img } });
+      let caption = "", hashtags: string[] = [];
+      try {
+        const r = await fetch("https://api.anthropic.com/v1/messages", {
+          method: "POST",
+          headers: { "x-api-key": ctx.anthropicKey, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+          body: JSON.stringify({ model: "claude-haiku-4-5", max_tokens: 1200, messages: [{ role: "user", content: userContent }] }),
+        });
+        const d = await r.json();
+        if (!r.ok) return { ok: false, content: `Não consegui reescrever a legenda agora (${d?.error?.message || r.status}). Tente de novo.` };
+        const raw = (d.content || []).filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n");
+        const m = raw.match(/\{[\s\S]*\}/);
+        if (m) { const p = JSON.parse(m[0]); caption = p.caption || ""; hashtags = Array.isArray(p.hashtags) ? p.hashtags : []; }
+        if (!caption) caption = raw.trim();
+      } catch (e: any) { return { ok: false, content: `Erro ao reescrever a legenda: ${e?.message || e}` }; }
+      if (!caption) return { ok: false, content: "A legenda voltou vazia. Tenta de novo com mais detalhe do que mudar." };
+
+      // Atualiza NO LUGAR (mesma peça, mesma imagem) — só o texto muda.
+      const { error: updErr } = await ctx.userClient.from("generated_contents")
+        .update({ caption, hashtags: hashtags.length ? hashtags : null }).eq("id", src.id);
+      if (updErr) return { ok: false, content: `Não consegui salvar a nova legenda: ${updErr.message}.` };
+
+      try {
+        const { error: spendErr } = await ctx.userClient.rpc("spend_credits", { p_user: ctx.userId, p_amount: COST, p_generation_id: src.id, p_metadata: { action: "edit_caption" } });
+        if (spendErr) console.error(`[agent-tools] editar_legenda: spend_credits FALHOU (legenda entregue sem cobrança) user=${ctx.userId} content=${src.id}:`, spendErr.message || spendErr);
+      } catch (e: any) {
+        console.error(`[agent-tools] editar_legenda: spend_credits LANÇOU user=${ctx.userId} content=${src.id}:`, e?.message || e);
+      }
+
+      return {
+        ok: true,
+        content: `Legenda reescrita (content_id=${src.id}) — a IMAGEM não mudou. O preview atualiza sozinho. Confirme em 1 frase; não repita a legenda inteira.`,
+        action_result: { content_id: src.id, content_type: src.content_type || "post", platform: plataforma },
+      };
+    }
     case "editar_slide": {
       const SLIDE_EDIT_COST = 10; // pricing 3x (2026-07-08): alinhado ao post (10cr)
       const idx = Math.max(0, (Number(input.slide) || 1) - 1); // usuário conta de 1
