@@ -39,7 +39,7 @@ interface Slide {
   overlay?: { headline?: string; body?: string; bullets?: string[]; footer?: string };
   overlay_style?: { safe_area_top?: number; safe_area_bottom?: number; text_align?: "left" | "center"; max_headline_lines?: number; font_scale?: number };
   overlay_positions?: Record<string, { x: number; y: number }>;
-  render_mode?: "legacy_image" | "ai_bg_overlay";
+  render_mode?: "legacy_image" | "ai_bg_overlay" | "ai_full_design" | "template_clean";
 }
 
 interface BrandSnapshotData {
@@ -115,13 +115,18 @@ const DownloadPage = () => {
 
   const captureSlide = useCallback(async (index: number): Promise<Blob> => {
     const slide = content?.slides[index];
-    
-    // For overlay mode: must render via html-to-image (bg + text overlay)
-    const hasOverlayBg = !!slide?.background_image_url;
-    
+
+    // ai_full_design / template_clean: background_image_url IS the final image (text baked
+    // into pixels). It must be downloaded directly — overlaying headline/body on top would
+    // stamp the raw prompt over the finished image. Only genuine ai_bg_overlay needs the
+    // html-to-image render path. (Matches ActionCard/ContentPreview guards.)
+    const isFinalImage =
+      slide?.render_mode === "ai_full_design" || slide?.render_mode === "template_clean";
+    const hasOverlayBg = !!slide?.background_image_url && !isFinalImage;
+
     if (!hasOverlayBg) {
-      // Legacy: If we have an AI-generated image, download it directly as blob (pixel-perfect)
-      const imgUrl = slide?.image_url || slide?.previewImage;
+      // Legacy/full-design: download the finished AI image directly as blob (pixel-perfect)
+      const imgUrl = slide?.image_url || slide?.background_image_url || slide?.previewImage;
       if (imgUrl && imgUrl.startsWith("http")) {
         try {
           const res = await fetch(imgUrl);
@@ -569,7 +574,17 @@ const DownloadPage = () => {
           }}
         >
           <div ref={renderRef} style={{ width: dims.width, height: dims.height }}>
-            {content.platform === "linkedin" && content.content_type === "document" ? (
+            {(content.slides[renderIndex].render_mode === "ai_full_design" ||
+              content.slides[renderIndex].render_mode === "template_clean") &&
+            (content.slides[renderIndex].background_image_url || content.slides[renderIndex].image_url) ? (
+              // Final AI image (text baked in) — render full-bleed, never overlay
+              <img
+                src={content.slides[renderIndex].background_image_url || content.slides[renderIndex].image_url}
+                alt=""
+                crossOrigin="anonymous"
+                style={{ width: dims.width, height: dims.height, objectFit: "cover", display: "block" }}
+              />
+            ) : content.platform === "linkedin" && content.content_type === "document" ? (
               <LinkedInDocumentRenderer
                 slide={content.slides[renderIndex]}
                 slideIndex={renderIndex}
@@ -577,7 +592,9 @@ const DownloadPage = () => {
                 brand={brandSnapshot as any}
                 dimensions={dims}
               />
-            ) : content.slides[renderIndex].background_image_url ? (
+            ) : content.slides[renderIndex].background_image_url &&
+              content.slides[renderIndex].render_mode !== "ai_full_design" &&
+              content.slides[renderIndex].render_mode !== "template_clean" ? (
               <SlideBgOverlayRenderer
                 backgroundImageUrl={content.slides[renderIndex].background_image_url!}
                 overlay={content.slides[renderIndex].overlay || {
