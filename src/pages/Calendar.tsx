@@ -77,6 +77,7 @@ interface CalendarContent {
   brand_snapshot: any;
   image_urls: string[] | null;
   platform: string;
+  scheduled_accounts: { platforms?: string[]; accountIds?: string[] } | null;
 }
 
 type ViewMode = "week" | "month";
@@ -108,11 +109,20 @@ const Calendar = () => {
   const { accounts: connectedAccounts } = useConnectedAccounts();
   const [calSelectedAccountIds, setCalSelectedAccountIds] = useState<string[]>([]);
   const calValidAccounts = connectedAccounts.filter((a) => a.pfm_account_id && !a.expired);
-  // Ao abrir um conteúdo, pré-seleciona as contas da plataforma dele (ou todas as válidas).
+  // Ao abrir um conteúdo, pré-seleciona as contas que FORAM escolhidas ao agendar
+  // (scheduled_accounts). Só cai no fallback "todas as contas da plataforma" quando o
+  // conteúdo ainda não tem seleção salva (backlog/aprovado nunca agendado). Sem isso, o
+  // painel remarca todas as contas e reagendar/publicar sobrescreveria a escolha do usuário.
   useEffect(() => {
     if (!selectedContent) return;
-    const match = calValidAccounts.filter((a) => a.platform === selectedContent.platform).map((a) => a.pfm_account_id!);
-    setCalSelectedAccountIds(match.length ? match : calValidAccounts.map((a) => a.pfm_account_id!));
+    const validIds = calValidAccounts.map((a) => a.pfm_account_id!);
+    const savedIds = (selectedContent.scheduled_accounts?.accountIds || []).filter((id) => validIds.includes(id));
+    if (savedIds.length) {
+      setCalSelectedAccountIds(savedIds);
+    } else {
+      const match = calValidAccounts.filter((a) => a.platform === selectedContent.platform).map((a) => a.pfm_account_id!);
+      setCalSelectedAccountIds(match.length ? match : validIds);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedContent?.id, connectedAccounts]);
   const toggleCalAccount = (id: string) =>
@@ -283,7 +293,7 @@ const Calendar = () => {
         // em produção, então o PostgREST rejeita a query INTEIRA com 400 (PGRST200) e o
         // calendário fica vazio (todos os agendamentos somem). O nome do template vem de
         // template_set_id/template_id se algum dia precisar — sem join.
-        .select("id, title, content_type, status, scheduled_at, created_at, updated_at, brand_id, template_set_id, template_id, slides, caption, brand_snapshot, image_urls, platform")
+        .select("id, title, content_type, status, scheduled_at, created_at, updated_at, brand_id, template_set_id, template_id, slides, caption, brand_snapshot, image_urls, platform, scheduled_accounts")
         .eq("user_id", user.id)
         .in("status", ["scheduled", "approved", "published"])
         .gte("scheduled_at", rangeStart.toISOString())
