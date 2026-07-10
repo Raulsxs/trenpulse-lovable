@@ -279,7 +279,11 @@ const Calendar = () => {
 
       let scheduledQuery = supabase
         .from("generated_contents")
-        .select("id, title, content_type, status, scheduled_at, created_at, updated_at, brand_id, template_set_id, template_id, templates(name, category), slides, caption, brand_snapshot, image_urls, platform")
+        // NÃO usar embed templates(name,category): não existe FK generated_contents→templates
+        // em produção, então o PostgREST rejeita a query INTEIRA com 400 (PGRST200) e o
+        // calendário fica vazio (todos os agendamentos somem). O nome do template vem de
+        // template_set_id/template_id se algum dia precisar — sem join.
+        .select("id, title, content_type, status, scheduled_at, created_at, updated_at, brand_id, template_set_id, template_id, slides, caption, brand_snapshot, image_urls, platform")
         .eq("user_id", user.id)
         .in("status", ["scheduled", "approved", "published"])
         .gte("scheduled_at", rangeStart.toISOString())
@@ -291,7 +295,13 @@ const Calendar = () => {
       if (filterStatus !== "all") scheduledQuery = scheduledQuery.eq("status", filterStatus);
       if (filterPlatform !== "all") scheduledQuery = scheduledQuery.eq("platform", filterPlatform);
 
-      const { data: scheduledData } = await scheduledQuery;
+      const { data: scheduledData, error: scheduledError } = await scheduledQuery;
+      if (scheduledError) {
+        // Não engolir: um erro aqui (ex.: embed/coluna inválida → 400) esvaziava o calendário
+        // inteiro sem nenhum sinal. Loga e avisa o usuário em vez de mostrar "vazio".
+        console.error("[Calendar] scheduled query error:", scheduledError);
+        toast.error("Erro ao carregar agendamentos do calendário.");
+      }
       const scheduled = (scheduledData as unknown as CalendarContent[]) || [];
       setContents(scheduled);
 
@@ -301,7 +311,8 @@ const Calendar = () => {
       // vira status=scheduled), então o filtro scheduled_at IS NULL mantém só o backlog real.
       let backlogQuery = supabase
         .from("generated_contents")
-        .select("id, title, content_type, status, scheduled_at, created_at, updated_at, brand_id, template_set_id, template_id, templates(name, category), slides, caption, brand_snapshot, image_urls, platform")
+        // (ver nota acima) sem embed templates(...) — quebrava a query com 400
+        .select("id, title, content_type, status, scheduled_at, created_at, updated_at, brand_id, template_set_id, template_id, slides, caption, brand_snapshot, image_urls, platform")
         .eq("user_id", user.id)
         .in("status", ["draft", "approved"])
         .is("scheduled_at", null)
@@ -312,7 +323,8 @@ const Calendar = () => {
       if (filterFormat !== "all") backlogQuery = backlogQuery.eq("content_type", filterFormat);
       if (filterPlatform !== "all") backlogQuery = backlogQuery.eq("platform", filterPlatform);
 
-      const { data: backlogData } = await backlogQuery;
+      const { data: backlogData, error: backlogError } = await backlogQuery;
+      if (backlogError) console.error("[Calendar] backlog query error:", backlogError);
       const backlogItems = (backlogData as unknown as CalendarContent[]) || [];
       setBacklog(backlogItems);
 
