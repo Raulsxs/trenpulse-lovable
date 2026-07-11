@@ -64,9 +64,43 @@ function unwrapUrl(rawUrl: string): string {
 async function extractArticleContent(rawUrl: string, tag: string): Promise<string> {
   const url = unwrapUrl(rawUrl);
   console.log(`[ai-chat] ${tag}: fetching URL ${url}${url !== rawUrl ? " (unwrapped from Google redirect)" : ""}`);
+  const jinaKey = Deno.env.get("JINA_API_KEY");
   const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
 
-  // 1) Try Firecrawl (best quality)
+  // 1) Jina Reader (PRIMÁRIO). Lê de infra/IP próprios (fura o bloqueio de IP de datacenter
+  //    que derruba o fetch direto do Supabase) e não depende de crédito pré-pago como o
+  //    Firecrawl — que zerou os créditos e quebrou a feature do Maikon em silêncio (402).
+  if (jinaKey) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 20000);
+      const jr = await fetch("https://r.jina.ai/" + url, {
+        headers: { Authorization: `Bearer ${jinaKey}` },
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (jr.ok) {
+        // Jina devolve markdown com header (Title/URL) + navegação em links. Limpa links/imagens
+        // pra sobrar o texto do artigo (o brief downstream usa só os primeiros ~2000 chars).
+        const raw = (await jr.text())
+          .replace(/^Title:.*$/m, "").replace(/^URL Source:.*$/m, "").replace(/^Markdown Content:\s*/m, "")
+          .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+          .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+          .replace(/\n{3,}/g, "\n\n").trim();
+        if (raw.length > 200) {
+          console.log(`[ai-chat] ${tag}: Jina extracted ${raw.length} chars`);
+          return raw.substring(0, 4000);
+        }
+        console.warn(`[ai-chat] ${tag}: Jina returned only ${raw.length} chars, falling back`);
+      } else {
+        console.warn(`[ai-chat] ${tag}: Jina status ${jr.status}`);
+      }
+    } catch (err: any) {
+      console.warn(`[ai-chat] ${tag}: Jina failed:`, err?.message);
+    }
+  }
+
+  // 2) Firecrawl (BACKUP). Boa qualidade, mas exige crédito pré-pago; 402 = sem saldo.
   if (firecrawlKey) {
     try {
       const controller = new AbortController();
@@ -89,6 +123,8 @@ async function extractArticleContent(rawUrl: string, tag: string): Promise<strin
           return md.substring(0, 4000);
         }
         console.warn(`[ai-chat] ${tag}: Firecrawl returned only ${md.length} chars, falling back`);
+      } else if (fcResp.status === 402) {
+        console.error(`[ai-chat] ${tag}: Firecrawl SEM CRÉDITO (402) — recarregar em firecrawl.dev/pricing. Usando fallback.`);
       } else {
         console.warn(`[ai-chat] ${tag}: Firecrawl status ${fcResp.status}`);
       }
@@ -97,7 +133,7 @@ async function extractArticleContent(rawUrl: string, tag: string): Promise<strin
     }
   }
 
-  // 2) Fallback: direct fetch with redirect follow + browser UA
+  // 3) Fallback: direct fetch with redirect follow + browser UA
   try {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 12000);
@@ -753,7 +789,7 @@ Mensagem: "${message}"`;
         // Guard anti-invenção: se o link É o tema mas não conseguimos LER a página, NÃO inventamos
         // um assunto (um artigo de "Bentall" virou "ponte de safena"). Pede o texto em vez de chutar.
         if (urlMatch && !articleContent && message.replace(/https?:\/\/\S+/g, "").trim().length < 15) {
-          replyOverride = "Não consegui ler esse link — o site deve exigir login ou bloquear leitura automática (comum em artigos médicos ou com vídeo). Me manda o **texto** ou um **resumo do assunto** e eu crio o conteúdo certo, sem chutar. 🙏";
+          replyOverride = "Não consegui puxar o conteúdo desse link automaticamente agora. Me manda o **texto** (copia e cola) ou um **print do artigo** que eu crio o conteúdo certo na hora, sem chutar. 🙏";
           break;
         }
 
