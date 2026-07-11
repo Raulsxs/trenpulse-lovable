@@ -75,7 +75,14 @@ async function extractArticleContent(rawUrl: string, tag: string): Promise<strin
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), 20000);
       const jr = await fetch("https://r.jina.ai/" + url, {
-        headers: { Authorization: `Bearer ${jinaKey}` },
+        headers: {
+          Authorization: `Bearer ${jinaKey}`,
+          // Sem isso o Jina devolve a PÁGINA INTEIRA (menu, login, banners promo) e o brief pegava
+          // o lixo do topo — ex.: o banner "Innovation Video Competition" do CTSNet virou a imagem
+          // em vez do artigo. Remove o chrome do site → sobra o corpo do artigo. (Equivale ao
+          // onlyMainContent do Firecrawl.)
+          "X-Remove-Selector": "header, nav, footer, aside, form, #menu, .menu, .site-header, .sidebar",
+        },
         signal: controller.signal,
       });
       clearTimeout(timer);
