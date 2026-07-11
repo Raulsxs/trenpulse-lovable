@@ -363,7 +363,12 @@ function genResult(data: any, kind: string): ToolResult {
 }
 
 export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Promise<ToolResult> {
-  const brandId = input?.brandId || ctx.defaultBrandId || undefined;
+  // A marca SELECIONADA no seletor (ctx.defaultBrandId) é a escolha EXPLÍCITA do usuário e MANDA.
+  // Antes era input?.brandId || defaultBrandId: o LLM recebe a lista de marcas no system prompt e
+  // escolhia uma pelo tema (não sabe qual está selecionada!), atropelando o seletor. Caso Maikon:
+  // selecionou "Heart surgery" (clean) e saiu "Inovações em Saúde" (dark/tech) porque o artigo era
+  // de cirurgia cardíaca. O palpite do LLM NUNCA deve vencer a seleção do usuário.
+  const brandId = ctx.defaultBrandId || input?.brandId || undefined;
   // Modelo: o que o usuário nomeou na fala (input.modelo) vence o selecionado no chat (defaultModel).
   const model = input?.modelo || ctx.defaultModel || undefined;
   switch (name) {

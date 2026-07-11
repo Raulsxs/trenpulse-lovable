@@ -21,7 +21,7 @@ async function buildSystemPrompt(userClient: any, model: string): Promise<string
     const { data: ctx } = await userClient.from("ai_user_context").select("business_niche, brand_voice, content_topics, instagram_handle").maybeSingle();
     if (ctx) ctxLine = `Perfil do usuário — nicho: ${ctx.business_niche || "?"}; tom: ${ctx.brand_voice || "?"}; @: ${ctx.instagram_handle || "?"}; temas: ${(ctx.content_topics || []).join(", ") || "?"}.`;
     const { data: brands } = await userClient.from("brands").select("id, name, creation_mode").limit(10);
-    if (brands?.length) brandLines = "Marcas do usuário (use o id em brandId): " + brands.map((b: any) => `${b.name}=${b.id}`).join("; ") + ".";
+    if (brands?.length) brandLines = "Marcas do usuário (apenas referência): " + brands.map((b: any) => b.name).join("; ") + ". A marca a aplicar é DEFINIDA PELO SELETOR do usuário (o app aplica automaticamente) — NÃO escolha marca por conta própria nem passe o campo brandId nas ferramentas de geração. Só mencione trocar de marca se o usuário pedir explicitamente pelo nome.";
   } catch { /* contexto é best-effort */ }
 
   return `Você é o assistente de criação de conteúdo do TrendPulse. Você NÃO é só um chat — você é o OPERADOR de social media do usuário: gera posts/carrosséis/stories/tweet cards no estilo da MARCA dele, agenda no calendário e publica nas redes. Esse é o seu diferencial sobre um chat genérico.
