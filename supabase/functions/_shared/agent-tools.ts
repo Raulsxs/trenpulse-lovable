@@ -17,6 +17,7 @@ export interface ToolCtx {
   defaultBrandId?: string | null;
   defaultModel?: string | null;  // modelo de imagem selecionado no chat (estante)
   pendingImageUrls?: string[];   // fotos anexadas na mensagem atual
+  userText?: string;             // fala CRUA do usuário no turno atual (rede de segurança p/ detectar formato/rede)
 }
 
 export interface ToolResult {
@@ -268,10 +269,16 @@ export const AGENT_TOOLS = [
   },
   {
     name: "link_para_post",
-    description: "Transforma um LINK de notícia/artigo num post/infográfico do TEMA. Chame quando o usuário cola uma URL e quer conteúdo a partir dela.",
+    description: "Transforma um LINK de notícia/artigo em conteúdo do TEMA — post, CARROSSEL ou story. Chame quando o usuário cola uma URL e quer conteúdo a partir dela. Passe 'formato' e 'plataforma' conforme o pedido: se ele pedir carrossel, formato='carrossel'; se nomear a rede (instagram/linkedin/...), passe plataforma.",
     input_schema: {
       type: "object",
-      properties: { url: { type: "string" }, brandId: { type: "string" } },
+      properties: {
+        url: { type: "string" },
+        formato: { type: "string", description: "post | carrossel | story. Default post. Use carrossel se o usuário pedir carrossel." },
+        plataforma: { type: "string", description: "instagram | linkedin | tiktok | facebook | x — a rede que o usuário pediu." },
+        slides: { type: "number", description: "Nº de slides quando formato=carrossel (default do sistema se omitido)." },
+        brandId: { type: "string" },
+      },
       required: ["url"],
     },
   },
@@ -761,8 +768,24 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
       if (!ref) return { ok: false, content: "Nenhum post de referência anexado. Peça ao usuário para anexar o print (📎) e tente de novo." };
       return genResult(await callAiChat(ctx, { message: input.tema || "Recrie um post parecido com este, no estilo da marca.", intent_hint: "GENERATE", format: "post", brandId, model, imageUrls: [ref], replicateRef: true }), "Post replicado");
     }
-    case "link_para_post":
-      return genResult(await callAiChat(ctx, { message: input.url, intent_hint: "LINK_PARA_POST", brandId }), "Post do link");
+    case "link_para_post": {
+      // Antes ignorava formato/plataforma → link + "carrossel pro instagram" saía post único no
+      // LinkedIn (detectado da URL). Agora honra o pedido: formato=carrossel vira GENERATE_CAROUSEL
+      // via re-route de formato no ai-chat; story/post via GENERATE.
+      // Rede de segurança: se o LLM esquecer 'formato', detecta na fala CRUA do usuário. "carrossel"
+      // e "story" não aparecem em URLs, então é seguro (ao contrário de rede, que colide com a URL).
+      const fmtSrc = `${input.formato || ""} ${ctx.userText || ""}`;
+      const fmt = /carross|carrocel/i.test(fmtSrc) ? "carousel"
+        : /\bstor(y|ies)\b/i.test(fmtSrc) ? "story" : "post";
+      return genResult(await callAiChat(ctx, {
+        message: input.url,
+        intent_hint: "LINK_PARA_POST",
+        format: fmt,
+        platform: input.plataforma,
+        brandId,
+        generationParams: (fmt === "carousel" && input.slides) ? { slideCount: input.slides } : undefined,
+      }), fmt === "carousel" ? "Carrossel do link" : fmt === "story" ? "Story do link" : "Post do link");
+    }
 
     case "listar_agenda": {
       const { data } = await ctx.userClient

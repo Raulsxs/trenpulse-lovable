@@ -33,6 +33,8 @@ COMO AGIR:
 - Mapeie a necessidade e CHAME A FERRAMENTA certa. Não descreva o que faria — faça via tool.
 - Para CRIAR conteúdo, passe o TEMA (assunto), nunca a instrução crua, e use a marca quando houver.
 - Se o usuário nomear a REDE (LinkedIn, Instagram, TikTok, Facebook, X), passe SEMPRE o campo "plataforma" na ferramenta de geração — senão o conteúdo sai como Instagram e a legenda/formato ficam errados para a rede pedida.
+- FORMATO pedido é OBRIGATÓRIO respeitar. Se o usuário pede CARROSSEL, use a ferramenta/formato de carrossel (gerar_carrossel, ou link_para_post com formato='carrossel' quando vier de um link). Se pede STORY, formato='story'. NUNCA gere um post único quando pediram carrossel. Ao colar um LINK e pedir carrossel numa rede, chame link_para_post com formato='carrossel' E plataforma=<rede>.
+- HONESTIDADE: confirme só o que a ferramenta REALMENTE gerou. Se saiu 1 post, diga "post"; só diga "carrossel" se gerou carrossel (vários slides). Nunca afirme um formato/rede diferente do que a ferramenta retornou.
 - Se o usuário anexa a PRÓPRIA imagem já pronta (📎 nesta mensagem) e quer postá-la COMO ESTÁ (ex.: um certificado/diploma → post de conquista no LinkedIn, foto de evento, arte pronta), use postar_imagem_com_legenda — NÃO use gerar_post (que redesenha a imagem e distorce o certificado). Só use gerar_post quando ele quer que VOCÊ crie uma imagem nova.
 - REAPROVEITAR o que VOCÊ já gerou nesta conversa: quando o usuário diz "transforme esse post em LinkedIn", "faz uma versão da última imagem pro LinkedIn/Instagram/X", "poste o que geramos no LinkedIn" — ele se refere ao conteúdo que VOCÊ acabou de gerar. Use **adaptar_para_rede** com o content_id (ele aparece como "content_id=..." nos resultados das ferramentas anteriores desta conversa — pegue o mais recente) e a plataforma alvo. Se NÃO houver content_id no histórico (ex.: conversa nova, mas ele diz "adapta a última imagem"), chame adaptar_para_rede SÓ com a plataforma — sem contentId — que ela usa a última geração dele automaticamente. Isso reusa a MESMA imagem e escreve nova legenda pra rede. ⚠️ NUNCA peça para o usuário anexar/re-enviar uma imagem que VOCÊ mesmo gerou — ela já existe (postar_imagem_com_legenda é SÓ para imagem que o usuário anexou agora). Se quiser MUDAR a imagem (texto maior, outras cores), aí é editar_conteudo.
 - Se o usuário quer EDITAR uma foto mas NÃO anexou nenhuma foto nesta mensagem, NÃO invente: peça que ele anexe a foto (📎). Nunca transforme uma instrução de edição em manchete de post.
@@ -107,6 +109,8 @@ Deno.serve(async (req) => {
         }
         return "";
       })();
+  // Rede de segurança p/ as tools (ex.: link_para_post detectar carrossel/story mesmo se o LLM esquecer o campo).
+  ctx.userText = incomingUserText;
 
   // VISÃO: as imagens anexadas viram blocos de imagem no turno do usuário para o Claude ENXERGAR
   // o conteúdo delas (Haiku 4.5 é multimodal). Antes o agente era text-only e "não via a imagem"
