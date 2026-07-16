@@ -61,50 +61,59 @@ function unwrapUrl(rawUrl: string): string {
   }
 }
 
+// Uma chamada ao Jina Reader. removeSelector limpa o chrome do site (bom p/ CTSNet, cujo topo é
+// só menu), mas em alguns sites o artigo mora DENTRO de um seletor removido (ex.: fiercehealthcare
+// usa <aside>) e zera o conteúdo — por isso o chamador tenta com e sem. X-No-Cache evita o
+// "cached snapshot" vazio que o Jina às vezes serve.
+async function jinaRead(url: string, jinaKey: string, removeSelector: string | null, tag: string): Promise<string> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 20000);
+  try {
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${jinaKey}`,
+      "X-No-Cache": "true",
+    };
+    if (removeSelector) headers["X-Remove-Selector"] = removeSelector;
+    const jr = await fetch("https://r.jina.ai/" + url, { headers, signal: controller.signal });
+    clearTimeout(timer);
+    if (!jr.ok) {
+      console.warn(`[ai-chat] ${tag}: Jina status ${jr.status}${removeSelector ? " (remove-selector)" : ""}`);
+      return "";
+    }
+    return (await jr.text())
+      .replace(/^Title:.*$/m, "").replace(/^URL Source:.*$/m, "").replace(/^Markdown Content:\s*/m, "")
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+      .replace(/\n{3,}/g, "\n\n").trim();
+  } catch (err: any) {
+    clearTimeout(timer);
+    console.warn(`[ai-chat] ${tag}: Jina failed:`, err?.message);
+    return "";
+  }
+}
+
 async function extractArticleContent(rawUrl: string, tag: string): Promise<string> {
   const url = unwrapUrl(rawUrl);
   console.log(`[ai-chat] ${tag}: fetching URL ${url}${url !== rawUrl ? " (unwrapped from Google redirect)" : ""}`);
   const jinaKey = Deno.env.get("JINA_API_KEY");
   const firecrawlKey = Deno.env.get("FIRECRAWL_API_KEY");
 
-  // 1) Jina Reader (PRIMÁRIO). Lê de infra/IP próprios (fura o bloqueio de IP de datacenter
-  //    que derruba o fetch direto do Supabase) e não depende de crédito pré-pago como o
-  //    Firecrawl — que zerou os créditos e quebrou a feature do Maikon em silêncio (402).
+  // 1) Jina Reader (PRIMÁRIO). Lê de infra/IP próprios (fura o bloqueio de IP de datacenter que
+  //    derruba o fetch direto do Supabase) e não depende de crédito pré-pago como o Firecrawl.
   if (jinaKey) {
-    try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 20000);
-      const jr = await fetch("https://r.jina.ai/" + url, {
-        headers: {
-          Authorization: `Bearer ${jinaKey}`,
-          // Sem isso o Jina devolve a PÁGINA INTEIRA (menu, login, banners promo) e o brief pegava
-          // o lixo do topo — ex.: o banner "Innovation Video Competition" do CTSNet virou a imagem
-          // em vez do artigo. Remove o chrome do site → sobra o corpo do artigo. (Equivale ao
-          // onlyMainContent do Firecrawl.)
-          "X-Remove-Selector": "header, nav, footer, aside, form, #menu, .menu, .site-header, .sidebar",
-        },
-        signal: controller.signal,
-      });
-      clearTimeout(timer);
-      if (jr.ok) {
-        // Jina devolve markdown com header (Title/URL) + navegação em links. Limpa links/imagens
-        // pra sobrar o texto do artigo (o brief downstream usa só os primeiros ~2000 chars).
-        const raw = (await jr.text())
-          .replace(/^Title:.*$/m, "").replace(/^URL Source:.*$/m, "").replace(/^Markdown Content:\s*/m, "")
-          .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-          .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-          .replace(/\n{3,}/g, "\n\n").trim();
-        if (raw.length > 200) {
-          console.log(`[ai-chat] ${tag}: Jina extracted ${raw.length} chars`);
-          return raw.substring(0, 4000);
-        }
-        console.warn(`[ai-chat] ${tag}: Jina returned only ${raw.length} chars, falling back`);
-      } else {
-        console.warn(`[ai-chat] ${tag}: Jina status ${jr.status}`);
-      }
-    } catch (err: any) {
-      console.warn(`[ai-chat] ${tag}: Jina failed:`, err?.message);
+    const REMOVE = "header, nav, footer, aside, form, #menu, .menu, .site-header, .sidebar";
+    // 1ª tentativa COM remove-selector (limpa nav — essencial p/ CTSNet). Se vier pouco (site cujo
+    // artigo está dentro de um seletor removido, ex.: fiercehealthcare), refaz SEM remove-selector.
+    let md = await jinaRead(url, jinaKey, REMOVE, tag);
+    if (md.length < 400) {
+      const full = await jinaRead(url, jinaKey, null, tag);
+      if (full.length > md.length) md = full;
     }
+    if (md.length > 200) {
+      console.log(`[ai-chat] ${tag}: Jina extracted ${md.length} chars`);
+      return md.substring(0, 4000);
+    }
+    console.warn(`[ai-chat] ${tag}: Jina retornou pouco (${md.length}), caindo pro Firecrawl/fetch`);
   }
 
   // 2) Firecrawl (BACKUP). Boa qualidade, mas exige crédito pré-pago; 402 = sem saldo.
