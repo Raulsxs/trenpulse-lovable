@@ -7,6 +7,7 @@
 // ou image-to-video (anima uma imagem). Chamada interna (service_role). verify_jwt=false.
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAuth } from "../_shared/require-auth.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -69,10 +70,13 @@ async function replicateVideo(token: string, slug: string, input: Record<string,
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
-  }
+    // Auth: antes só checava o prefixo "Bearer" e confiava no body.userId → qualquer um debitava
+    // crédito de outro usuário. Agora exige service key (interno) OU JWT válido, e usa o user.id
+    // autenticado (ignora body.userId quando não é chamada interna).
+    const auth = await requireAuth(req);
+    if (!auth) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -82,7 +86,9 @@ serve(async (req) => {
     if (!token) return new Response(JSON.stringify({ error: "REPLICATE_API_TOKEN ausente" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const body = await req.json();
-    const { userId, tema, prompt, imageUrl, duration = 5, aspectRatio = "9:16", brandId, platform = "instagram", videoModel } = body;
+    const { tema, prompt, imageUrl, duration = 5, aspectRatio = "9:16", brandId, platform = "instagram", videoModel } = body;
+    // userId: usa o autenticado (não interno). Interno (service key) confia no body.userId.
+    const userId = auth.internal ? body.userId : auth.userId;
     if (!userId || (!tema && !prompt && !imageUrl)) {
       return new Response(JSON.stringify({ error: "userId + (tema | prompt | imageUrl) obrigatórios" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }

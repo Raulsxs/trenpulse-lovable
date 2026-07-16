@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAI } from "../_shared/ai-gateway.ts";
+import { requireAuth } from "../_shared/require-auth.ts";
 
 async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
   try {
@@ -243,7 +244,10 @@ serve(async (req) => {
   const t0 = Date.now();
   try {
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    // Antes só checava o prefixo "Bearer" → endpoint público (abuso de custo de geração de imagem).
+    // Agora exige service key (interno, via ai-chat) OU JWT de usuário válido (front/agente).
+    const auth = await requireAuth(req);
+    if (!auth) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -284,7 +288,9 @@ serve(async (req) => {
     // If the user has their own Google AI Studio key saved in profiles.gemini_api_key,
     // we call Gemini natively (nano banana) and bypass inference.sh entirely.
     // Resolves userId from body, or from brand.user_id when ai-chat forgot to pass it.
-    let resolvedUserId: string | null = requestUserId || null;
+    // Chamada de usuário (não interna): usa o user.id autenticado, nunca o body.userId (evita
+    // usar a gemini_api_key de outro usuário). Interno (service key) confia no body.userId.
+    let resolvedUserId: string | null = auth.internal ? (requestUserId || null) : auth.userId;
     if (!resolvedUserId && brandId) {
       const { data: brandRow } = await supabaseAdmin
         .from("brands")

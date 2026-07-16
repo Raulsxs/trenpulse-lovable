@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { requireAuth } from "../_shared/require-auth.ts";
 import React from "https://esm.sh/react@18.2.0";
 import { ImageResponse } from "https://deno.land/x/og_edge@0.0.4/mod.ts";
 
@@ -761,6 +762,13 @@ function buildEditorialCardElement(
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, { headers: corsHeaders });
+  }
+
+  // Antes NÃO tinha auth nenhuma → endpoint público (SSRF via fetch de URL do body + escrita em
+  // storage por content_id arbitrário + DoS de compute). Exige service key (interno) OU JWT válido.
+  const auth = await requireAuth(req);
+  if (!auth) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 
   try {
