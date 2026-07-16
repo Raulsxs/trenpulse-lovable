@@ -5,6 +5,7 @@ import { Check, CalendarDays, Loader2, Save, ExternalLink, Pencil, ImageIcon, Re
 import { CostChip } from "@/components/ui/cost-chip";
 import { Skeleton } from "@/components/ui/skeleton";
 import ScheduleModal from "@/components/content/ScheduleModal";
+import SaveBackgroundTemplateModal from "@/components/content/SaveBackgroundTemplateModal";
 import PlatformPreview from "@/components/content/PlatformPreview";
 import SlideBgOverlayRenderer from "@/components/content/SlideBgOverlayRenderer";
 import { getContentDimensions } from "@/lib/contentDimensions";
@@ -188,6 +189,9 @@ export default function ActionCard({
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
   const [adaptOpen, setAdaptOpen] = useState(false);
+  // Salvar visual pra reutilizar (Brand Kit). saveBgData carrega o que o modal precisa.
+  const [saveBgOpen, setSaveBgOpen] = useState(false);
+  const [saveBgData, setSaveBgData] = useState<{ brandId: string; slides: any[]; format: string } | null>(null);
   const [isAdapting, setIsAdapting] = useState(false);
   const [isRefazendo, setIsRefazendo] = useState(false);
   const [isRejected, setIsRejected] = useState(false);
@@ -1253,27 +1257,35 @@ export default function ActionCard({
             </button>
           </div>
 
-          {/* Save background nudge — only for ai_background mode (has bg image + overlay text) */}
-          {slideData?.background_image_url && slideData?.render_mode !== "ai_full_design" && (
+          {/* Salvar visual para reutilizar — vale pra qualquer imagem gerada (não só ai_bg_overlay). */}
+          {(slideData?.background_image_url || slideData?.image_url) && (
             <button
               className="w-full flex items-center justify-center gap-2 py-2 mb-2 text-xs text-primary/80 hover:text-primary bg-primary/5 hover:bg-primary/10 rounded-lg border border-primary/10 transition-all"
               onClick={async () => {
                 try {
-                  const { data } = await supabase.from("generated_contents").select("slides, brand_id").eq("id", contentId).single();
-                  const bgUrl = data?.slides?.[0]?.background_image_url;
-                  if (!bgUrl) { toast.error("Nenhum fundo disponível"); return; }
-                  if (!data?.brand_id) { toast.error("Conteúdo sem marca associada"); return; }
-                  await supabase.from("brand_background_templates").insert({
-                    brand_id: data.brand_id,
-                    name: headline?.substring(0, 40) || "Fundo salvo",
-                    image_url: bgUrl,
-                  });
-                  toast.success("Fundo salvo no Brand Kit!");
-                } catch { toast.error("Erro ao salvar fundo"); }
+                  const { data } = await supabase
+                    .from("generated_contents")
+                    .select("slides, brand_id, content_type")
+                    .eq("id", contentId)
+                    .single();
+                  const slides = (data?.slides as any[]) || [];
+                  const hasVisual = slides.some((s) => s?.background_image_url || s?.image_url);
+                  if (!hasVisual) { toast.error("Nenhum visual disponível para salvar"); return; }
+                  // A tabela exige marca (o visual salvo vive dentro de uma marca p/ reuso). Sem marca,
+                  // orienta em vez de estourar erro cru.
+                  if (!data?.brand_id) {
+                    toast.info("Selecione uma marca para salvar este visual", {
+                      description: "Escolha uma marca no seletor antes de gerar — aí dá pra reutilizar o visual depois.",
+                    });
+                    return;
+                  }
+                  setSaveBgData({ brandId: data.brand_id, slides, format: (data.content_type as string) || "post" });
+                  setSaveBgOpen(true);
+                } catch { toast.error("Erro ao abrir o salvamento"); }
               }}
             >
               <Save className="w-3.5 h-3.5" />
-              Gostou do visual? Salve este fundo para usar de novo
+              Gostou do visual? Salve para reutilizar
             </button>
           )}
 
@@ -1301,6 +1313,17 @@ export default function ActionCard({
       </Card>
 
       <ScheduleModal open={scheduleOpen} onClose={() => setScheduleOpen(false)} onSchedule={handleSchedule} isScheduling={isScheduling} />
+
+      {saveBgData && (
+        <SaveBackgroundTemplateModal
+          open={saveBgOpen}
+          onOpenChange={(o) => { setSaveBgOpen(o); if (!o) setSaveBgData(null); }}
+          brandId={saveBgData.brandId}
+          contentFormat={saveBgData.format}
+          slides={saveBgData.slides}
+          sourceContentId={contentId}
+        />
+      )}
 
       {/* Editar legenda — restaura a edição de texto (o editor de conteúdo foi removido) */}
       <Dialog open={captionEditOpen} onOpenChange={setCaptionEditOpen}>

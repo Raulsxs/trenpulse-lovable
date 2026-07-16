@@ -13,6 +13,7 @@ import { useBrands, useUpdateBrand } from "@/hooks/useStudio";
 import { VISUAL_TONES } from "@/types/studio";
 import { ArrowLeft, Plus, X, Save, Loader2, Star, Eye } from "lucide-react";
 import BrandExamples from "@/components/brand/BrandExamples";
+import SavedVisualsSection from "@/components/brand/SavedVisualsSection";
 // TemplateSetsSection and SavedBackgroundTemplates removed in simplification
 import BrandPhotoBackgrounds from "@/components/brand/BrandPhotoBackgrounds";
 import { supabase } from "@/integrations/supabase/client";
@@ -425,6 +426,19 @@ export default function BrandEdit() {
                     </p>
                   </div>
                   <BrandPhotoBackgrounds brandId={brand.id} />
+                </CardContent>
+              </Card>
+
+              {/* Visuais salvos — reuso do que o usuário curtiu */}
+              <Card>
+                <CardContent className="pt-6 space-y-4">
+                  <div className="space-y-1">
+                    <h3 className="text-sm font-semibold">Visuais salvos</h3>
+                    <p className="text-xs text-muted-foreground">
+                      Posts que você salvou para repetir o visual. "Usar" abre o Studio recriando no mesmo estilo, com conteúdo novo.
+                    </p>
+                  </div>
+                  <SavedVisualsSection brandId={brand.id} />
                 </CardContent>
               </Card>
             </div>
