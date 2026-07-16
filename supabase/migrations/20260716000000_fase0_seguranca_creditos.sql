@@ -14,15 +14,23 @@ ALTER TABLE public.billing_events ENABLE ROW LEVEL SECURITY;
 -- sem policy → nenhum acesso p/ anon/authenticated
 
 -- ── Funções de crédito privilegiadas (só webhook/cron via service_role) ──
-REVOKE EXECUTE ON FUNCTION public.grant_credits(uuid, integer, text, text, jsonb) FROM anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.reset_monthly_credits(integer) FROM anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.get_cron_users_due() FROM anon, authenticated;
-REVOKE EXECUTE ON FUNCTION public.debit_credits(uuid, integer, uuid, uuid) FROM anon, authenticated;
+-- IMPORTANTE: funções nascem com EXECUTE p/ PUBLIC (default), e anon/authenticated fazem parte de
+-- PUBLIC. Revogar só de anon/authenticated NÃO basta — tem que revogar de PUBLIC e conceder
+-- explicitamente a service_role (que também dependia do grant de PUBLIC).
+REVOKE ALL ON FUNCTION public.grant_credits(uuid, integer, text, text, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.grant_credits(uuid, integer, text, text, jsonb) TO service_role;
+REVOKE ALL ON FUNCTION public.reset_monthly_credits(integer) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.reset_monthly_credits(integer) TO service_role;
+REVOKE ALL ON FUNCTION public.get_cron_users_due() FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.get_cron_users_due() TO service_role;
+REVOKE ALL ON FUNCTION public.debit_credits(uuid, integer, uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.debit_credits(uuid, integer, uuid, uuid) TO service_role;
 
--- ── spend_credits: o agente chama via client do usuário (ctx.userClient), então NÃO revogamos de
--- authenticated. Mas o corpo não validava p_user → um usuário podia drenar crédito de outro.
--- Guard: usuário só gasta o PRÓPRIO crédito; service_role (auth.uid() null) passa livre. Anon nunca.
-REVOKE EXECUTE ON FUNCTION public.spend_credits(uuid, integer, uuid, jsonb) FROM anon;
+-- ── spend_credits: o agente chama via client do usuário (ctx.userClient), então authenticated
+-- PRECISA poder chamar. Mas o corpo não validava p_user → um usuário podia drenar crédito de outro.
+-- Guard (abaixo): usuário só gasta o PRÓPRIO crédito; service_role (auth.uid() null) passa livre.
+REVOKE ALL ON FUNCTION public.spend_credits(uuid, integer, uuid, jsonb) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.spend_credits(uuid, integer, uuid, jsonb) TO authenticated, service_role;
 
 CREATE OR REPLACE FUNCTION public.spend_credits(p_user uuid, p_amount integer, p_generation_id uuid DEFAULT NULL::uuid, p_metadata jsonb DEFAULT NULL::jsonb)
  RETURNS integer
