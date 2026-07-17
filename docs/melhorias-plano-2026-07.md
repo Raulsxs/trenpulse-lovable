@@ -26,6 +26,17 @@ Exploits confirmados na auditoria. Sem isso, o modelo de créditos fura.
 - [ ] Alertas de saldo baixo/health-check das dependências externas (PFM, Firecrawl, Jina, inference.sh).
 - [ ] Smoke test do agente (links reais + asserts de formato/marca) — pega regressão antes do cliente.
 
+## Fase 5 — Direção de produto (insight LocalStudio, 17/jul)
+Inspirado no LocalStudio.dev (editor no browser, IA local, saída = camadas editáveis).
+- [ ] **Camada de texto editável sobre a arte AI** (impacto 🔴, esforço Alto). Hoje geramos imagem
+  CHAPADA (texto cozido no pixel) → raiz de quase todos os bugs (texto duplicado, acento em caixa
+  alta, marca/conteúdo errado) e cada correção = regenerar (queima crédito). Se o texto for camada
+  editável sobre o fundo AI, o usuário conserta sem gerar de novo. Ver `docs/spike-camada-editavel.md`.
+- [ ] **IA de TEXTO no browser** (impacto 🟢 margem, esforço Médio, progressive enhancement). Legendas,
+  hashtags, variantes por plataforma e **tradução bilíngue** rodariam no browser (Chrome Prompt/
+  Translator API) onde suportado → custo marginal zero; fallback pra API. SÓ texto (imagem no browser
+  não tem qualidade). Começar pela tradução bilíngue.
+
 ## Fase 4 — Crescimento
 - [ ] Landing reposicionada + case Dr. Maikon (prova social) — precisa Raul.
 - [ ] Onboarding self-serve completo (1ª marca/1ª geração assistida).
