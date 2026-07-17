@@ -200,6 +200,8 @@ export default function ActionCard({
   const [isRegeneratingImage, setIsRegeneratingImage] = useState(false);
   const [showImageEditDialog, setShowImageEditDialog] = useState(false);
   const [imageEditInstruction, setImageEditInstruction] = useState("");
+  const [showTextFixDialog, setShowTextFixDialog] = useState(false);
+  const [textFixValue, setTextFixValue] = useState("");
 
   // Multi-platform publish state — uses shared cache to avoid N parallel connect-social calls
   const { accounts: sharedAccounts } = useConnectedAccounts(contentType === "cron_config");
@@ -806,6 +808,20 @@ export default function ActionCard({
     const instruction = imageEditInstruction.trim();
     if (!instruction) return;
     setShowImageEditDialog(false);
+    await runImageEdit(instruction);
+  };
+
+  // "Ajustar texto": corrige o texto DA IMAGEM regenerando só esta peça, mantendo o visual.
+  // Também força acentuação correta em maiúsculas (o modelo dropa Ã/Ç/É em CAIXA ALTA).
+  const handleConfirmTextFix = async () => {
+    const fixed = textFixValue.trim();
+    if (!fixed) return;
+    setShowTextFixDialog(false);
+    const instruction = `Mantenha EXATAMENTE o mesmo visual, estilo, cores, fontes, ilustrações e composição da imagem atual. Troque APENAS o texto principal para EXATAMENTE este (não adicione, não remova, não reescreva, não traduza): "${fixed}". Escreva com acentuação portuguesa correta, INCLUSIVE em letras MAIÚSCULAS (Ã, Õ, Ç, É, Á, Í, Ó, Ú, Â, Ê, À). Não altere mais nada na arte.`;
+    await runImageEdit(instruction);
+  };
+
+  const runImageEdit = async (instruction: string) => {
     setIsRegeneratingImage(true);
     setSlideData(null);
     setComposedImageUrls(null);
@@ -1198,10 +1214,22 @@ export default function ActionCard({
                 </button>
                 <button
                   className="w-full text-left px-2 py-2 text-xs rounded-md hover:bg-muted/80 transition-colors flex items-center gap-2"
+                  onClick={() => {
+                    setAdaptOpen(false);
+                    setTextFixValue(slideData?.headline || slideData?.overlay?.headline || "");
+                    setShowTextFixDialog(true);
+                  }}
+                >
+                  <Type className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="flex-1"><b>Ajustar texto</b> — corrigir o texto da imagem</span>
+                  <CostChip cost={editCost} />
+                </button>
+                <button
+                  className="w-full text-left px-2 py-2 text-xs rounded-md hover:bg-muted/80 transition-colors flex items-center gap-2"
                   onClick={() => { setAdaptOpen(false); handleRegenerateImage(); }}
                 >
                   <Pencil className="w-3.5 h-3.5 text-muted-foreground" />
-                  <span className="flex-1"><b>Ajustar</b> — pequenas mudanças no visual</span>
+                  <span className="flex-1"><b>Ajustar visual</b> — pequenas mudanças no design</span>
                   <CostChip cost={editCost} />
                 </button>
                 <button
@@ -1475,6 +1503,43 @@ export default function ActionCard({
             <Button size="sm" onClick={handleConfirmImageEdit} disabled={!imageEditInstruction.trim()}>
               <RefreshCw className="w-3 h-3 mr-1" />
               Regenerar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Ajustar texto — corrigir o texto da imagem mantendo o visual */}
+      <Dialog open={showTextFixDialog} onOpenChange={setShowTextFixDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Type className="w-4 h-4" />
+              Ajustar o texto da imagem
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground mt-1">
+              Escreva o texto certo. A IA mantém o mesmo visual e troca só o texto — com acentos corretos.
+            </p>
+          </DialogHeader>
+
+          <Textarea
+            value={textFixValue}
+            onChange={(e) => setTextFixValue(e.target.value)}
+            placeholder="Ex.: Por que softwares travam com 80%?"
+            rows={3}
+            className="text-sm resize-none"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) handleConfirmTextFix();
+            }}
+          />
+
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" size="sm" onClick={() => setShowTextFixDialog(false)}>
+              Cancelar
+            </Button>
+            <Button size="sm" onClick={handleConfirmTextFix} disabled={!textFixValue.trim()}>
+              <RefreshCw className="w-3 h-3 mr-1" />
+              Corrigir texto
             </Button>
           </DialogFooter>
         </DialogContent>
