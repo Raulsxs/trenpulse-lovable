@@ -1286,32 +1286,37 @@ export default function ActionCard({
                   if (!user) { toast.error("Faça login para salvar"); return; }
                   const visualUrl = slides.map((s) => s?.background_image_url || s?.image_url).find(Boolean) as string | undefined;
                   const brandName = (data?.title || "").trim().slice(0, 30) || "Meu estilo salvo";
-                  const { data: newBrand, error: brandErr } = await supabase.from("brands").insert({
+                  // Gera o id no cliente e insere SEM .select(): a policy de SELECT de brands usa uma
+                  // função STABLE que não enxerga a linha recém-inserida, então .insert().select()
+                  // (RETURNING) falha na RLS. Sem RETURNING passa e já sabemos o id.
+                  const newBrandId = (crypto as any).randomUUID();
+                  const { error: brandErr } = await supabase.from("brands").insert({
+                    id: newBrandId,
                     owner_user_id: user.id,
                     name: brandName,
                     creation_mode: "style_copy",
                     visual_tone: "clean",
                     palette: [],
                     fonts: { headings: "Inter", body: "Inter" },
-                  }).select("id").single();
-                  if (brandErr || !newBrand) { toast.error("Não consegui criar a marca"); return; }
+                  });
+                  if (brandErr) { console.error("[ActionCard] criar marca:", brandErr); toast.error("Não consegui criar a marca: " + (brandErr.message || "")); return; }
 
                   // A imagem gerada vira REFERÊNCIA DE ESTILO da marca (é o que faz a IA replicar o look).
                   if (visualUrl) {
-                    await supabase.from("brand_examples").insert({ brand_id: newBrand.id, image_url: visualUrl, purpose: "reference" });
+                    await supabase.from("brand_examples").insert({ brand_id: newBrandId, image_url: visualUrl, purpose: "reference" });
                   }
                   // Salva o visual como template reutilizável (aparece em Marcas → Visuais salvos).
                   const backgroundImages = slides.map((s, i) => ({
                     index: i, url: s?.background_image_url || s?.image_url || null, role: s?.role || (i === 0 ? "cover" : "content"),
                   }));
                   await supabase.from("brand_background_templates").insert({
-                    brand_id: newBrand.id, name: brandName,
+                    brand_id: newBrandId, name: brandName,
                     content_format: (data?.content_type as string) || "post",
                     slide_count: slides.length, background_images: backgroundImages, source_content_id: contentId,
                   });
                   // Vincula o conteúdo à marca nova + pré-seleciona ela no seletor do agente.
-                  await supabase.from("generated_contents").update({ brand_id: newBrand.id }).eq("id", contentId);
-                  try { localStorage.setItem("tp_agent_brand", newBrand.id); } catch { /* ignore */ }
+                  await supabase.from("generated_contents").update({ brand_id: newBrandId }).eq("id", contentId);
+                  try { localStorage.setItem("tp_agent_brand", newBrandId); } catch { /* ignore */ }
 
                   toast.success(`Marca "${brandName}" criada com este visual!`, {
                     description: "Selecione ela no seletor pra gerar no mesmo estilo. Salvei também em Marcas → Visuais salvos.",
