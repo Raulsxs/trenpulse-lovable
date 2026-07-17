@@ -1265,23 +1265,58 @@ export default function ActionCard({
                 try {
                   const { data } = await supabase
                     .from("generated_contents")
-                    .select("slides, brand_id, content_type")
+                    .select("slides, brand_id, content_type, title")
                     .eq("id", contentId)
                     .single();
                   const slides = (data?.slides as any[]) || [];
                   const hasVisual = slides.some((s) => s?.background_image_url || s?.image_url);
                   if (!hasVisual) { toast.error("Nenhum visual disponível para salvar"); return; }
-                  // A tabela exige marca (o visual salvo vive dentro de uma marca p/ reuso). Sem marca,
-                  // orienta em vez de estourar erro cru.
-                  if (!data?.brand_id) {
-                    toast.info("Selecione uma marca para salvar este visual", {
-                      description: "Escolha uma marca no seletor antes de gerar — aí dá pra reutilizar o visual depois.",
-                    });
+
+                  // Já tem marca → abre o modal pra nomear e salvar o visual nela.
+                  if (data?.brand_id) {
+                    setSaveBgData({ brandId: data.brand_id, slides, format: (data.content_type as string) || "post" });
+                    setSaveBgOpen(true);
                     return;
                   }
-                  setSaveBgData({ brandId: data.brand_id, slides, format: (data.content_type as string) || "post" });
-                  setSaveBgOpen(true);
-                } catch { toast.error("Erro ao abrir o salvamento"); }
+
+                  // SEM marca → CRIA uma marca com este visual como referência de estilo (style_copy),
+                  // salva o visual nela e vincula o conteúdo. Assim o usuário reutiliza o estilo depois
+                  // (pedido do Raul: "salvar deveria criar uma marca com as configs atuais").
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (!user) { toast.error("Faça login para salvar"); return; }
+                  const visualUrl = slides.map((s) => s?.background_image_url || s?.image_url).find(Boolean) as string | undefined;
+                  const brandName = (data?.title || "").trim().slice(0, 30) || "Meu estilo salvo";
+                  const { data: newBrand, error: brandErr } = await supabase.from("brands").insert({
+                    owner_user_id: user.id,
+                    name: brandName,
+                    creation_mode: "style_copy",
+                    visual_tone: "clean",
+                    palette: [],
+                    fonts: { headings: "Inter", body: "Inter" },
+                  }).select("id").single();
+                  if (brandErr || !newBrand) { toast.error("Não consegui criar a marca"); return; }
+
+                  // A imagem gerada vira REFERÊNCIA DE ESTILO da marca (é o que faz a IA replicar o look).
+                  if (visualUrl) {
+                    await supabase.from("brand_examples").insert({ brand_id: newBrand.id, image_url: visualUrl, purpose: "reference" });
+                  }
+                  // Salva o visual como template reutilizável (aparece em Marcas → Visuais salvos).
+                  const backgroundImages = slides.map((s, i) => ({
+                    index: i, url: s?.background_image_url || s?.image_url || null, role: s?.role || (i === 0 ? "cover" : "content"),
+                  }));
+                  await supabase.from("brand_background_templates").insert({
+                    brand_id: newBrand.id, name: brandName,
+                    content_format: (data?.content_type as string) || "post",
+                    slide_count: slides.length, background_images: backgroundImages, source_content_id: contentId,
+                  });
+                  // Vincula o conteúdo à marca nova + pré-seleciona ela no seletor do agente.
+                  await supabase.from("generated_contents").update({ brand_id: newBrand.id }).eq("id", contentId);
+                  try { localStorage.setItem("tp_agent_brand", newBrand.id); } catch { /* ignore */ }
+
+                  toast.success(`Marca "${brandName}" criada com este visual!`, {
+                    description: "Selecione ela no seletor pra gerar no mesmo estilo. Salvei também em Marcas → Visuais salvos.",
+                  });
+                } catch (e) { console.error("[ActionCard] salvar visual:", e); toast.error("Erro ao salvar o visual"); }
               }}
             >
               <Save className="w-3.5 h-3.5" />
