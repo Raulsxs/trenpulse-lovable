@@ -28,10 +28,11 @@ Exploits confirmados na auditoria. Sem isso, o modelo de créditos fura.
 
 ## Fase 5 — Direção de produto (insight LocalStudio, 17/jul)
 Inspirado no LocalStudio.dev (editor no browser, IA local, saída = camadas editáveis).
-- [ ] **Camada de texto editável sobre a arte AI** (impacto 🔴, esforço Alto). Hoje geramos imagem
-  CHAPADA (texto cozido no pixel) → raiz de quase todos os bugs (texto duplicado, acento em caixa
-  alta, marca/conteúdo errado) e cada correção = regenerar (queima crédito). Se o texto for camada
-  editável sobre o fundo AI, o usuário conserta sem gerar de novo. Ver `docs/spike-camada-editavel.md`.
+- [ ] **Correção de texto sem perder qualidade** (impacto 🔴). NÃO é reviver o overlay antigo (foi
+  removido por ser ruim — perda de qualidade, texto não encaixava, genérico). Caminho recomendado no
+  spike: (a) atacar os bugs de texto direto (acento em maiúscula, duplicação) + "corrigir texto =
+  regenera só o slide"; (b) opcional: spike de inpainting (editar região mascarada mantendo o baked
+  premium). Ver `docs/spike-camada-editavel.md`.
 - [ ] **IA de TEXTO no browser** (impacto 🟢 margem, esforço Médio, progressive enhancement). Legendas,
   hashtags, variantes por plataforma e **tradução bilíngue** rodariam no browser (Chrome Prompt/
   Translator API) onde suportado → custo marginal zero; fallback pra API. SÓ texto (imagem no browser

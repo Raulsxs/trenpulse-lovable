@@ -28,11 +28,17 @@ de imagem, não do nosso código). Recomendo um **protótipo A/B de qualidade** 
 existem e funcionam**. O que mudou foi o **roteamento**: o `ai-chat` hoje gera `ai_full_design`
 (Gemini cozinha texto no pixel) por padrão.
 
-## Por que foi abandonado (o tradeoff real)
-Refactor de abril: "6 modos visuais → 1 (Gemini gera tudo)". Motivos: simplicidade + o design
-**cozido** costuma sair mais **coeso/premium** (ilustração + texto integrados numa peça só — ex.: o
-infográfico "5 erros" que geramos hoje). O `ai_bg_overlay` (fundo limpo + texto por cima) tende a
-sair mais **genérico/template**. Foi uma troca de **editabilidade por qualidade percebida**.
+## Por que foi REMOVIDO (feedback do Raul — quem viveu)
+Não foi só simplificação — o `ai_bg_overlay` era **ruim de verdade** na prática:
+- **Perda de qualidade** da imagem (o fundo limpo saía pior);
+- **Texto não encaixava** no fundo (colidia, sangrava, safe area furada);
+- **Sem variedade** — mesma fonte/cor/estilo em tudo, cara de template genérico;
+- No geral, **experiência ruim** pro usuário.
+
+O `ai_full_design` (Gemini cozinha tudo) ganhou porque o texto sai **integrado** ao design —
+fontes, cores, hierarquia e ilustração numa peça coesa (ex.: o infográfico "5 erros" de hoje).
+**Regra do Raul:** *só voltamos pra camada editável se tiver algo MUITO melhor que a abordagem do
+LocalStudio* — reviver o modo antigo como estava está fora.
 
 ## A grande sacada (por que revisitar AGORA)
 1. **Corrige os bugs de texto na raiz.** Acento sumido em maiúscula, texto duplicado, pt-BR
@@ -62,29 +68,52 @@ sair mais **genérico/template**. Foi uma troca de **editabilidade por qualidade
 - **Complexidade de UX** pro usuário leigo (Maikon). Mitigável: overlay editável como **opção**
   ("quero poder editar depois") e/ou edição só quando o usuário PEDE (corrigir), não obrigatória.
 
-## Opções
-- **A — Modo editável como OPÇÃO (recomendado p/ começar).** Mantém `ai_full_design` como padrão
-  premium; oferece "gerar editável" (ou só o botão "corrigir texto" cai no fluxo overlay). Menor
-  risco, entrega o ganho de correção sem apostar tudo.
-- **B — Overlay como padrão pra formatos-texto** (quote, infográfico, autoridade) onde o overlay já
-  é o natural, mantendo baked pros ilustrados. Híbrido por formato.
-- **C — Overlay como padrão geral.** Máxima editabilidade + fim dos bugs de texto, mas aposta na
-  qualidade do fundo limpo. Só depois de um A/B convincente.
+## O que descarta e o que sobra
+Com o feedback do Raul, o leque muda:
+- ❌ **Reviver `ai_bg_overlay` (fundo limpo + texto por cima)** — foi exatamente o que deu ruim. FORA.
+- ❌ **Overlay como padrão** — idem.
+- ✅ A pergunta certa vira: *dá pra ter EDITABILIDADE **sem** perder a qualidade do baked?* Só vale
+  se a resposta for "muito melhor que o LocalStudio".
 
-## Recomendação (faseada)
-1. **Protótipo A/B (esforço BAIXO, 1 sessão):** gerar 5-6 peças em `ai_bg_overlay` (backgroundOnly +
-   overlay) com os modelos/prompts atuais e comparar lado a lado com `ai_full_design`. Isso responde
-   a pergunta que decide tudo: *"o fundo limpo + nosso texto está bom o suficiente hoje?"*.
-2. **Se sim → Opção A/B:** wire do roteamento no `ai-chat` (reaproveitando o brief de texto que já
-   existe), polir o editor, garantir export via Satori. Lançar como modo editável medindo adoção.
-3. **Independente do A/B, quick win:** oferecer "**corrigir texto**" nos cards que hoje só têm
-   "refazer" — mesmo sobre baked, cair num fluxo de overlay editável pra ajustes de texto simples.
+## Caminhos que PODERIAM clear a barra (e o veredito honesto)
+
+**1. Edição regional / inpainting (o mais promissor).**
+Mantém a imagem **baked premium** intacta e, quando o usuário quer corrigir um texto, faz uma
+**edição mascarada** só naquela região (nano-banana / gpt-image-2 suportam edit com máscara). Não é
+"camada" — é "regenerar só o pedaço". Preserva o design integrado (fontes/cores/ilustração) e
+permite ajuste cirúrgico.
+- ✅ Não perde qualidade; texto continua integrado.
+- ⚠️ O texto ainda é **renderizado pelo modelo** → o bug de acento/pt-BR **pode persistir** na região
+  editada; e inpainting de TEXTO é historicamente instável (o modelo erra a grafia).
+- **Veredito:** é o único caminho de "editabilidade" que pode superar o overlay. Precisa de um spike
+  próprio (testar edit mascarado com nano-banana num texto real).
+
+**2. Não perseguir editabilidade — atacar os PROBLEMAS diretamente (melhor ROI hoje).**
+O dano recorrente real não é "não dá pra editar" — é **texto errado** (acento em maiúscula, duplicado,
+conteúdo errado). Isso ataca-se sem virar layered:
+- **Acento em CAIXA ALTA:** reforço de prompt + validação/retry quando o modelo dropa diacrítico
+  (detectável comparando o texto pedido vs OCR/heurística), ou pós-processo.
+- **Texto duplicado / UI falsa:** já mapeado (regras NO_UI_MOCKUP + limpeza de referência da marca).
+- **"Corrigir sem regenerar do zero":** um botão "corrigir texto" que **regenera SÓ aquele slide**
+  com o texto certo (barato), em vez de refazer tudo.
+Isso entrega 80% do valor ("meu post saiu com o texto certo") sem o risco do layered.
+
+**3. Layered de verdade (estilo LocalStudio), só que premium.**
+Gerar o design como estrutura editável (blocos, fontes, cores variadas) com qualidade de agência.
+Isso é essencialmente **construir um motor de design** — alto custo, e é justamente onde o overlay
+antigo falhou. **Só vale** com um salto de tecnologia (modelo que devolva layout estruturado bom).
+Hoje: **não recomendado**.
+
+## Recomendação honesta
+1. **Curto prazo (melhor ROI):** ir pelo **caminho 2** — atacar os bugs de texto (acento/duplicação)
+   e um "corrigir texto = regenera só o slide". Resolve a dor real, baixo risco, sem apostar em layered.
+2. **Se quiser explorar editabilidade premium:** fazer um **spike focado só de inpainting** (caminho 1)
+   — testar edição mascarada de texto com nano-banana numa peça real e ver se (a) preserva qualidade
+   e (b) acerta o pt-BR. Se acertar, aí sim temos "algo melhor que o Erick". Se errar o texto, cai no
+   caminho 2 mesmo.
+3. **Layered do zero (caminho 3):** parar aqui até haver salto de modelo. Documentado como "watch".
 
 ## Esforço estimado
-- Protótipo A/B: **BAIXO** (reusa tudo que existe).
-- Modo editável opt-in (Opção A): **MÉDIO** (roteamento + polish do editor + export).
-- Padrão geral (Opção C): **MÉDIO-ALTO** (qualidade de fundo + UX + consistência de carrossel).
-
-## Próximo passo sugerido
-Rodar o **protótipo A/B** (fase 1) — é barato e é o dado que destrava a decisão. Depois disso a
-gente escolhe A/B/C com base em qualidade real, não em achismo.
+- Caminho 2 (atacar bugs de texto + corrigir-só-o-slide): **BAIXO-MÉDIO**, alto valor imediato.
+- Caminho 1 (spike de inpainting): **BAIXO** pro spike; **MÉDIO** se virar feature.
+- Caminho 3 (layered premium): **ALTO** — não agora.
