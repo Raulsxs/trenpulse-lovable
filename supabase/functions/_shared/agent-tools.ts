@@ -117,10 +117,15 @@ export const AGENT_TOOLS = [
   },
   {
     name: "gerar_tweet_card",
-    description: "Cria um carrossel de 'tweet cards' (estilo print de X/Twitter) a partir de um tema. Chame quando o usuário pede tweet card / thread em cards. Se ele ANEXAR fotos (📎), elas viram MÍDIA dentro dos cards (não gera imagem) — use esta tool mesmo com fotos anexadas quando o pedido for tweet card.",
+    description: "Cria um carrossel de 'tweet cards' (estilo print de X/Twitter) a partir de um tema. Chame quando o usuário pede tweet card / thread em cards. MÍDIA no card (sem gerar imagem): se ele ANEXAR fotos (📎), elas viram a mídia; se ele quiser usar uma imagem que VOCÊ JÁ GEROU nesta conversa ('usa essa imagem no tweet card', 'faz um tweet card com a imagem que geramos'), passe usar_imagem_gerada=true — NUNCA peça pra re-anexar.",
     input_schema: {
       type: "object",
-      properties: { tema: { type: "string" }, brandId: { type: "string" } },
+      properties: {
+        tema: { type: "string" },
+        usar_imagem_gerada: { type: "boolean", description: "true quando o usuário quer usar como mídia do card uma IMAGEM QUE VOCÊ JÁ GEROU nesta conversa. Reaproveita a última geração com imagem." },
+        source_content_id: { type: "string", description: "OPCIONAL: content_id (do histórico) de uma geração anterior cuja imagem deve virar a mídia do tweet card." },
+        brandId: { type: "string" },
+      },
       required: ["tema"],
     },
   },
@@ -396,7 +401,26 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
     }
     case "gerar_tweet_card": {
       // Fotos anexadas viram MÍDIA dentro dos cards (não gera imagem). O LLM não conhece as URLs.
-      const tweetImgs = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
+      let tweetImgs = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
+      // Continuidade de assets: sem anexo, mas quer usar uma imagem JÁ GERADA ("usa essa imagem no
+      // tweet card") → reaproveita a última geração com imagem (ou o source_content_id). Sem upload.
+      if (!tweetImgs.length && (input.usar_imagem_gerada || input.source_content_id)) {
+        const pickImg = (row: any): string | null => {
+          const arr = Array.isArray(row?.image_urls) ? row.image_urls.filter((u: any) => typeof u === "string" && u) : [];
+          return arr[0] || (Array.isArray(row?.slides) && (row.slides[0]?.image_url || row.slides[0]?.background_image_url)) || null;
+        };
+        let img: string | null = null;
+        if (input.source_content_id) {
+          const { data } = await ctx.userClient.from("generated_contents").select("image_urls, slides").eq("id", input.source_content_id).maybeSingle();
+          img = pickImg(data);
+        }
+        if (!img) {
+          const { data: recents } = await ctx.userClient.from("generated_contents").select("image_urls, slides").order("created_at", { ascending: false }).limit(8);
+          const src = (recents || []).find((r: any) => pickImg(r));
+          img = src ? pickImg(src) : null;
+        }
+        if (img) tweetImgs = [img];
+      }
       return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_TWEET_CARD", brandId, imageUrls: tweetImgs.length ? tweetImgs : undefined }), "Tweet card");
     }
     case "postar_imagem_com_legenda": {
