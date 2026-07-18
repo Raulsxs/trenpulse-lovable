@@ -117,7 +117,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "gerar_tweet_card",
-    description: "Cria um carrossel de 'tweet cards' (estilo print de X/Twitter) a partir de um tema. Chame quando o usuário pede tweet card / thread em cards.",
+    description: "Cria um carrossel de 'tweet cards' (estilo print de X/Twitter) a partir de um tema. Chame quando o usuário pede tweet card / thread em cards. Se ele ANEXAR fotos (📎), elas viram MÍDIA dentro dos cards (não gera imagem) — use esta tool mesmo com fotos anexadas quando o pedido for tweet card.",
     input_schema: {
       type: "object",
       properties: { tema: { type: "string" }, brandId: { type: "string" } },
@@ -394,8 +394,11 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
       const refs = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
       return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "story", platform: input.plataforma, brandId, model, imageUrls: refs.length ? refs : undefined, replicateRef: refs.length ? true : undefined }), "Story");
     }
-    case "gerar_tweet_card":
-      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_TWEET_CARD", brandId }), "Tweet card");
+    case "gerar_tweet_card": {
+      // Fotos anexadas viram MÍDIA dentro dos cards (não gera imagem). O LLM não conhece as URLs.
+      const tweetImgs = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
+      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_TWEET_CARD", brandId, imageUrls: tweetImgs.length ? tweetImgs : undefined }), "Tweet card");
+    }
     case "postar_imagem_com_legenda": {
       const COST = 4; // pricing 3x (2026-07-08): só legenda, usa a imagem do usuário
       // Imagem anexada as-is (não regenera). O LLM não conhece a URL — pega de pendingImageUrls.

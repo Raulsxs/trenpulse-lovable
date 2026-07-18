@@ -1762,7 +1762,9 @@ ${userCtx?.business_niche ? `NICHO DO AUTOR: ${userCtx.business_niche}` : ""}
 REGRAS:
 - Cada tweet: NO MÁXIMO 280 caracteres, linguagem natural de X (direto, com gancho).
 - O 1º tweet é o GANCHO que para o scroll.
-- Use listas com "1 -", "2 -" quando fizer sentido (estilo thread).
+- DESTAQUE em **negrito** as 1 a 3 palavras/frases mais importantes de cada tweet — envolva com dois
+  asteriscos, assim: **palavra**. Não exagere (o negrito só nas ideias-chave).
+- Quando listar itens, comece CADA item numa nova linha com "→ " (ex.: "→ **Design**: peças com a cara da marca").
 - No máximo 1 emoji por tweet, com moderação. SEM hashtags.
 - Cada tweet se sustenta sozinho como um slide.
 - Português do Brasil, acentos corretos. Use APENAS palavras reais e bem grafadas — NÃO invente
@@ -1799,6 +1801,9 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
         // 4. Render each tweet as a card (Satori, visual_style=tweet_card). Retry once:
         //    render-slide-image can fail/time-out on a cold start (WASM init for satori/resvg)
         //    on the first hit after a deploy — a second attempt finds it warm.
+        // Imagens ENVIADAS pelo usuário (não geradas): entram como mídia dentro dos cards,
+        // distribuídas nos primeiros slides (foto[i] no card[i]). Ex.: subiu 1 → vai na capa.
+        const tweetUploads = (imageUrls || []).filter((u: string) => typeof u === "string" && u.startsWith("http"));
         let cardUrls: string[] = [];
         for (let attempt = 0; attempt < 2 && cardUrls.length === 0; attempt++) {
           if (attempt > 0) await new Promise((r) => setTimeout(r, 1500));
@@ -1808,7 +1813,7 @@ Responda APENAS com um array JSON de strings: ["tweet 1", "tweet 2", ...]`;
               method: "POST",
               headers: internalHeaders,
               body: JSON.stringify({
-                slides: tweets.map((t) => ({ text: t })),
+                slides: tweets.map((t, i) => ({ text: t, image_url: tweetUploads[i] || undefined })),
                 content_id: draftId,
                 visual_style: "tweet_card",
                 tweet_profile: tweetProfile,

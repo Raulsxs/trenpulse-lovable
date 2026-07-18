@@ -623,6 +623,45 @@ function sanitizeForFont(text: string): string {
 
 type TweetProfile = { name?: string; handle?: string; avatar_url?: string; verified?: boolean };
 
+// Corpo do tweet com formatação rica: **negrito** vira InterBold; linhas iniciadas por → / - / •
+// viram bullets com seta azul. Cada palavra é um span (flex-wrap) pra o texto quebrar naturalmente
+// mantendo pesos mistos — padrão do Satori pra texto inline com estilos diferentes.
+function tweetRichBody(text: string, fontSize: number) {
+  const lines = (text || "").split(/\n/);
+  const lineEls = lines.map((rawLine, li) => {
+    const isBullet = /^\s*(→|-|•|\*)\s+/.test(rawLine);
+    const line = rawLine.replace(/^\s*(→|-|•|\*)\s+/, "");
+    const segs = line.split(/(\*\*[^*]+\*\*)/g).filter((s) => s !== "");
+    const words: any[] = [];
+    for (const seg of segs) {
+      const bold = /^\*\*[^*]+\*\*$/.test(seg);
+      const t = bold ? seg.slice(2, -2) : seg.replace(/\*\*/g, "");
+      for (const tok of t.split(/(\s+)/)) {
+        if (tok === "") continue;
+        words.push(React.createElement("div", {
+          style: { display: "flex", whiteSpace: "pre" as any, lineHeight: 1.42,
+            fontFamily: bold ? "InterBold" : "Inter", fontWeight: bold ? 700 : 400 },
+        }, tok));
+      }
+    }
+    const row: any[] = [];
+    if (isBullet) row.push(React.createElement("div", {
+      // Marcador desenhado (a fonte Inter não tem o glifo "→"): quadrado arredondado azul do X.
+      style: { display: "flex", width: 18, height: 18, borderRadius: 5, backgroundColor: "#1d9bf0",
+        marginRight: 16, marginTop: Math.round(fontSize * 0.32), flexShrink: 0 },
+    }));
+    row.push(...words);
+    return React.createElement("div", {
+      // width 100% força cada linha a virar um bloco próprio (senão as linhas fluem juntas no Satori).
+      style: { display: "flex", flexDirection: "row", flexWrap: "wrap" as any, alignItems: "flex-start",
+        width: "100%", marginTop: li === 0 ? 0 : (isBullet ? 18 : 10) },
+    }, ...row);
+  });
+  return React.createElement("div", {
+    style: { display: "flex", flexDirection: "column", fontSize, color: "#0f1419" },
+  }, ...lineEls);
+}
+
 function buildTweetCardElement(
   text: string,
   profile: TweetProfile,
@@ -631,11 +670,13 @@ function buildTweetCardElement(
   avatarDataUri: string | null,
   w: number,
   h: number,
+  imageDataUri: string | null = null,
 ) {
   const name = (profile.name || "Seu Nome").trim();
   const handle = (profile.handle || "voce").replace(/^@+/, "").trim();
   const verified = profile.verified !== false; // default true (matches Blotato)
-  const fontSize = tweetFontSize(text);
+  // Com imagem, o texto fica menor pra sobrar espaço pro visual.
+  const fontSize = imageDataUri ? Math.min(tweetFontSize(text), 46) : tweetFontSize(text);
 
   const avatarEl = avatarDataUri
     ? React.createElement("img", {
@@ -661,13 +702,22 @@ function buildTweetCardElement(
   const header = React.createElement("div", { style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 24, flexWrap: "nowrap" } }, avatarEl, whoCol);
 
   const body = React.createElement("div", {
-    style: {
-      display: "flex", marginTop: 40, fontSize, fontWeight: 400, color: "#0f1419",
-      lineHeight: 1.42, whiteSpace: "pre-wrap" as any, wordBreak: "normal" as any, flexGrow: 1,
-    },
-  }, text);
+    style: { display: "flex", flexDirection: "column", marginTop: 40, flexGrow: imageDataUri ? 0 : 1 },
+  }, tweetRichBody(text, fontSize));
+
+  // Imagem enviada pelo usuário (não gerada) — vive DENTRO do card, estilo tweet com mídia.
+  const imageEl = imageDataUri
+    ? React.createElement("img", {
+        src: imageDataUri, width: w - 144, height: Math.round(h * 0.44),
+        style: { width: w - 144, height: Math.round(h * 0.44), marginTop: 32, borderRadius: 24, objectFit: "cover" as any, border: "1px solid #cfd9de" },
+      })
+    : null;
 
   const children: any[] = [header, body];
+  if (imageEl) {
+    children.push(imageEl);
+    children.push(React.createElement("div", { style: { display: "flex", flexGrow: 1 } })); // empurra o contador pro rodapé
+  }
   if (total > 1) {
     children.push(
       React.createElement("div", { style: { display: "flex", flexDirection: "row", marginTop: 24, fontSize: 30, color: "#536471" } }, `${idx + 1}/${total}`),
@@ -822,7 +872,14 @@ Deno.serve(async (req) => {
       let element;
       if (isTweetCard) {
         const tweetText = slide.text || slide.body || slide.headline || "";
-        element = buildTweetCardElement(tweetText, tweet_profile || {}, offset + i, totalSlides, avatarDataUri, w, h);
+        // Imagem enviada pelo usuário (opcional) — vira mídia dentro do tweet card.
+        let tweetImgData: string | null = null;
+        const tweetImgSrc = slide.image_url || slide.background_image_url;
+        if (tweetImgSrc) {
+          try { tweetImgData = await toDataUri(tweetImgSrc); }
+          catch (e) { console.warn(`[render-slide-image] tweet image fetch failed: ${(e as Error).message}`); }
+        }
+        element = buildTweetCardElement(tweetText, tweet_profile || {}, offset + i, totalSlides, avatarDataUri, w, h, tweetImgData);
       } else if (isEditorial) {
         const bgSrc = slide.background_image_url || slide.image_url || slide.previewImage;
         let bgData: string | null = null;
