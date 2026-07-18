@@ -91,6 +91,19 @@ export default function AgentChat() {
   const toolBreak = useRef(false);   // separa texto pré/pós tool no mesmo balão
   const shownContent = useRef<Set<string>>(new Set()); // dedup ActionCard por content_id (1 card/conteúdo) — evita 2 canais realtime no mesmo content (crash)
 
+  // "Salvar visual" cria uma marca e dispara este evento — recarrega as marcas e seleciona a nova
+  // NA HORA no seletor (antes só aparecia depois de recarregar / ir em Marcas).
+  useEffect(() => {
+    const onBrandCreated = async (e: Event) => {
+      const detail = (e as CustomEvent).detail || {};
+      const { data } = await supabase.from("brands").select("id, name").limit(20);
+      if (data) setBrands(data as any);
+      if (detail.brandId) setBrandId(detail.brandId);
+    };
+    window.addEventListener("tp-brand-created", onBrandCreated as EventListener);
+    return () => window.removeEventListener("tp-brand-created", onBrandCreated as EventListener);
+  }, []);
+
   useEffect(() => {
     (async () => {
       const { data } = await supabase.from("brands").select("id, name").limit(20);

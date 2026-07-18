@@ -192,6 +192,7 @@ export default function ActionCard({
   // Salvar visual pra reutilizar (Brand Kit). saveBgData carrega o que o modal precisa.
   const [saveBgOpen, setSaveBgOpen] = useState(false);
   const [saveBgData, setSaveBgData] = useState<{ brandId: string; slides: any[]; format: string } | null>(null);
+  const [savingVisual, setSavingVisual] = useState(false);
   const [isAdapting, setIsAdapting] = useState(false);
   const [isRefazendo, setIsRefazendo] = useState(false);
   const [isRejected, setIsRejected] = useState(false);
@@ -873,6 +874,82 @@ export default function ActionCard({
     }
   };
 
+  // Nome de marca legível: corta na PALAVRA (não no meio), teto ~28 chars. Antes cortava no meio
+  // ("...travam nos ú"). Marca representa um estilo salvo — o título do post é só um rótulo.
+  const cleanBrandName = (title: string): string => {
+    const t = (title || "").trim();
+    if (!t) return "Meu estilo salvo";
+    if (t.length <= 28) return t;
+    const cut = t.slice(0, 28);
+    const sp = cut.lastIndexOf(" ");
+    return (sp > 12 ? cut.slice(0, sp) : cut).trim() + "…";
+  };
+
+  // Salvar visual: trava contra duplo-clique (savingVisual), cria marca sem RETURNING, dispara evento
+  // pro seletor do chat atualizar na hora.
+  const handleSaveVisual = async () => {
+    if (savingVisual) return;
+    setSavingVisual(true);
+    try {
+      const { data } = await supabase
+        .from("generated_contents")
+        .select("slides, brand_id, content_type, title")
+        .eq("id", contentId)
+        .single();
+      const slides = (data?.slides as any[]) || [];
+      const hasVisual = slides.some((s) => s?.background_image_url || s?.image_url);
+      if (!hasVisual) { toast.error("Nenhum visual disponível para salvar"); return; }
+
+      // Já tem marca → abre o modal pra nomear e salvar o visual nela.
+      if (data?.brand_id) {
+        setSaveBgData({ brandId: data.brand_id, slides, format: (data.content_type as string) || "post" });
+        setSaveBgOpen(true);
+        return;
+      }
+
+      // SEM marca → cria uma marca com este visual como referência de estilo (style_copy).
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) { toast.error("Faça login para salvar"); return; }
+      const visualUrl = slides.map((s) => s?.background_image_url || s?.image_url).find(Boolean) as string | undefined;
+      const brandName = cleanBrandName(data?.title || "");
+      // id no cliente + insert SEM .select(): a policy STABLE de SELECT quebra o RETURNING.
+      const newBrandId = (crypto as any).randomUUID();
+      const { error: brandErr } = await supabase.from("brands").insert({
+        id: newBrandId, owner_user_id: user.id, name: brandName,
+        creation_mode: "style_copy", visual_tone: "clean", palette: [],
+        fonts: { headings: "Inter", body: "Inter" },
+      });
+      if (brandErr) { console.error("[ActionCard] criar marca:", brandErr); toast.error("Não consegui criar a marca: " + (brandErr.message || "")); return; }
+
+      if (visualUrl) {
+        await supabase.from("brand_examples").insert({ brand_id: newBrandId, image_url: visualUrl, purpose: "reference" });
+      }
+      const backgroundImages = slides.map((s, i) => ({
+        index: i, url: s?.background_image_url || s?.image_url || null, role: s?.role || (i === 0 ? "cover" : "content"),
+      }));
+      await supabase.from("brand_background_templates").insert({
+        brand_id: newBrandId, name: brandName,
+        content_format: (data?.content_type as string) || "post",
+        slide_count: slides.length, background_images: backgroundImages, source_content_id: contentId,
+      });
+      await supabase.from("generated_contents").update({ brand_id: newBrandId }).eq("id", contentId);
+      try {
+        localStorage.setItem("tp_agent_brand", newBrandId);
+        // Sinaliza o seletor do chat (AgentChat/ChatWindow) pra recarregar marcas e selecionar esta.
+        window.dispatchEvent(new CustomEvent("tp-brand-created", { detail: { brandId: newBrandId, name: brandName } }));
+      } catch { /* ignore */ }
+
+      toast.success(`Marca "${brandName}" criada e selecionada!`, {
+        description: "Já dá pra gerar no mesmo estilo. Salvei também em Marcas → Visuais salvos.",
+      });
+    } catch (e) {
+      console.error("[ActionCard] salvar visual:", e);
+      toast.error("Erro ao salvar o visual");
+    } finally {
+      setSavingVisual(false);
+    }
+  };
+
   const typeLabels: Record<string, string> = {
     carousel: "Carrossel",
     story: "Story",
@@ -1288,72 +1365,12 @@ export default function ActionCard({
           {/* Salvar visual para reutilizar — vale pra qualquer imagem gerada (não só ai_bg_overlay). */}
           {(slideData?.background_image_url || slideData?.image_url) && (
             <button
-              className="w-full flex items-center justify-center gap-2 py-2 mb-2 text-xs text-primary/80 hover:text-primary bg-primary/5 hover:bg-primary/10 rounded-lg border border-primary/10 transition-all"
-              onClick={async () => {
-                try {
-                  const { data } = await supabase
-                    .from("generated_contents")
-                    .select("slides, brand_id, content_type, title")
-                    .eq("id", contentId)
-                    .single();
-                  const slides = (data?.slides as any[]) || [];
-                  const hasVisual = slides.some((s) => s?.background_image_url || s?.image_url);
-                  if (!hasVisual) { toast.error("Nenhum visual disponível para salvar"); return; }
-
-                  // Já tem marca → abre o modal pra nomear e salvar o visual nela.
-                  if (data?.brand_id) {
-                    setSaveBgData({ brandId: data.brand_id, slides, format: (data.content_type as string) || "post" });
-                    setSaveBgOpen(true);
-                    return;
-                  }
-
-                  // SEM marca → CRIA uma marca com este visual como referência de estilo (style_copy),
-                  // salva o visual nela e vincula o conteúdo. Assim o usuário reutiliza o estilo depois
-                  // (pedido do Raul: "salvar deveria criar uma marca com as configs atuais").
-                  const { data: { user } } = await supabase.auth.getUser();
-                  if (!user) { toast.error("Faça login para salvar"); return; }
-                  const visualUrl = slides.map((s) => s?.background_image_url || s?.image_url).find(Boolean) as string | undefined;
-                  const brandName = (data?.title || "").trim().slice(0, 30) || "Meu estilo salvo";
-                  // Gera o id no cliente e insere SEM .select(): a policy de SELECT de brands usa uma
-                  // função STABLE que não enxerga a linha recém-inserida, então .insert().select()
-                  // (RETURNING) falha na RLS. Sem RETURNING passa e já sabemos o id.
-                  const newBrandId = (crypto as any).randomUUID();
-                  const { error: brandErr } = await supabase.from("brands").insert({
-                    id: newBrandId,
-                    owner_user_id: user.id,
-                    name: brandName,
-                    creation_mode: "style_copy",
-                    visual_tone: "clean",
-                    palette: [],
-                    fonts: { headings: "Inter", body: "Inter" },
-                  });
-                  if (brandErr) { console.error("[ActionCard] criar marca:", brandErr); toast.error("Não consegui criar a marca: " + (brandErr.message || "")); return; }
-
-                  // A imagem gerada vira REFERÊNCIA DE ESTILO da marca (é o que faz a IA replicar o look).
-                  if (visualUrl) {
-                    await supabase.from("brand_examples").insert({ brand_id: newBrandId, image_url: visualUrl, purpose: "reference" });
-                  }
-                  // Salva o visual como template reutilizável (aparece em Marcas → Visuais salvos).
-                  const backgroundImages = slides.map((s, i) => ({
-                    index: i, url: s?.background_image_url || s?.image_url || null, role: s?.role || (i === 0 ? "cover" : "content"),
-                  }));
-                  await supabase.from("brand_background_templates").insert({
-                    brand_id: newBrandId, name: brandName,
-                    content_format: (data?.content_type as string) || "post",
-                    slide_count: slides.length, background_images: backgroundImages, source_content_id: contentId,
-                  });
-                  // Vincula o conteúdo à marca nova + pré-seleciona ela no seletor do agente.
-                  await supabase.from("generated_contents").update({ brand_id: newBrandId }).eq("id", contentId);
-                  try { localStorage.setItem("tp_agent_brand", newBrandId); } catch { /* ignore */ }
-
-                  toast.success(`Marca "${brandName}" criada com este visual!`, {
-                    description: "Selecione ela no seletor pra gerar no mesmo estilo. Salvei também em Marcas → Visuais salvos.",
-                  });
-                } catch (e) { console.error("[ActionCard] salvar visual:", e); toast.error("Erro ao salvar o visual"); }
-              }}
+              disabled={savingVisual}
+              className="w-full flex items-center justify-center gap-2 py-2 mb-2 text-xs text-primary/80 hover:text-primary bg-primary/5 hover:bg-primary/10 rounded-lg border border-primary/10 transition-all disabled:opacity-60 disabled:cursor-wait"
+              onClick={handleSaveVisual}
             >
-              <Save className="w-3.5 h-3.5" />
-              Gostou do visual? Salve para reutilizar
+              {savingVisual ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+              {savingVisual ? "Salvando..." : "Gostou do visual? Salve para reutilizar"}
             </button>
           )}
 
