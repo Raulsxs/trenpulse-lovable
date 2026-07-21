@@ -46,6 +46,37 @@ interface Tool { name: string; ok?: boolean; cancelled?: boolean }
 interface Action { contentId: string; contentType: any; platform?: string; refreshKey?: number }
 interface Msg { id: string; role: "user" | "assistant"; text: string; tools: Tool[]; action?: Action }
 
+// Sanea o histórico Anthropic (convo) p/ nunca mandar uma sequência que a API rejeita com 400.
+// A Anthropic exige: 1º turno = user, alternância estrita user/assistant, e todo tool_use com um
+// tool_result. Um turno que MORRE no meio (erro/abort/queda de conexão) deixa lixo — turno de user
+// órfão (sem resposta) ou assistant com tool_use pendente. Sem isto, a PRÓXIMA mensagem empilha
+// outro user → 400 em TUDO dali pra frente (foi o que travou o /agent do Maikon: 4x "Tive um
+// problema" seguidos porque a conversa estava envenenada no localStorage). Cura no load + blinda o send.
+export function sanitizeConvo(msgs: any[]): any[] {
+  const toBlocks = (c: any) => Array.isArray(c) ? c : (typeof c === "string" && c ? [{ type: "text", text: c }] : []);
+  const hasToolUse = (m: any) => Array.isArray(m?.content) && m.content.some((b: any) => b?.type === "tool_use");
+  const out: any[] = [];
+  for (const m of msgs) {
+    if (!m || (m.role !== "user" && m.role !== "assistant")) continue;
+    const last = out[out.length - 1];
+    if (last && last.role === m.role) {
+      // Dois turnos do mesmo papel seguidos (órfão) → mescla num só (mantém alternância).
+      last.content = [...toBlocks(last.content), ...toBlocks(m.content)];
+    } else {
+      out.push({ role: m.role, content: m.content });
+    }
+  }
+  while (out.length && out[0].role !== "user") out.shift(); // 1º turno TEM que ser user
+  // Em repouso, a conversa saudável termina num assistant "completo". Remove do fim os turnos
+  // incompletos: user órfão (esperando resposta que nunca veio) e assistant com tool_use pendente.
+  while (out.length) {
+    const last = out[out.length - 1];
+    if (last.role === "user" || (last.role === "assistant" && hasToolUse(last))) out.pop();
+    else break;
+  }
+  return out;
+}
+
 const SUGGESTIONS = [
   { icon: ImageIcon, text: "Crie um post sobre 5 sinais de burnout" },
   { icon: LayoutGrid, text: "Monte um carrossel com dicas de produtividade" },
@@ -140,7 +171,9 @@ export default function AgentChat() {
               setUiMessages(cleaned);
               shownContent.current = seen;
             }
-            if (Array.isArray(saved.convo)) convo.current = saved.convo;
+            // Sanea ao carregar: conversas salvas de sessões que morreram no meio ficam envenenadas
+            // (turno órfão) → sem isto, a 1ª mensagem já daria 400. Cura o estado do localStorage.
+            if (Array.isArray(saved.convo)) convo.current = sanitizeConvo(saved.convo);
           }
         } catch { /* ignore */ }
       }
@@ -223,8 +256,13 @@ export default function AgentChat() {
     }
   }
 
-  async function streamAgent(body: any) {
+  async function streamAgent(body: any, rollbackConvo?: any[]) {
     setSending(true);
+    // Referência do histórico no início. done/confirm_request TROCAM convo.current pela versão
+    // canônica do servidor (nova referência). Se no fim ela continuar sendo ESTA (stream morreu
+    // antes de done/confirm), o turno do usuário ficou órfão → restauramos o estado pré-envio p/
+    // não envenenar a conversa. É o que garante que uma falha nunca trava as mensagens seguintes.
+    const convoAtStart = convo.current;
     const ac = new AbortController();
     abortRef.current = ac;
     const aId = newId();
@@ -260,6 +298,9 @@ export default function AgentChat() {
     } catch (e: any) {
       if (e?.name !== "AbortError") toast.error(e?.message || "Falha na conexão com o agente");
     } finally {
+      // Rollback: stream terminou sem done/confirm_request (erro, abort, queda) → convo.current ainda
+      // é a referência de início, com o turno órfão. Restaura pro estado pré-envio (histórico válido).
+      if (rollbackConvo !== undefined && convo.current === convoAtStart) convo.current = rollbackConvo;
       setSending(false); // dispara o efeito de persistência com o estado final já commitado
     }
   }
@@ -280,8 +321,9 @@ export default function AgentChat() {
     // No balão do usuário mostramos o texto digitado + um marcador do anexo (não o texto cru gigante).
     const bubble = docNow ? `${text}${text ? "\n\n" : ""}📎 ${docNow.name}`.trim() : text;
     setUiMessages((ms) => [...ms, { id: newId(), role: "user", text: bubble, tools: [] }]);
+    const prevConvo = convo.current; // estado canônico ANTES do turno otimista — alvo do rollback se falhar
     convo.current = [...convo.current, { role: "user", content: sendText }];
-    await streamAgent({ messages: convo.current, brandId: brandId || undefined, model, imageUrls: photosNow });
+    await streamAgent({ messages: convo.current, brandId: brandId || undefined, model, imageUrls: photosNow }, prevConvo);
   }
 
   async function handleConfirm(approved: boolean) {
