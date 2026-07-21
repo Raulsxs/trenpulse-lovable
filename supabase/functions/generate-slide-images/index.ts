@@ -142,6 +142,12 @@ function buildInferenceBody(model: ImageModelId, promptText: string, aspectRatio
   }
 }
 
+// Circuit breaker do inference.sh: quando a conta fica sem saldo, a API responde 402 em TODA chamada.
+// Sem isto, cada slide de cada carrossel paga o pedágio de 2 tentativas 402 (retry interno) antes de
+// cair no Gemini — desperdício e latência. Ao ver 402/401, "abre o circuito" por 10min: os próximos
+// slides pulam o inference.sh direto pro fallback. Reseta sozinho (recarregou o saldo → volta a tentar).
+let inferenceShDownUntil = 0;
+
 // ════════════ REPLICATE — provider primário (migração 2026-06-18) ════════════
 // Replicate vira a espinha dorsal da estante "escolha seu modelo": catálogo único + async-capável.
 // inference.sh fica como FALLBACK (segurança — se Replicate falhar, o fluxo antigo assume).
@@ -188,12 +194,30 @@ const REPLICATE_REGISTRY: Record<string, { slug: string; build: (p: string, ar: 
   },
 };
 
+// fetch com timeout via AbortController — sem isto uma conexão pendurada trava a função até o
+// wall-clock da edge (caso do carrossel que morria sem log). Retorna a Response ou lança.
+async function tfetch(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+  const ac = new AbortController();
+  const t = setTimeout(() => ac.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: ac.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
+
 /** Chama o Replicate (Prefer:wait + poll p/ modelos lentos). Retorna URL da imagem ou null. */
 async function callReplicate(modelId: string, prompt: string, aspectRatio: string, refImages: string[]): Promise<string | null> {
   const token = Deno.env.get("REPLICATE_API_TOKEN");
   const entry = REPLICATE_REGISTRY[modelId];
   if (!token || !entry) return null;
   const input = entry.build(prompt, aspectRatio, refImages);
+  const authHeaders = { Authorization: `Token ${token}` };
+
+  // Best-effort: cancela a predição abandonada p/ não pagar por trabalho descartado.
+  const cancel = (id: string) =>
+    tfetch(`https://api.replicate.com/v1/predictions/${id}/cancel`, { method: "POST", headers: authHeaders }, 8000)
+      .catch(() => {}); // fire-and-forget
 
   // Retry com backoff + jitter: sob carrossel, N slides disparam em paralelo e o Replicate
   // devolve 429 (rate-limit) em alguns → antes virava null sem retry (slide sem imagem).
@@ -201,30 +225,48 @@ async function callReplicate(modelId: string, prompt: string, aspectRatio: strin
   for (let attempt = 0; attempt < 3; attempt++) {
     if (attempt > 0) await new Promise((r) => setTimeout(r, 1200 * attempt + Math.floor(Math.random() * 900)));
     try {
-      const res = await fetch(`https://api.replicate.com/v1/models/${entry.slug}/predictions`, {
+      const res = await tfetch(`https://api.replicate.com/v1/models/${entry.slug}/predictions`, {
         method: "POST",
-        headers: { Authorization: `Token ${token}`, "Content-Type": "application/json", Prefer: "wait" },
+        headers: { ...authHeaders, "Content-Type": "application/json", Prefer: "wait" },
         body: JSON.stringify({ input }),
-      });
+      }, 75000); // Prefer:wait segura até ~60s → timeout com folga
       if (!res.ok) {
         console.warn(`[replicate] ${entry.slug} HTTP ${res.status} (tentativa ${attempt + 1}): ${(await res.text()).substring(0, 150)}`);
         if (res.status === 429 || res.status >= 500) continue; // transitório → retry
         return null; // erro permanente
       }
       let pred = await res.json();
-      // Prefer:wait bloqueia até ~60s; modelos lentos (gpt medium) voltam "processing" → poll até ~115s.
+      // Prefer:wait bloqueia até ~60s; modelos lentos (gpt medium) voltam "processing" → poll até ~210s.
+      // O gpt-image-2 leva ~150s na média sob carrossel; teto antigo (115s) matava slides normais.
       const start = Date.now();
-      while (pred.status && !["succeeded", "failed", "canceled"].includes(pred.status) && Date.now() - start < 115000) {
-        await new Promise((r) => setTimeout(r, 2000));
-        const pr = await fetch(`https://api.replicate.com/v1/predictions/${pred.id}`, { headers: { Authorization: `Token ${token}` } });
-        if (!pr.ok) break;
-        pred = await pr.json();
+      let pollErrs = 0; // GET de status pode dar 429 (N slides pollando juntos) — NÃO abortar por 1 falha.
+      let delay = 3000;
+      while (pred.status && !["succeeded", "failed", "canceled"].includes(pred.status) && Date.now() - start < 210000) {
+        await new Promise((r) => setTimeout(r, delay + Math.floor(Math.random() * 700)));
+        delay = Math.min(delay + 1000, 7000); // espaça o poll (3s→7s) p/ não gerar o próprio 429
+        try {
+          const pr = await tfetch(`https://api.replicate.com/v1/predictions/${pred.id}`, { headers: authHeaders }, 15000);
+          if (!pr.ok) {
+            // Erro no poll (tipicamente 429). Antes: `break` → jogava fora a predição que estava OK.
+            // Agora: tolera até 5 falhas seguidas de status; a geração segue rodando no Replicate.
+            if (++pollErrs > 5) { console.warn(`[replicate] ${entry.slug} poll falhou ${pollErrs}x (HTTP ${pr.status}) — desiste`); break; }
+            console.warn(`[replicate] ${entry.slug} poll HTTP ${pr.status} (${pollErrs}/5) — segue tentando`);
+            continue;
+          }
+          pollErrs = 0;
+          pred = await pr.json();
+        } catch (e: any) {
+          if (++pollErrs > 5) { console.warn(`[replicate] ${entry.slug} poll exceção ${pollErrs}x (${e?.message}) — desiste`); break; }
+          console.warn(`[replicate] ${entry.slug} poll exceção (${pollErrs}/5): ${e?.message} — segue tentando`);
+        }
       }
       if (pred.status === "succeeded") {
         const out = Array.isArray(pred.output) ? pred.output[0] : pred.output;
         return typeof out === "string" ? out : (out?.url || null);
       }
       console.warn(`[replicate] ${entry.slug} status=${pred.status} (tentativa ${attempt + 1})`);
+      // Ainda rodando quando estourou o teto/poll → cancela p/ não pagar pelo descartado.
+      if (pred.id && pred.status && !["failed", "canceled"].includes(pred.status)) await cancel(pred.id);
       if (pred.status === "failed") continue; // geração falhou → retry
       return null;
     } catch (e: any) {
@@ -665,7 +707,11 @@ ${brandColorHint}
 
       // ── Tier 2: inference.sh (fallback) ──
       // gpt-image-2 (1:1/4:5) é o melhor DESIGN + texto pt-BR. O Gemini do user é só Tier-3 fallback.
-      const INFERENCE_SH_KEY = !base64Image && Deno.env.get("INFERENCE_SH_API_KEY");
+      const circuitOpen = Date.now() < inferenceShDownUntil;
+      const INFERENCE_SH_KEY = !base64Image && !circuitOpen && Deno.env.get("INFERENCE_SH_API_KEY");
+      if (circuitOpen) {
+        console.warn(`[generate-slide-images] inference.sh em circuit-break (saldo 402) — pulando direto p/ fallback`);
+      }
       if (INFERENCE_SH_KEY) {
         console.log(`[generate-slide-images] Using inference.sh for ${mode}: platform=${platform}, contentFormat=${contentFormat}, aspect=${aspectRatio}`);
 
@@ -732,6 +778,13 @@ ${brandColorHint}
             } else {
               const errText = await infRes.text();
               console.warn(`[generate-slide-images] inference.sh error [${infRes.status}]: ${errText.substring(0, 300)}`);
+              // 402 (sem saldo) / 401 (key inválida): erro de CONTA, não transitório — abre o circuit
+              // breaker (10min) p/ os próximos slides pularem o inference.sh, e desiste deste já.
+              if (infRes.status === 402 || infRes.status === 401) {
+                inferenceShDownUntil = Date.now() + 10 * 60 * 1000;
+                console.warn(`[generate-slide-images] inference.sh ${infRes.status} — conta sem saldo/inválida, circuit aberto por 10min`);
+                break;
+              }
               // On 422 (RESOURCE_EXHAUSTED/quota) or 429 (rate limit), skip directly to fallback
               if (infRes.status === 422 || infRes.status === 429) {
                 console.warn(`[generate-slide-images] inference.sh ${infRes.status} — quota/rate limit, going to fallback`);
