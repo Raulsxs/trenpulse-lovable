@@ -15,7 +15,9 @@ import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus,
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ActionCard from "@/components/chat/ActionCard";
 import ConfirmAction from "@/components/chat/ConfirmAction";
+import QueuePanel from "@/components/chat/QueuePanel";
 import { useCredits } from "@/hooks/useCredits";
+import { useGenerationQueue } from "@/hooks/useGenerationQueue";
 import { isSupportedDocument, extractDocumentText, truncateForPrompt } from "@/lib/documentExtract";
 
 const SUPABASE_URL = "https://qdmhqxpazffmaxleyzxs.supabase.co";
@@ -115,6 +117,8 @@ export default function AgentChat() {
   const [brandOpen, setBrandOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<any>(null);
+  const [queueOpen, setQueueOpen] = useState(false);
+  const { jobs, enqueue, cancelJob, removeJob, clearFinished, activeCount } = useGenerationQueue();
   const { balance } = useCredits();
   const location = useLocation();
   // Prefill vindo do FeatureSpotlight ("Criar vídeo" → cai com o pedido pronto no input).
@@ -340,6 +344,28 @@ export default function AgentChat() {
     await streamAgent({ messages: convo.current, brandId: brandId || undefined, model, imageUrls: photosNow }, prevConvo);
   }
 
+  // Enfileira o pedido atual (não espera gerar) — o worker processa um por vez no servidor.
+  // Anexos (foto/doc) não vão pra fila (o job carrega só o texto do pedido); avisa e ignora.
+  async function handleEnqueue() {
+    const text = input.trim();
+    if (!text || sending) return;
+    setInput("");
+    const res = await enqueue(text, { brandId: brandId || undefined, model });
+    if (res.error) { toast.error("Não consegui enfileirar: " + res.error); setInput(text); return; }
+    toast.success("Adicionado à fila — gerando em segundo plano.");
+    setQueueOpen(true);
+  }
+
+  // "Ver" um job pronto: mostra o card do conteúdo no chat (sem regerar).
+  function openContent(contentId: string) {
+    setQueueOpen(false);
+    shownContent.current.add(contentId); // evita dedup bloquear e não duplica canal realtime
+    setUiMessages((ms) => {
+      const stripped = ms.map((m) => m.action?.contentId === contentId ? { ...m, action: undefined } : m);
+      return [...stripped, { id: newId(), role: "assistant", text: "Aqui está 👇", tools: [], action: { contentId, contentType: "post" as any } }];
+    });
+  }
+
   async function handleConfirm(approved: boolean) {
     const pc = pendingConfirm;
     setPendingConfirm(null);
@@ -461,6 +487,12 @@ export default function AgentChat() {
             <Coins className="w-3 h-3" />{balance}
           </span>
         )}
+        <Button variant="ghost" size="sm" className="relative h-8 px-2 gap-1 shrink-0" onClick={() => setQueueOpen(true)} title="Fila de gerações">
+          <ListChecks className="w-4 h-4" /><span className="hidden sm:inline">Fila</span>
+          {activeCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 px-1 rounded-full bg-primary text-primary-foreground text-[10px] font-bold leading-4 text-center tabular-nums">{activeCount}</span>
+          )}
+        </Button>
         {uiMessages.length > 0 && (
           <Button variant="ghost" size="sm" className="h-8 px-2 gap-1 shrink-0" onClick={handleNew} title="Nova conversa"><Plus className="w-4 h-4" /><span className="hidden sm:inline">Nova</span></Button>
         )}
@@ -666,11 +698,25 @@ export default function AgentChat() {
             {sending ? (
               <Button onClick={handleStop} variant="outline" size="sm" className="ml-auto h-8 gap-1.5"><Square className="w-3.5 h-3.5" /> Parar</Button>
             ) : (
-              <Button onClick={handleSend} disabled={!input.trim() && !doc} size="sm" className="ml-auto h-8 gap-1.5 transition-all hover:shadow-md active:scale-95"><Send className="w-4 h-4" /> Enviar</Button>
+              <div className="ml-auto flex items-center gap-1.5">
+                <Button onClick={handleEnqueue} disabled={!input.trim()} variant="outline" size="sm" className="h-8 gap-1.5" title="Adicionar à fila — gera em segundo plano, um por vez"><ListChecks className="w-4 h-4" /><span className="hidden sm:inline">Fila</span></Button>
+                <Button onClick={handleSend} disabled={!input.trim() && !doc} size="sm" className="h-8 gap-1.5 transition-all hover:shadow-md active:scale-95"><Send className="w-4 h-4" /> Enviar</Button>
+              </div>
             )}
           </div>
         </div>
       </div>
+
+      <QueuePanel
+        open={queueOpen}
+        onClose={() => setQueueOpen(false)}
+        jobs={jobs}
+        onCancel={cancelJob}
+        onRemove={removeJob}
+        onClearFinished={clearFinished}
+        onView={openContent}
+        onResume={(prompt) => { setQueueOpen(false); setInput(prompt); inputRef.current?.focus(); }}
+      />
     </div>
   );
 }
