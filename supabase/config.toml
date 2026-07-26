@@ -31,3 +31,8 @@ verify_jwt = true
 # Validação temporária do caminho de visão do style_guide (REMOVER após validar).
 [functions.diag-vision]
 verify_jwt = false
+
+# Worker da fila de gerações. Aceita JWT do usuário (kick do front) OU service key (cron/re-chain);
+# a função se auto-protege (getUser p/ user JWT, comparação com a service key p/ interno).
+[functions.process-generation-jobs]
+verify_jwt = false
