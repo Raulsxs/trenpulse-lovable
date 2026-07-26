@@ -8,6 +8,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import Anthropic from "npm:@anthropic-ai/sdk";
 import { AGENT_TOOLS, GATED_TOOLS, CONFIRM_CREDIT_THRESHOLD, estimateToolCost, dispatchTool, type ToolCtx } from "../_shared/agent-tools.ts";
+import { replicateAgentTurn, shouldFallback } from "../_shared/agent-fallback.ts";
 
 const MODEL = "claude-haiku-4-5";
 const corsHeaders = {
@@ -55,6 +56,30 @@ EXPECTATIVA REALISTA: a IA é ótima em design, texto curto, fundo, carrossel; �
 
 function sse(controller: ReadableStreamDefaultController, enc: TextEncoder, event: Record<string, unknown>) {
   controller.enqueue(enc.encode(`data: ${JSON.stringify(event)}\n\n`));
+}
+
+// UM turno do agente: tenta a Anthropic (tool-calling nativo + streaming de texto); se ela falhar
+// (crédito zerado, 429, overload…), cai pro Replicate Haiku (protocolo manual) — devolve SEMPRE o
+// mesmo formato { content, stop_reason } pros dois loops (SSE e headless) não mudarem. onText recebe
+// o texto (incremental na Anthropic; de uma vez no fallback).
+async function agentTurn(
+  anthropic: Anthropic, system: string, messages: any[], onText?: (t: string) => void,
+): Promise<{ content: any[]; stop_reason: string; via: string }> {
+  try {
+    const s = anthropic.messages.stream({ model: MODEL, max_tokens: 2048, system, tools: AGENT_TOOLS as any, messages });
+    if (onText) s.on("text", (delta: string) => onText(delta));
+    const final = await s.finalMessage();
+    return { content: final.content, stop_reason: final.stop_reason || "end_turn", via: "anthropic" };
+  } catch (e: any) {
+    if (!shouldFallback(e)) throw e;
+    console.warn(`[ai-agent] Anthropic indisponível (${String(e?.message).slice(0, 90)}) — fallback Replicate Haiku`);
+    const fb = await replicateAgentTurn(system, messages, AGENT_TOOLS);
+    if (onText && fb.stop_reason !== "tool_use") {
+      const t = fb.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+      if (t) onText(t);
+    }
+    return { ...fb, via: "replicate" };
+  }
 }
 
 Deno.serve(async (req) => {
@@ -157,6 +182,55 @@ Deno.serve(async (req) => {
   const system = await buildSystemPrompt(userClient, selectedModel);
   const enc = new TextEncoder();
 
+  // ── MODO HEADLESS (fila de gerações) ──
+  // O worker da fila chama isto (com o JWT do próprio usuário) p/ rodar o pedido SEM stream interativo.
+  // Roda o mesmo loop de tool-calling e devolve JSON. Diferença de segurança vs o chat:
+  //   - GERAÇÃO (gated por custo, ex.: carrossel 50cr) → AUTO-APROVA (o usuário enfileirou de propósito).
+  //   - IRREVERSÍVEL (publicar/agendar, GATED_TOOLS) → NÃO executa; devolve needs_review pro usuário
+  //     finalizar no chat. A fila NUNCA publica/agenda sozinha (respeita o human-in-the-loop).
+  if (body.headless) {
+    const json = (obj: unknown, status = 200) =>
+      new Response(JSON.stringify(obj), { status, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+    try {
+      if (incomingUserText) await logTurn("user", incomingUserText, null, 0);
+      let contentId: string | null = null;
+      let resultText = "";
+      let needsReview: any = null;
+      for (let round = 0; round < 8; round++) {
+        const final = await agentTurn(anthropic, system, messages);
+        messages.push({ role: "assistant", content: final.content });
+        {
+          const asstText = final.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
+          const calls = final.content.filter((b: any) => b.type === "tool_use").map((b: any) => ({ name: b.name, input: b.input }));
+          await logTurn("assistant", asstText, calls.length ? calls : null, 0);
+        }
+        const toolUses = final.content.filter((b: any) => b.type === "tool_use");
+        if (final.stop_reason !== "tool_use" || toolUses.length === 0) {
+          resultText = final.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
+          break;
+        }
+        const toolResults: any[] = [];
+        for (const tu of toolUses as any[]) {
+          if (GATED_TOOLS.has(tu.name)) {
+            // Publicar/agendar não roda na fila — devolve o estado pro usuário confirmar no chat.
+            needsReview = { tool_use_id: tu.id, name: tu.name, input: tu.input, messages };
+            break;
+          }
+          let r;
+          try { r = await dispatchTool(ctx, tu.name, tu.input); }
+          catch (e: any) { r = { ok: false, content: `Erro na ferramenta: ${e?.message || e}` }; }
+          if (r.action_result?.content_id) contentId = r.action_result.content_id;
+          toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: r.content, is_error: !r.ok });
+        }
+        if (needsReview) break;
+        messages.push({ role: "user", content: toolResults });
+      }
+      return json({ ok: true, content_id: contentId, text: resultText, needs_review: needsReview, messages });
+    } catch (e: any) {
+      return json({ ok: false, error: e?.message || String(e) }, 500);
+    }
+  }
+
   const stream = new ReadableStream({
     async start(controller) {
       try {
@@ -181,13 +255,9 @@ Deno.serve(async (req) => {
           messages.push({ role: "user", content: [{ type: "tool_result", tool_use_id: c.tool_use_id, content: resultText }] });
         }
 
-        // Loop manual de tool-use (cap de 8 rodadas).
+        // Loop manual de tool-use (cap de 8 rodadas). agentTurn tenta Anthropic e cai pro Replicate.
         for (let round = 0; round < 8; round++) {
-          const msgStream = anthropic.messages.stream({
-            model: MODEL, max_tokens: 2048, system, tools: AGENT_TOOLS as any, messages,
-          });
-          msgStream.on("text", (delta: string) => sse(controller, enc, { type: "text", delta }));
-          const final = await msgStream.finalMessage();
+          const final = await agentTurn(anthropic, system, messages, (delta) => sse(controller, enc, { type: "text", delta }));
           messages.push({ role: "assistant", content: final.content });
 
           // Auditoria: texto da resposta + ferramentas chamadas neste round.
