@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload, ChevronDown, Palette } from "lucide-react";
+import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload, ChevronDown, Palette, Newspaper, Smartphone, MessageSquareQuote, Linkedin } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ActionCard from "@/components/chat/ActionCard";
 import ConfirmAction from "@/components/chat/ConfirmAction";
@@ -84,6 +84,19 @@ const SUGGESTIONS = [
   { icon: ListChecks, text: "O que tenho agendado essa semana?" },
 ];
 
+// Atalhos sempre visíveis acima do input — os formatos mais pedidos, com custo antes do clique
+// (assinatura do design: preço visível). O template termina em ": " → o usuário só completa o tema.
+// Custos espelham credit_pricing (caso típico: carrossel 5 slides, editorial 4). Clicar preenche o
+// input e foca; NÃO envia sozinho (o usuário escreve o tema e decide quando disparar).
+const QUICK_ACTIONS = [
+  { icon: ImageIcon, label: "Post", cost: 10, template: "Crie um post para Instagram sobre: " },
+  { icon: LayoutGrid, label: "Carrossel", cost: 50, template: "Crie um carrossel de 5 slides educativos e visualmente impactantes para Instagram sobre: " },
+  { icon: Newspaper, label: "Editorial", cost: 20, template: "Crie um carrossel editorial cinematográfico sobre: " },
+  { icon: Smartphone, label: "Story", cost: 25, template: "Crie um story para Instagram sobre: " },
+  { icon: MessageSquareQuote, label: "Tweet", cost: 6, template: "Crie um tweet card visual sobre: " },
+  { icon: Linkedin, label: "LinkedIn", cost: 10, template: "Crie um post para LinkedIn sobre: " },
+];
+
 export default function AgentChat() {
   const [uiMessages, setUiMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
@@ -117,6 +130,7 @@ export default function AgentChat() {
   const convo = useRef<any[]>([]);        // messages Anthropic (continuidade)
   const curId = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const storeKey = useRef<string>("");
   const toolBreak = useRef(false);   // separa texto pré/pós tool no mesmo balão
@@ -531,6 +545,26 @@ export default function AgentChat() {
       </div>
 
       <div className="border-t border-border p-2.5 sm:p-3 space-y-2">
+        {/* Atalhos rápidos: formatos mais pedidos, custo antes do clique. Preenche o input e foca. */}
+        <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-0.5 px-0.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          {QUICK_ACTIONS.map((qa) => {
+            const Icon = qa.icon;
+            return (
+              <button
+                key={qa.label}
+                type="button"
+                disabled={sending}
+                onClick={() => { setInput(qa.template); inputRef.current?.focus(); }}
+                title={`${qa.label} · ~${qa.cost} créditos`}
+                className="group inline-flex items-center gap-1.5 h-7 shrink-0 rounded-full border border-border bg-background px-2.5 text-[12px] font-medium text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-primary/[0.03] disabled:opacity-40 disabled:pointer-events-none transition-all"
+              >
+                <Icon className="w-3.5 h-3.5 shrink-0 group-hover:text-primary transition-colors" />
+                <span>{qa.label}</span>
+                <span className="inline-flex items-center gap-0.5 text-[10px] text-muted-foreground/70 tabular-nums"><Coins className="w-2.5 h-2.5" />{qa.cost}</span>
+              </button>
+            );
+          })}
+        </div>
         {(photos.length > 0 || doc || extractingDoc) && (
           <div className="flex gap-2 flex-wrap items-center">
             {photos.map((u, i) => (
@@ -555,6 +589,7 @@ export default function AgentChat() {
         )}
         <div className="rounded-xl border border-border bg-card overflow-hidden focus-within:border-primary/50 transition-colors">
           <Textarea
+            ref={inputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); } }}
