@@ -6,12 +6,12 @@
  * via ConfirmAction. NÃO toca no /chat atual.
  */
 import { useEffect, useRef, useState } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload, ChevronDown, Palette, Newspaper, Smartphone, MessageSquareQuote, Linkedin } from "lucide-react";
+import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload, ChevronDown, Palette, Newspaper, Smartphone, MessageSquareQuote, Linkedin, HelpCircle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ActionCard from "@/components/chat/ActionCard";
 import ConfirmAction from "@/components/chat/ConfirmAction";
@@ -115,12 +115,14 @@ export default function AgentChat() {
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const [brandOpen, setBrandOpen] = useState(false);
+  const [brandHelpOpen, setBrandHelpOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<any>(null);
   const [queueOpen, setQueueOpen] = useState(false);
   const { jobs, enqueue, cancelJob, removeJob, clearFinished, activeCount } = useGenerationQueue();
   const { balance } = useCredits();
   const location = useLocation();
+  const navigate = useNavigate();
   // Prefill vindo do FeatureSpotlight ("Criar vídeo" → cai com o pedido pronto no input).
   useEffect(() => {
     const pf = (location.state as any)?.prefill;
@@ -630,30 +632,52 @@ export default function AgentChat() {
             disabled={sending}
           />
           <div className="flex flex-wrap items-center gap-2 px-2.5 py-2 border-t border-border/60 bg-muted/20">
-            {brands.length > 0 && (
-              <Popover open={brandOpen} onOpenChange={setBrandOpen}>
-                <PopoverTrigger asChild>
-                  <button type="button" className="group inline-flex items-center gap-1.5 h-8 rounded-lg border border-border bg-background px-2.5 text-xs font-medium hover:border-primary/50 hover:bg-muted/40 transition-all max-w-[130px] sm:max-w-[160px]">
-                    <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                    <span className="truncate">{brands.find((b) => b.id === brandId)?.name || "Sem marca"}</span>
-                    <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-auto transition-transform group-data-[state=open]:rotate-180" />
+            {/* Seletor de marca — SEMPRE visível (mesmo sem marca ainda), pra dar acesso a "Criar marca". */}
+            <Popover open={brandOpen} onOpenChange={setBrandOpen}>
+              <PopoverTrigger asChild>
+                <button type="button" className="group inline-flex items-center gap-1.5 h-8 rounded-lg border border-border bg-background px-2.5 text-xs font-medium hover:border-primary/50 hover:bg-muted/40 transition-all max-w-[130px] sm:max-w-[160px]">
+                  <Palette className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  <span className="truncate">{brands.find((b) => b.id === brandId)?.name || "Sem marca"}</span>
+                  <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0 ml-auto transition-transform group-data-[state=open]:rotate-180" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" side="top" sideOffset={8} className="w-60 p-1.5 rounded-xl shadow-lg">
+                <p className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Marca aplicada</p>
+                {[{ id: "", name: "Sem marca" }, ...brands].map((b) => {
+                  const active = (brandId || "") === b.id;
+                  return (
+                    <button key={b.id || "none"} type="button" onClick={() => { setBrandId(b.id); setBrandOpen(false); }}
+                      className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-left transition-colors ${active ? "bg-primary/10 text-primary font-semibold" : "hover:bg-muted"}`}>
+                      <span className="flex-1 truncate">{b.name}</span>
+                      {active && <Check className="w-3.5 h-3.5 shrink-0" />}
+                    </button>
+                  );
+                })}
+                <div className="mt-1 pt-1 border-t border-border">
+                  <button type="button" onClick={() => { setBrandOpen(false); navigate("/brands/new"); }}
+                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-left text-primary font-semibold hover:bg-primary/5 transition-colors">
+                    <Plus className="w-3.5 h-3.5 shrink-0" /> Criar marca
                   </button>
-                </PopoverTrigger>
-                <PopoverContent align="start" side="top" sideOffset={8} className="w-56 p-1.5 rounded-xl shadow-lg">
-                  <p className="px-2 py-1 text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Marca aplicada</p>
-                  {[{ id: "", name: "Sem marca" }, ...brands].map((b) => {
-                    const active = (brandId || "") === b.id;
-                    return (
-                      <button key={b.id || "none"} type="button" onClick={() => { setBrandId(b.id); setBrandOpen(false); }}
-                        className={`flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-xs text-left transition-colors ${active ? "bg-primary/10 text-primary font-semibold" : "hover:bg-muted"}`}>
-                        <span className="flex-1 truncate">{b.name}</span>
-                        {active && <Check className="w-3.5 h-3.5 shrink-0" />}
-                      </button>
-                    );
-                  })}
-                </PopoverContent>
-              </Popover>
-            )}
+                </div>
+              </PopoverContent>
+            </Popover>
+            {/* Ajuda: o que é uma marca? (click — mobile-friendly) */}
+            <Popover open={brandHelpOpen} onOpenChange={setBrandHelpOpen}>
+              <PopoverTrigger asChild>
+                <button type="button" aria-label="O que é uma marca?" className="inline-flex items-center justify-center h-8 w-8 rounded-lg text-muted-foreground hover:text-primary hover:bg-muted/40 transition-colors">
+                  <HelpCircle className="w-4 h-4" />
+                </button>
+              </PopoverTrigger>
+              <PopoverContent align="start" side="top" sideOffset={8} className="w-72 p-3 rounded-xl shadow-lg text-xs leading-relaxed">
+                <p className="font-semibold text-foreground mb-1 flex items-center gap-1.5"><Palette className="w-3.5 h-3.5 text-primary" /> O que é uma marca?</p>
+                <p className="text-muted-foreground">É a <strong>identidade visual</strong> do seu conteúdo — cores, fontes, tom de voz e regras do que pode ou não aparecer. Quando você seleciona uma marca, a IA aplica tudo isso automaticamente nas gerações, pra sair no seu estilo e consistente.</p>
+                <p className="text-muted-foreground mt-2">Sem marca, a IA cria com liberdade total. Com marca, fica a sua cara.</p>
+                <button type="button" onClick={() => { setBrandHelpOpen(false); navigate("/brands/new"); }}
+                  className="mt-2.5 inline-flex items-center gap-1.5 text-primary font-semibold hover:underline">
+                  <Plus className="w-3.5 h-3.5" /> Criar minha marca
+                </button>
+              </PopoverContent>
+            </Popover>
             {(() => {
               const sel = MODELS.find((m) => m.id === model) || MODELS[1];
               return (
