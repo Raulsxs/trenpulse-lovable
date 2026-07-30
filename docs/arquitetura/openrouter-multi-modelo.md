@@ -81,7 +81,7 @@ Nova tabela **`generation_costs`**: `id, user_id, op (post/carousel_slide/story/
 
 ## 6. Plano de Execução — as tarefas (cada item = 1 PR)
 
-- [ ] **T01 (P0) — `_shared/openrouter.ts`**: cliente `orChat` com tradução Anthropic↔OpenAI, tool-calling nativo, `modelChain` com fallback, streaming, e retorno de `usage.cost`. Teste unitário da tradução (loop 2 rodadas de tool). Guardar `OPENROUTER_API_KEY` como secret.
+- [x] **T01 (P0) — `_shared/openrouter.ts`**: cliente `orChat` com tradução Anthropic↔OpenAI, tool-calling nativo, `modelChain` com fallback, streaming, e retorno de `usage.cost`. Teste unitário da tradução (11 testes) + validação ao vivo (round-trip do loop de tool com Haiku via OpenRouter, custo $0.0009). `OPENROUTER_API_KEY` como secret. ✅
 - [ ] **T02 (P0) — Agente no OpenRouter**: `ai-agent` `agentTurn()` usa `orChat` (Haiku→Gemini→Qwen) com `agent-fallback.ts` (Replicate) como última rede. Preserva SSE + headless. Deploy + teste ao vivo (chat responde + gera post ponta a ponta via OpenRouter, com a Anthropic direta ainda zerada).
 - [ ] **T03 (P0.5) — Telemetria**: migration `generation_costs` (+RLS) e instrumentação de `ai-agent`/`ai-chat`/`generate-slide-images` p/ gravar `usage.cost` (fire-and-forget).
 - [ ] **T04 (P0.5) — Painel de margem**: `admin-analytics` + UI mostrando receita×custo real por operação e por modelo, com alerta de margem baixa.
