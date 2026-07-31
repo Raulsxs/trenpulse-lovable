@@ -381,8 +381,14 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
   // selecionou "Heart surgery" (clean) e saiu "Inovações em Saúde" (dark/tech) porque o artigo era
   // de cirurgia cardíaca. O palpite do LLM NUNCA deve vencer a seleção do usuário.
   const brandId = ctx.defaultBrandId || input?.brandId || undefined;
-  // Modelo: o que o usuário nomeou na fala (input.modelo) vence o selecionado no chat (defaultModel).
-  const model = input?.modelo || ctx.defaultModel || undefined;
+  // Modelo: o SELETOR (ctx.defaultModel) MANDA — mesma regra da marca acima. Antes era
+  // `input?.modelo || ctx.defaultModel`: o LLM chutava `modelo` (ex.: nano-banana) na tool call e
+  // atropelava o seletor — carrossel ia pro Gemini mesmo com "gpt-image-2" selecionado. Agora só
+  // honramos input.modelo quando o usuário NOMEOU um modelo explicitamente na fala (ex.: "gera com
+  // nano banana"); senão o palpite do LLM nunca vence a escolha do usuário.
+  const userNamedModel = /\b(gpt[- ]?image|nano[- ]?banana|nano|seedream|reve|ideogram|flux|qwen|recraft|imagen)\b/i
+    .test(ctx.userText || "");
+  const model = (userNamedModel && input?.modelo) ? input.modelo : (ctx.defaultModel || input?.modelo || undefined);
   switch (name) {
     case "gerar_post": {
       // Imagem anexada vira referência de estilo (image-to-image), igual gerar_carrossel.

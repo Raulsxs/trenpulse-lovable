@@ -248,9 +248,17 @@ export async function orImage(opts: {
   const key = Deno.env.get("OPENROUTER_API_KEY");
   if (!key) throw new Error("OPENROUTER_API_KEY ausente");
   const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": "https://trendpulse.com.br", "X-Title": "TrendPulse" };
-  const model = (opts.model && OR_IMAGE_MODELS[opts.model]) || opts.model || OR_IMAGE_DEFAULT;
-  // Aspect ratios do app (1:1, 4:5, 9:16) são todos suportados pelos modelos do mapa.
   const ar = ["1:1", "4:5", "9:16", "2:3", "3:2", "3:4", "4:3", "16:9"].includes(opts.aspectRatio) ? opts.aspectRatio : "1:1";
+  // Guard de aspect (espelha resolveImageModel do generate-slide-images): o gpt-image-2 só suporta
+  // 1:1/3:2/2:3 → em 4:5/9:16 ele degradaria a proporção. Nesses formatos VERTICAIS re-roteia pra
+  // Nano Banana Pro (nativo), MESMO se o usuário selecionou gpt — pra não estragar a proporção. Em
+  // 1:1 (post/carrossel) o seletor é honrado (gpt fica gpt).
+  let appModel = opts.model;
+  if (appModel === "gpt-image-2" && (ar === "4:5" || ar === "9:16")) {
+    appModel = "nano-banana";
+    console.warn(`[openrouter] gpt-image-2 degrada ${ar} — re-roteando pra nano-banana (proporção nativa)`);
+  }
+  const model = (appModel && OR_IMAGE_MODELS[appModel]) || appModel || OR_IMAGE_DEFAULT;
   const refs = (opts.refImages || []).filter((u) => typeof u === "string" && u.startsWith("http"));
 
   const run = async (withRefs: boolean) => {
