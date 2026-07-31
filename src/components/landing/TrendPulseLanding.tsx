@@ -113,7 +113,7 @@ const BODY = `
         Vire referência <span style="color:transparent;background:linear-gradient(120deg,#0059B3,#1DAFA3);-webkit-background-clip:text;background-clip:text">sem virar refém</span> do conteúdo.
       </h1>
       <p data-reveal data-delay="160" style="font-size:19px;line-height:1.6;color:#44546B;max-width:520px;margin:0 0 32px">
-        Diga o tema, cole um link ou escreva uma frase. Em segundos o TrendPulse cria posts, carrosséis e stories com a <strong style="color:#14253A;font-weight:600">sua</strong> identidade — prontos para publicar.
+        Você sabe que precisa aparecer todo dia, mas falta tempo, ideia e paciência pra design. O TrendPulse cria o conteúdo com a <strong style="color:#14253A;font-weight:600">sua</strong> cara e publica pra você. Enquanto isso, você atende seus clientes.
       </p>
       <div data-reveal data-delay="240" style="display:flex;flex-wrap:wrap;gap:12px;margin-bottom:26px">
         <button data-tp="signup" style="border:none;font-family:inherit;font-size:16px;font-weight:700;color:#fff;cursor:pointer;padding:15px 26px;border-radius:13px;background:linear-gradient(135deg,#0059B3,#1DAFA3);box-shadow:0 12px 28px rgba(0,89,179,.3);display:flex;align-items:center;gap:9px">
@@ -210,7 +210,7 @@ const BODY = `
     <div data-reveal style="text-align:center;margin-bottom:56px">
       <div style="font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DAFA3;margin-bottom:12px">Como funciona</div>
       <h2 style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:40px;letter-spacing:-.025em;margin:0 0 14px">Da ideia ao post em 3 passos</h2>
-      <p style="font-size:17px;color:#44546B;max-width:560px;margin:0 auto">Sem briefing, sem designer, sem template em branco. Você diz o tema — a IA entrega pronto.</p>
+      <p style="font-size:17px;color:#44546B;max-width:560px;margin:0 auto">Sem briefing, sem designer, sem template em branco. Você diz o tema, a IA entrega pronto.</p>
     </div>
     <div class="tp-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;position:relative">
       <div data-reveal data-delay="0" style="position:relative">
@@ -245,52 +245,52 @@ const BODY = `
 <section id="recursos" style="padding:88px 24px;background:#fff;border-top:1px solid rgba(20,37,58,.07)">
   <div style="max-width:1140px;margin:0 auto">
     <div data-reveal style="text-align:center;margin-bottom:54px">
-      <div style="font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DAFA3;margin-bottom:12px">Recursos</div>
-      <h2 style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:40px;letter-spacing:-.025em;margin:0 0 14px">Tudo para manter sua autoridade no ar</h2>
-      <p style="font-size:17px;color:#44546B;max-width:560px;margin:0 auto">As ferramentas que normalmente exigem uma agência inteira — num só lugar.</p>
+      <div style="font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DAFA3;margin-bottom:12px">O que muda pra você</div>
+      <h2 style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:40px;letter-spacing:-.025em;margin:0 0 14px">Presença todo dia, sem virar um fardo</h2>
+      <p style="font-size:17px;color:#44546B;max-width:560px;margin:0 auto">O que normalmente exige uma agência inteira, sem agência: você diz, a IA faz, você publica.</p>
     </div>
     <div class="tp-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:18px">
       <div data-reveal data-delay="0" style="background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;padding:24px">
         <div style="width:46px;height:46px;border-radius:12px;background:rgba(0,89,179,.1);display:flex;align-items:center;justify-content:center;margin-bottom:16px">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0059B3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
         </div>
-        <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:17.5px;margin:0 0 7px">Chat inteligente</h3>
-        <p style="font-size:14px;color:#44546B;line-height:1.55;margin:0">Digite um tema, cole um link ou peça sugestões. A IA entende e gera o conteúdo ideal.</p>
+        <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:17.5px;margin:0 0 7px">Nunca mais encare a tela em branco</h3>
+        <p style="font-size:14px;color:#44546B;line-height:1.55;margin:0">Sem ideia do que postar? Diga o tema, cole um link ou peça sugestões. A IA entrega o conteúdo pronto.</p>
       </div>
       <div data-reveal data-delay="80" style="background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;padding:24px">
         <div style="width:46px;height:46px;border-radius:12px;background:rgba(29,175,163,.12);display:flex;align-items:center;justify-content:center;margin-bottom:16px">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#13897f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="2.5"></circle><circle cx="6.5" cy="12" r="2.5"></circle><circle cx="17" cy="14" r="2.5"></circle><path d="M11 7 9 11M16 12l-7 1"></path></svg>
         </div>
-        <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:17.5px;margin:0 0 7px">Sua identidade visual</h3>
-        <p style="font-size:14px;color:#44546B;line-height:1.55;margin:0">Suba exemplos da sua marca e a IA replica cores, tipografia e estilo em cada post.</p>
+        <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:17.5px;margin:0 0 7px">Todo post com a sua cara</h3>
+        <p style="font-size:14px;color:#44546B;line-height:1.55;margin:0">Suba a sua marca uma vez. A IA replica cores, fontes e estilo em tudo. Ninguém percebe que foi IA.</p>
       </div>
       <div data-reveal data-delay="160" style="background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;padding:24px">
         <div style="width:46px;height:46px;border-radius:12px;background:rgba(0,89,179,.1);display:flex;align-items:center;justify-content:center;margin-bottom:16px">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0059B3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
         </div>
-        <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:17.5px;margin:0 0 7px">Geração instantânea</h3>
-        <p style="font-size:14px;color:#44546B;line-height:1.55;margin:0">Posts, carrosséis, stories e documentos prontos em segundos com IA.</p>
+        <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:17.5px;margin:0 0 7px">Do zero ao pronto em segundos</h3>
+        <p style="font-size:14px;color:#44546B;line-height:1.55;margin:0">Posts, carrosséis e stories prontos pra publicar antes do seu café esfriar.</p>
       </div>
       <div data-reveal data-delay="0" style="background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;padding:24px">
         <div style="width:46px;height:46px;border-radius:12px;background:rgba(29,175,163,.12);display:flex;align-items:center;justify-content:center;margin-bottom:16px">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#13897f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>
         </div>
-        <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:17.5px;margin:0 0 7px">Calendário editorial</h3>
-        <p style="font-size:14px;color:#44546B;line-height:1.55;margin:0">Agende publicações e organize seu calendário sem sair da plataforma.</p>
+        <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:17.5px;margin:0 0 7px">Seu feed no piloto automático</h3>
+        <p style="font-size:14px;color:#44546B;line-height:1.55;margin:0">Crie uma vez, agende a semana toda. Seu feed não para nem quando você para.</p>
       </div>
       <div data-reveal data-delay="80" style="background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;padding:24px">
         <div style="width:46px;height:46px;border-radius:12px;background:rgba(0,89,179,.1);display:flex;align-items:center;justify-content:center;margin-bottom:16px">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0059B3" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"></circle><circle cx="6" cy="12" r="3"></circle><circle cx="18" cy="19" r="3"></circle><path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4"></path></svg>
         </div>
-        <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:17.5px;margin:0 0 7px">Publicação em 9 redes</h3>
-        <p style="font-size:14px;color:#44546B;line-height:1.55;margin:0">Instagram, LinkedIn, TikTok, X e mais — com um clique. Sem baixar, sem complicação.</p>
+        <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:17.5px;margin:0 0 7px">Nunca mais suma do feed</h3>
+        <p style="font-size:14px;color:#44546B;line-height:1.55;margin:0">Publique em Instagram, LinkedIn, TikTok, X e mais com um clique. Sem baixar, sem exportar, sem desculpa.</p>
       </div>
       <div data-reveal data-delay="160" style="background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;padding:24px">
         <div style="width:46px;height:46px;border-radius:12px;background:rgba(29,175,163,.12);display:flex;align-items:center;justify-content:center;margin-bottom:16px">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#13897f" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 21l4-1 11-11a2.8 2.8 0 0 0-4-4L3 16z"></path><path d="M14 6l4 4"></path></svg>
         </div>
-        <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:17.5px;margin:0 0 7px">Frases & citações</h3>
-        <p style="font-size:14px;color:#44546B;line-height:1.55;margin:0">Escreva sua frase e a IA cria uma arte elegante com aspas, autor e design profissional.</p>
+        <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:17.5px;margin:0 0 7px">Suas frases viram arte</h3>
+        <p style="font-size:14px;color:#44546B;line-height:1.55;margin:0">Escreva a frase de impacto. A IA entrega a arte elegante, com aspas e design, pronta pro feed.</p>
       </div>
     </div>
   </div>
@@ -301,7 +301,7 @@ const BODY = `
     <div data-reveal style="text-align:center;margin-bottom:54px">
       <div style="font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DAFA3;margin-bottom:12px">Para quem é</div>
       <h2 style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:40px;letter-spacing:-.025em;margin:0 0 14px">Feito para quem vende a própria expertise</h2>
-      <p style="font-size:17px;color:#44546B;max-width:560px;margin:0 auto">Sua autoridade cresce com presença constante. O TrendPulse mantém o feed vivo enquanto você atende.</p>
+      <p style="font-size:17px;color:#44546B;max-width:560px;margin:0 auto">Cada semana sem postar, você vira lembrança e o concorrente vira referência. O TrendPulse mantém você presente, mesmo na correria.</p>
     </div>
     <div class="tp-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:20px">
       <div data-reveal data-delay="0" style="background:#fff;border:1px solid rgba(20,37,58,.09);border-radius:18px;padding:28px;box-shadow:0 1px 3px rgba(20,37,58,.05)">
@@ -433,11 +433,10 @@ const BODY = `
       <img src="/landing/foto_pessoal.png" alt="Cliente" style="width:100%;height:100%;object-fit:cover">
     </div>
     <div>
-      <div style="display:flex;gap:3px;margin-bottom:12px">
-        <span style="color:#1DAFA3;font-size:16px">★</span><span style="color:#1DAFA3;font-size:16px">★</span><span style="color:#1DAFA3;font-size:16px">★</span><span style="color:#1DAFA3;font-size:16px">★</span><span style="color:#1DAFA3;font-size:16px">★</span>
-      </div>
-      <p style="font-family:'Plus Jakarta Sans';font-weight:600;font-size:21px;line-height:1.4;letter-spacing:-.01em;margin:0 0 16px;color:#14253A">"Eu publicava uma vez por semana, sem constância. Hoje meu feed não para — e levo minutos, não tardes inteiras."</p>
-      <div style="font-size:14px;color:#79879C">— Depoimento de cliente · <span style="color:#9aa6b5">substitua por um real</span></div>
+<!-- TODO Raul: trocar esta PROMESSA por um DEPOIMENTO REAL do Dr. Maikon (foto + frase dele + nome/profissão). Prova social real converte muito mais. Aí sim voltam as 5 estrelas. -->
+      <div style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1DAFA3;background:rgba(29,175,163,.12);padding:5px 11px;border-radius:999px;margin-bottom:14px">A promessa</div>
+      <p style="font-family:'Plus Jakarta Sans';font-weight:600;font-size:21px;line-height:1.4;letter-spacing:-.01em;margin:0 0 16px;color:#14253A">Você não precisa escolher entre atender bem e aparecer nas redes. Enquanto você cuida dos seus clientes, o TrendPulse cuida da sua presença.</p>
+      <div style="font-size:14px;color:#79879C">O jeito de nunca mais sumir do feed.</div>
     </div>
   </div>
 </section>
