@@ -110,7 +110,7 @@ const BODY = `
         Feito para coaches e consultores
       </div>
       <h1 class="tp-hero-h1" data-reveal data-delay="80" style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:62px;line-height:1.04;letter-spacing:-.03em;margin:0 0 22px">
-        Vire referência <span style="color:transparent;background:linear-gradient(120deg,#0059B3,#1DAFA3);-webkit-background-clip:text;background-clip:text">sem virar refém</span> do conteúdo.
+        Vire referência <span style="color:#0059B3">sem virar refém</span> do conteúdo.
       </h1>
       <p data-reveal data-delay="160" style="font-size:19px;line-height:1.6;color:#44546B;max-width:520px;margin:0 0 32px">
         Você sabe que precisa aparecer todo dia, mas falta tempo, ideia e paciência pra design. O TrendPulse cria o conteúdo com a <strong style="color:#14253A;font-weight:600">sua</strong> cara e publica pra você. Enquanto isso, você atende seus clientes.
@@ -208,13 +208,12 @@ const BODY = `
 <section id="como" style="padding:96px 24px 80px">
   <div style="max-width:1080px;margin:0 auto">
     <div data-reveal style="text-align:center;margin-bottom:56px">
-      <div style="font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DAFA3;margin-bottom:12px">Como funciona</div>
       <h2 style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:40px;letter-spacing:-.025em;margin:0 0 14px">Da ideia ao post em 3 passos</h2>
       <p style="font-size:17px;color:#44546B;max-width:560px;margin:0 auto">Sem briefing, sem designer, sem template em branco. Você diz o tema, a IA entrega pronto.</p>
     </div>
     <div class="tp-3col" style="display:grid;grid-template-columns:repeat(3,1fr);gap:24px;position:relative">
       <div data-reveal data-delay="0" style="position:relative">
-        <div style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:54px;line-height:1;color:transparent;background:linear-gradient(135deg,#0059B3,#1DAFA3);-webkit-background-clip:text;background-clip:text;opacity:.22;margin-bottom:6px">01</div>
+        <div style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:54px;line-height:1;color:#0059B3;opacity:.2;margin-bottom:6px">01</div>
         <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:20px;margin:0 0 8px">Escolha o formato</h3>
         <p style="font-size:14.5px;color:#44546B;line-height:1.55;margin:0 0 16px">Post, carrossel ou story — para Instagram ou LinkedIn.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -224,13 +223,13 @@ const BODY = `
         </div>
       </div>
       <div data-reveal data-delay="120" style="position:relative">
-        <div style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:54px;line-height:1;color:transparent;background:linear-gradient(135deg,#0059B3,#1DAFA3);-webkit-background-clip:text;background-clip:text;opacity:.22;margin-bottom:6px">02</div>
+        <div style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:54px;line-height:1;color:#0059B3;opacity:.2;margin-bottom:6px">02</div>
         <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:20px;margin:0 0 8px">Diga o que quer</h3>
         <p style="font-size:14.5px;color:#44546B;line-height:1.55;margin:0 0 16px">Cole um link, escreva uma frase ou peça sugestões. A IA cuida do resto.</p>
         <div style="background:#fff;border:1px solid rgba(20,37,58,.1);border-radius:11px;padding:11px 13px;font-size:13.5px;box-shadow:0 2px 8px rgba(20,37,58,.04)"><span style="color:#79879C">Ex: </span><span style="color:#14253A;font-weight:500">A disciplina que separa quem sonha de quem realiza</span></div>
       </div>
       <div data-reveal data-delay="240" style="position:relative">
-        <div style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:54px;line-height:1;color:transparent;background:linear-gradient(135deg,#0059B3,#1DAFA3);-webkit-background-clip:text;background-clip:text;opacity:.22;margin-bottom:6px">03</div>
+        <div style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:54px;line-height:1;color:#0059B3;opacity:.2;margin-bottom:6px">03</div>
         <h3 style="font-family:'Plus Jakarta Sans';font-weight:700;font-size:20px;margin:0 0 8px">Publique</h3>
         <p style="font-size:14.5px;color:#44546B;line-height:1.55;margin:0 0 16px">Revise, ajuste se quiser e publique direto — ou agende no calendário.</p>
         <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -245,7 +244,6 @@ const BODY = `
 <section id="recursos" style="padding:88px 24px;background:#fff;border-top:1px solid rgba(20,37,58,.07)">
   <div style="max-width:1140px;margin:0 auto">
     <div data-reveal style="text-align:center;margin-bottom:54px">
-      <div style="font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DAFA3;margin-bottom:12px">O que muda pra você</div>
       <h2 style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:40px;letter-spacing:-.025em;margin:0 0 14px">Presença todo dia, sem virar um fardo</h2>
       <p style="font-size:17px;color:#44546B;max-width:560px;margin:0 auto">O que normalmente exige uma agência inteira, sem agência: você diz, a IA faz, você publica.</p>
     </div>
@@ -299,7 +297,6 @@ const BODY = `
 <section style="padding:88px 24px">
   <div style="max-width:1100px;margin:0 auto">
     <div data-reveal style="text-align:center;margin-bottom:54px">
-      <div style="font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DAFA3;margin-bottom:12px">Para quem é</div>
       <h2 style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:40px;letter-spacing:-.025em;margin:0 0 14px">Feito para quem vende a própria expertise</h2>
       <p style="font-size:17px;color:#44546B;max-width:560px;margin:0 auto">Cada semana sem postar, você vira lembrança e o concorrente vira referência. O TrendPulse mantém você presente, mesmo na correria.</p>
     </div>
@@ -344,7 +341,6 @@ const BODY = `
 
 <section id="exemplos" style="padding:88px 0;background:#fff;border-top:1px solid rgba(20,37,58,.07);overflow:hidden">
   <div data-reveal style="text-align:center;margin-bottom:48px;padding:0 24px">
-    <div style="font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DAFA3;margin-bottom:12px">Exemplos</div>
     <h2 style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:40px;letter-spacing:-.025em;margin:0 0 14px">Conteúdos gerados na plataforma</h2>
     <p style="font-size:17px;color:#44546B;max-width:560px;margin:0 auto">Saídas reais — prontas para publicar, com legenda e formato corretos.</p>
   </div>
@@ -357,7 +353,6 @@ const BODY = `
 
 <section id="feito" style="padding:88px 0;overflow:hidden">
   <div data-reveal style="text-align:center;margin-bottom:48px;padding:0 24px">
-    <div style="font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DAFA3;margin-bottom:12px">Prova real</div>
     <h2 style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:40px;letter-spacing:-.025em;margin:0 0 14px">Feito com TrendPulse</h2>
     <p style="font-size:17px;color:#44546B;max-width:580px;margin:0 auto">Posts gerados de verdade na plataforma — português impecável, design profissional e a sua identidade. Um feed inteiro em minutos.</p>
   </div>
@@ -371,7 +366,6 @@ const BODY = `
 <section id="precos" style="padding:88px 24px">
   <div style="max-width:1040px;margin:0 auto">
     <div data-reveal style="text-align:center;margin-bottom:24px">
-      <div style="font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DAFA3;margin-bottom:12px">Preços</div>
       <h2 style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:40px;letter-spacing:-.025em;margin:0 0 14px">Sem mensalidade, sem surpresa</h2>
       <p style="font-size:17px;color:#44546B;max-width:540px;margin:0 auto 18px">Você compra créditos e usa quando quiser. Eles <strong style="color:#14253A">não expiram</strong>.</p>
       <span style="display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:600;color:#0059B3;background:rgba(0,89,179,.08);padding:8px 16px;border-radius:999px">
