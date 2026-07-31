@@ -52,6 +52,28 @@ const galleryCard = (g: { src: string; cap: string; pos?: string }) =>
   `<div style="flex:none;width:248px;background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(20,37,58,.06)"><img src="${g.src}" alt="Exemplo gerado na plataforma" loading="lazy" style="width:248px;height:248px;object-fit:cover;${g.pos ? `object-position:${g.pos};` : ""}display:block"><div style="padding:13px 14px"><div style="font-size:12.5px;color:#44546B;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${g.cap}</div></div></div>`;
 const GALLERY_HTML = GALLERY.map(galleryCard).join("");
 
+// Seção "Feito com TrendPulse" — 16 posts REAIS gerados na plataforma (gpt-image-2, português
+// impecável). Marquee em sentido inverso ao de #exemplos → efeito de mural de duas fileiras.
+const GALLERY_FEITO: { src: string; cap: string }[] = [
+  { src: "/showcase/gerados/exemplo_sinais_coracao.jpg", cap: "5 sinais de que o coração pede atenção." },
+  { src: "/showcase/gerados/exemplo_alimentacao_saudavel.jpg", cap: "Alimentação saudável começa na sua cozinha." },
+  { src: "/showcase/gerados/exemplo_hipertensao.jpg", cap: "Hipertensão: o inimigo silencioso." },
+  { src: "/showcase/gerados/exemplo_exercicios.jpg", cap: "Por que 30 minutos por dia já mudam tudo." },
+  { src: "/showcase/gerados/exemplo_ansiedade.jpg", cap: "Técnicas simples para reduzir a ansiedade." },
+  { src: "/showcase/gerados/exemplo_sono.jpg", cap: "A importância do sono para a sua saúde." },
+  { src: "/showcase/gerados/exemplo_colesterol.jpg", cap: "Colesterol alto tem solução." },
+  { src: "/showcase/gerados/exemplo_nutricao_coracao.jpg", cap: "Nutrição inteligente para o coração." },
+  { src: "/showcase/gerados/exemplo_diabetes.jpg", cap: "Diabetes: informação salva vidas." },
+  { src: "/showcase/gerados/exemplo_prevencao.jpg", cap: "Prevenção é o melhor remédio." },
+  { src: "/showcase/gerados/exemplo_saude_mental.jpg", cap: "Cuidar da mente é cuidar da saúde." },
+  { src: "/showcase/gerados/exemplo_inflamacao.jpg", cap: "Inflamação crônica: sinais de alerta." },
+  { src: "/showcase/gerados/exemplo_envelhecer.jpg", cap: "Envelhecer com qualidade de vida." },
+  { src: "/showcase/gerados/exemplo_vacinacao.jpg", cap: "Vacinação protege toda a população." },
+  { src: "/showcase/gerados/exemplo_obesidade.jpg", cap: "Obesidade é uma questão de saúde." },
+  { src: "/showcase/gerados/exemplo_produtividade.jpg", cap: "Produtividade sem estresse no trabalho." },
+];
+const GALLERY_FEITO_HTML = GALLERY_FEITO.map(galleryCard).join("");
+
 const BODY = `
 <header style="position:fixed;top:0;left:0;right:0;z-index:50;backdrop-filter:blur(14px);background:rgba(247,249,251,.78);border-bottom:1px solid rgba(20,37,58,.08)">
   <div style="max-width:1200px;margin:0 auto;padding:14px 24px;display:flex;align-items:center;justify-content:space-between;gap:16px">
@@ -330,6 +352,19 @@ const BODY = `
     <div style="position:absolute;left:0;top:0;bottom:0;width:90px;z-index:2;background:linear-gradient(90deg,#fff,transparent);pointer-events:none"></div>
     <div style="position:absolute;right:0;top:0;bottom:0;width:90px;z-index:2;background:linear-gradient(270deg,#fff,transparent);pointer-events:none"></div>
     <div style="display:flex;gap:18px;width:max-content;animation:tpMarquee 90s linear infinite;padding:0 9px">${GALLERY_HTML}${GALLERY_HTML}</div>
+  </div>
+</section>
+
+<section id="feito" style="padding:88px 0;overflow:hidden">
+  <div data-reveal style="text-align:center;margin-bottom:48px;padding:0 24px">
+    <div style="font-size:12.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:#1DAFA3;margin-bottom:12px">Prova real</div>
+    <h2 style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:40px;letter-spacing:-.025em;margin:0 0 14px">Feito com TrendPulse</h2>
+    <p style="font-size:17px;color:#44546B;max-width:580px;margin:0 auto">Posts gerados de verdade na plataforma — português impecável, design profissional e a sua identidade. Um feed inteiro em minutos.</p>
+  </div>
+  <div data-reveal style="position:relative">
+    <div style="position:absolute;left:0;top:0;bottom:0;width:90px;z-index:2;background:linear-gradient(90deg,#F7F9FB,transparent);pointer-events:none"></div>
+    <div style="position:absolute;right:0;top:0;bottom:0;width:90px;z-index:2;background:linear-gradient(270deg,#F7F9FB,transparent);pointer-events:none"></div>
+    <div style="display:flex;gap:18px;width:max-content;animation:tpMarquee 80s linear infinite;animation-direction:reverse;padding:0 9px">${GALLERY_FEITO_HTML}${GALLERY_FEITO_HTML}</div>
   </div>
 </section>
 
