@@ -140,16 +140,17 @@ export async function orChat(opts: {
         const r = await streamOne(model, baseBody, headers, opts.onText);
         return r;
       }
-      const res = await tfetch(OR_URL, { method: "POST", headers, body: JSON.stringify({ ...baseBody, model }) }, 60000);
+      // Não-streaming: fetch PURO (sem AbortController). No edge do Supabase, ler res.json() de uma
+      // Response cujo fetch levou signal de AbortController dispara "stream controller cannot close or
+      // enqueue". Lemos o corpo como texto e parseamos. O wall-clock do edge já limita o tempo.
+      const res = await fetch(OR_URL, { method: "POST", headers, body: JSON.stringify({ ...baseBody, model }) });
+      const raw = await res.text();
       if (!res.ok) {
-        const txt = (await res.text()).slice(0, 200);
-        lastErr = new Error(`OpenRouter ${model} HTTP ${res.status}: ${txt}`);
-        if (res.status === 429 || res.status >= 500 || res.status === 402) { console.warn(`[openrouter] ${model} ${res.status} — próximo da chain`); continue; }
-        // 4xx "de verdade" (400 payload) também tenta o próximo, mas loga distinto.
-        console.warn(`[openrouter] ${model} ${res.status} (payload?) — próximo da chain`);
+        lastErr = new Error(`OpenRouter ${model} HTTP ${res.status}: ${raw.slice(0, 200)}`);
+        console.warn(`[openrouter] ${model} HTTP ${res.status} — próximo da chain`);
         continue;
       }
-      const data = await res.json();
+      const data = JSON.parse(raw);
       const { content, stop_reason } = fromOpenAIResponse(data.choices?.[0]);
       return { content, stop_reason, model, usage: data.usage || null };
     } catch (e: any) {
@@ -213,3 +214,65 @@ export const AGENT_MODEL_CHAIN = [
   "google/gemini-2.5-flash",
   "qwen/qwen3.5-flash-02-23",
 ];
+
+// ── IMAGEM via Unified Image API do OpenRouter (T05) ──
+// Endpoint /api/v1/images. Request: { model, prompt, aspect_ratio, input_references[] }.
+// Resposta: { data:[{ b64_json, media_type }], usage:{ cost } }. A imagem volta em base64 (o mesmo
+// formato data:image/...;base64 que o generate-slide-images já usa). Referências: OBJETOS
+// { type:"image_url", image_url:{ url } } — o OpenRouter busca a URL (precisa ser pública direta).
+const OR_IMAGES_URL = "https://openrouter.ai/api/v1/images";
+
+// Mapa: modelo do app (seletor Econômico/Padrão/Premium) → slug OpenRouter.
+// QUALIDADE pt-BR medida ao vivo (mesmo prompt, 3 modelos, 2026-07-31):
+//   - gpt-image-2 (openai): texto pt-BR PERFEITO, 68s, $0.053 → margem ótima. PADRÃO.
+//   - Nano Banana Pro (gemini-3-pro-image): pt-BR PERFEITO, 23s (rápido), $0.139 → premium.
+//   - gemini-2.5-flash-image: RÁPIDO/barato mas ERRA pt-BR ("Lingulagem", "adotom") → NÃO usar p/ texto.
+//   - seedream: econômico (pt-BR ~ok). O usuário aceita menos qualidade no tier barato.
+export const OR_IMAGE_MODELS: Record<string, string> = {
+  "seedream": "bytedance-seed/seedream-4.5",         // econômico
+  "gpt-image-2": "openai/gpt-image-2",               // PADRÃO: texto pt-BR perfeito + melhor margem
+  "nano-banana": "google/gemini-3-pro-image",        // premium: Nano Banana Pro, pt-BR perfeito + rápido + 9:16
+  "flux": "black-forest-labs/flux.2-klein-4b",       // fotorrealismo barato
+};
+// Default seguro p/ pt-BR (texto perfeito). Velocidade ~68s é aceitável (Replicate gpt-image-2 era similar).
+export const OR_IMAGE_DEFAULT = "openai/gpt-image-2";
+
+export interface OrImageResult { dataUrl: string; usage: any; model: string }
+
+/** Gera uma imagem via OpenRouter. Retorna data URL (base64) + usage.cost. Se a busca de uma
+ *  referência falhar (URL não-pública/404), re-tenta SEM referências — melhor imagem sem estilo do
+ *  que falhar o slide inteiro (e derrubar o carrossel). */
+export async function orImage(opts: {
+  model?: string; prompt: string; aspectRatio: string; refImages?: string[]; resolution?: string;
+}): Promise<OrImageResult> {
+  const key = Deno.env.get("OPENROUTER_API_KEY");
+  if (!key) throw new Error("OPENROUTER_API_KEY ausente");
+  const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": "https://trendpulse.com.br", "X-Title": "TrendPulse" };
+  const model = (opts.model && OR_IMAGE_MODELS[opts.model]) || opts.model || OR_IMAGE_DEFAULT;
+  // Aspect ratios do app (1:1, 4:5, 9:16) são todos suportados pelos modelos do mapa.
+  const ar = ["1:1", "4:5", "9:16", "2:3", "3:2", "3:4", "4:3", "16:9"].includes(opts.aspectRatio) ? opts.aspectRatio : "1:1";
+  const refs = (opts.refImages || []).filter((u) => typeof u === "string" && u.startsWith("http"));
+
+  const run = async (withRefs: boolean) => {
+    const body: any = { model, prompt: opts.prompt, aspect_ratio: ar };
+    if (opts.resolution) body.resolution = opts.resolution;
+    if (withRefs && refs.length) body.input_references = refs.slice(0, 14).map((url) => ({ type: "image_url", image_url: { url } }));
+    const res = await fetch(OR_IMAGES_URL, { method: "POST", headers, body: JSON.stringify(body) });
+    const raw = await res.text();
+    if (!res.ok) throw new Error(`OpenRouter image ${model} HTTP ${res.status}: ${raw.slice(0, 200)}`);
+    const data = JSON.parse(raw);
+    const item = (data.data || [])[0];
+    if (!item?.b64_json) throw new Error(`OpenRouter image ${model}: sem b64_json`);
+    return { dataUrl: `data:${item.media_type || "image/png"};base64,${item.b64_json}`, usage: data.usage || null, model };
+  };
+
+  try {
+    return await run(true);
+  } catch (e: any) {
+    if (refs.length && /HTTP 400|fetching URL|Unsupported URL/i.test(String(e?.message))) {
+      console.warn(`[openrouter] image ${model} falhou com refs (${String(e?.message).slice(0, 80)}) — re-tentando SEM referências`);
+      return await run(false);
+    }
+    throw e;
+  }
+}

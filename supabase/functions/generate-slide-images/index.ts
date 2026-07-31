@@ -2,6 +2,7 @@ import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAI } from "../_shared/ai-gateway.ts";
 import { requireAuth } from "../_shared/require-auth.ts";
+import { orImage } from "../_shared/openrouter.ts";
 
 async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
   try {
@@ -681,11 +682,25 @@ ${brandColorHint}
         .filter(Boolean)
         .slice(0, 6);
 
-      // ── Tier 1: Replicate (provider primário da estante) ──
-      // Migração 2026-06-18. Exceção de segurança: quando há foto pessoal de referência E o user
-      // tem key Gemini própria (modo photo_backgrounds do Maikon), pulamos o Replicate e deixamos
-      // o fluxo Gemini/inference.sh provado assumir — preserva melhor a pessoa na imagem.
+      // Exceção de segurança (modo photo_backgrounds do Maikon): foto pessoal de referência + key
+      // Gemini própria → pula OpenRouter E Replicate, deixa o fluxo Gemini/inference.sh provado
+      // assumir (preserva melhor a pessoa). NÃO QUEBRAR esse caminho.
       const isPersonalPhotoMode = !!userGeminiKey && refImages.length > 0;
+
+      // ── Tier 0: OpenRouter (T05) — provider PRIMÁRIO de imagem. Tem crédito e NÃO estrangula
+      // (o Replicate cai a 6 req/min quando o saldo baixa → carrossel de 5 slides estourava o gateway
+      // = 504, o bug que a Amanda viu). Nano Banana/Gemini são rápidos (~4s) → carrossel não estoura.
+      if (!base64Image && Deno.env.get("OPENROUTER_API_KEY") && !isPersonalPhotoMode) {
+        try {
+          const r = await orImage({ model: requestModel, prompt: promptText, aspectRatio, refImages });
+          base64Image = r.dataUrl;
+          console.log(`[generate-slide-images] Tier-0 OpenRouter OK: model=${r.model}, custo=$${r.usage?.cost}, aspect=${aspectRatio}, refs=${refImages.length}`);
+        } catch (e: any) {
+          console.warn(`[generate-slide-images] OpenRouter falhou (${String(e?.message).slice(0, 140)}) — caindo p/ Replicate`);
+        }
+      }
+
+      // ── Tier 1: Replicate (fallback — provider anterior da estante) ──
       if (!base64Image && Deno.env.get("REPLICATE_API_TOKEN") && !isPersonalPhotoMode) {
         const resolvedModelRep = resolveImageModel(requestModel, aspectRatio, contentStyle, language);
         console.log(`[generate-slide-images] Tier-1 Replicate: model=${resolvedModelRep}, aspect=${aspectRatio}, refs=${refImages.length}`);

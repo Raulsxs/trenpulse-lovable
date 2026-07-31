@@ -6,11 +6,10 @@
 // Stream SSE de eventos: text | tool_start | tool_done | action_result | confirm_request | done | error
 // Resume pós-confirmação: o cliente re-chama com { messages, confirm: {tool_use_id,name,input,approved} }.
 import { createClient } from "npm:@supabase/supabase-js@2";
-import Anthropic from "npm:@anthropic-ai/sdk";
 import { AGENT_TOOLS, GATED_TOOLS, CONFIRM_CREDIT_THRESHOLD, estimateToolCost, dispatchTool, type ToolCtx } from "../_shared/agent-tools.ts";
-import { replicateAgentTurn, shouldFallback } from "../_shared/agent-fallback.ts";
+import { replicateAgentTurn } from "../_shared/agent-fallback.ts";
+import { orChat, AGENT_MODEL_CHAIN } from "../_shared/openrouter.ts";
 
-const MODEL = "claude-haiku-4-5";
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
@@ -58,27 +57,31 @@ function sse(controller: ReadableStreamDefaultController, enc: TextEncoder, even
   controller.enqueue(enc.encode(`data: ${JSON.stringify(event)}\n\n`));
 }
 
-// UM turno do agente: tenta a Anthropic (tool-calling nativo + streaming de texto); se ela falhar
-// (crédito zerado, 429, overload…), cai pro Replicate Haiku (protocolo manual) — devolve SEMPRE o
-// mesmo formato { content, stop_reason } pros dois loops (SSE e headless) não mudarem. onText recebe
-// o texto (incremental na Anthropic; de uma vez no fallback).
+// UM turno do agente (T02): PRIMÁRIO = OpenRouter (tool-calling NATIVO + fallback entre modelos
+// Haiku→Gemini→Qwen numa API só). Se o OpenRouter inteiro cair, BACKSTOP = Replicate Haiku (protocolo
+// manual, agent-fallback.ts). Devolve SEMPRE o mesmo formato { content, stop_reason } pros dois loops
+// (SSE e headless) não mudarem. onText recebe o texto (streaming no OpenRouter; de uma vez no backstop).
+// A key da Anthropic direta saiu do caminho quente — o OpenRouter cobra à parte (conserta o apagão de
+// crédito) e ainda dá resiliência multi-provedor. `usage` traz o custo USD real (insumo do T03).
 async function agentTurn(
-  anthropic: Anthropic, system: string, messages: any[], onText?: (t: string) => void,
-): Promise<{ content: any[]; stop_reason: string; via: string }> {
+  system: string, messages: any[], onText?: (t: string) => void,
+): Promise<{ content: any[]; stop_reason: string; via: string; usage?: any }> {
   try {
-    const s = anthropic.messages.stream({ model: MODEL, max_tokens: 2048, system, tools: AGENT_TOOLS as any, messages });
-    if (onText) s.on("text", (delta: string) => onText(delta));
-    const final = await s.finalMessage();
-    return { content: final.content, stop_reason: final.stop_reason || "end_turn", via: "anthropic" };
+    const r = await orChat({
+      system, messages, tools: AGENT_TOOLS as any,
+      modelChain: AGENT_MODEL_CHAIN, maxTokens: 2048,
+      stream: !!onText, onText,
+    });
+    console.log(`[ai-agent] turno via openrouter:${r.model} (custo $${r.usage?.cost ?? "?"})`);
+    return { content: r.content, stop_reason: r.stop_reason, via: `openrouter:${r.model}`, usage: r.usage };
   } catch (e: any) {
-    if (!shouldFallback(e)) throw e;
-    console.warn(`[ai-agent] Anthropic indisponível (${String(e?.message).slice(0, 90)}) — fallback Replicate Haiku`);
+    console.warn(`[ai-agent] OpenRouter indisponível (${String(e?.message).slice(0, 100)}) — backstop Replicate manual`);
     const fb = await replicateAgentTurn(system, messages, AGENT_TOOLS);
     if (onText && fb.stop_reason !== "tool_use") {
       const t = fb.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
       if (t) onText(t);
     }
-    return { ...fb, via: "replicate" };
+    return { ...fb, via: "replicate-backstop" };
   }
 }
 
@@ -178,7 +181,6 @@ Deno.serve(async (req) => {
     } catch (e: any) { console.warn("[ai-agent] log falhou:", e?.message); }
   };
 
-  const anthropic = new Anthropic({ apiKey: anthropicKey });
   const system = await buildSystemPrompt(userClient, selectedModel);
   const enc = new TextEncoder();
 
@@ -197,7 +199,7 @@ Deno.serve(async (req) => {
       let resultText = "";
       let needsReview: any = null;
       for (let round = 0; round < 8; round++) {
-        const final = await agentTurn(anthropic, system, messages);
+        const final = await agentTurn(system, messages);
         messages.push({ role: "assistant", content: final.content });
         {
           const asstText = final.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
@@ -257,7 +259,7 @@ Deno.serve(async (req) => {
 
         // Loop manual de tool-use (cap de 8 rodadas). agentTurn tenta Anthropic e cai pro Replicate.
         for (let round = 0; round < 8; round++) {
-          const final = await agentTurn(anthropic, system, messages, (delta) => sse(controller, enc, { type: "text", delta }));
+          const final = await agentTurn(system, messages, (delta) => sse(controller, enc, { type: "text", delta }));
           messages.push({ role: "assistant", content: final.content });
 
           // Auditoria: texto da resposta + ferramentas chamadas neste round.
