@@ -3,6 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAI } from "../_shared/ai-gateway.ts";
 import { requireAuth } from "../_shared/require-auth.ts";
 import { orImage } from "../_shared/openrouter.ts";
+import { overlayLogo, type LogoPosition } from "../_shared/logo-overlay.ts";
 
 async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
   try {
@@ -439,13 +440,29 @@ serve(async (req) => {
     // ══════ LOAD BRAND (optional — "Sem marca" generates without brand refs) ══════
     let brandInfo: any = null;
     if (brandId) {
-      const { data } = await supabase
+      // service-role (supabaseAdmin) — chamada interna do ai-chat passa a service key; garante ler a
+      // marca (logo_url/style_guide) pro overlay determinístico, sem depender de RLS do authHeader.
+      const { data } = await supabaseAdmin
         .from("brands")
-        .select("name, palette, fonts, visual_tone, do_rules, dont_rules, logo_url, visual_preferences, creation_mode")
+        .select("name, palette, fonts, visual_tone, do_rules, dont_rules, logo_url, visual_preferences, creation_mode, style_guide")
         .eq("id", brandId)
         .single();
       brandInfo = data;
     }
+
+    // ── Config do logo overlay (T02) — resolvida UMA vez, usada no reserve-canto E no overlay ──
+    // watermark_opacity=0 é comum em style_guides legados (era pra watermark de fundo); NÃO pode zerar
+    // o logo do canto → default 1. Posição/tamanho do style_guide com defaults sãos.
+    const SG_LOGO = (brandInfo?.style_guide as any)?.brand_tokens?.logo || {};
+    const VALID_LOGO_POS = ["top-right", "top-left", "bottom-right", "bottom-left", "top-center", "bottom-center"];
+    const logoPosition = (VALID_LOGO_POS.includes(SG_LOGO.preferred_position) ? SG_LOGO.preferred_position : "top-right") as LogoPosition;
+    const logoOpacity = (typeof SG_LOGO.watermark_opacity === "number" && SG_LOGO.watermark_opacity > 0 && SG_LOGO.watermark_opacity <= 1) ? SG_LOGO.watermark_opacity : 1;
+    const logoWidthPct = SG_LOGO.size_hint === "small" ? 0.16 : SG_LOGO.size_hint === "large" ? 0.30 : 0.22;
+    const LOGO_POS_PTBR: Record<string, string> = {
+      "top-right": "o canto superior direito", "top-left": "o canto superior esquerdo",
+      "bottom-right": "o canto inferior direito", "bottom-left": "o canto inferior esquerdo",
+      "top-center": "o topo centralizado", "bottom-center": "a base centralizada",
+    };
     if (!brandId) {
       console.log("[generate-slide-images] No brand — generating without brand references");
     }
@@ -676,6 +693,15 @@ ${brandColorHint}
         promptText += `\n\nPROIBIDO ABSOLUTO — SEM NUMERAÇÃO DE SLIDE: não desenhe número de página, contador ("1/5", "01", "slide 2"), bolinhas/pontos de paginação, barra de progresso, seta nem texto de "próximo/arraste". A posição do slide é indicada pelo app, NUNCA dentro da imagem. Nenhum slide pode ter marcador — todos idênticos nesse aspecto.`;
       }
 
+      // Logo overlay (T02): quando a marca tem logo, NÓS compomos o logo real por cima (canto sup.
+      // direito) — determinístico, idêntico em todo slide. Então pedimos pra IA deixar esse canto LIMPO
+      // (ela desenhava logos inconsistentes ali). O overlay em si acontece no ponto de upload, abaixo.
+      const willOverlayLogo = !!brandInfo?.logo_url && brandInfo?.creation_mode !== "photo_backgrounds";
+      if (willOverlayLogo) {
+        const canto = LOGO_POS_PTBR[logoPosition] || "o canto superior direito";
+        promptText += `\n\nRESERVE ${canto.toUpperCase()}: deixe ${canto} da imagem COMPLETAMENTE LIMPO e vazio (sem texto, sem logo, sem ícone de marca, sem @handle). Esse espaço é reservado para a marca ser aplicada depois.`;
+      }
+
       const refImages = contentParts
         .filter((p: any) => p.type === "image_url")
         .map((p: any) => p.image_url?.url)
@@ -854,13 +880,47 @@ ${brandColorHint}
       });
     }
 
+    // ── Logo overlay determinístico (T02) ──
+    // Compõe brands.logo_url por cima do slide (Satori) → logo idêntico em todos os slides (mata o
+    // logo-drift do carrossel). Só full-design (não bg-only) com logo, fora do modo photo do Maikon.
+    // Normaliza fallback-URL pra base64 antes de compor. Try/catch → slide sem logo se algo falhar.
+    let finalImage: string | null = base64Image;
+    let fallbackUrlPassthrough: string | null = null;
+    if (!finalImage && fallbackImageResult) {
+      if (fallbackImageResult.startsWith("http")) fallbackUrlPassthrough = fallbackImageResult;
+      else finalImage = fallbackImageResult;
+    }
+    const wantLogo = !isBgOnly && !!brandInfo?.logo_url && brandInfo?.creation_mode !== "photo_backgrounds";
+    if (wantLogo) {
+      try {
+        if (!finalImage && fallbackUrlPassthrough) {
+          const b = await fetch(fallbackUrlPassthrough);
+          const buf = new Uint8Array(await b.arrayBuffer());
+          let s = ""; for (let i = 0; i < buf.length; i++) s += String.fromCharCode(buf[i]);
+          finalImage = `data:image/png;base64,${btoa(s)}`;
+          fallbackUrlPassthrough = null;
+        }
+        if (finalImage) {
+          const isLIPost = platform === "linkedin" && contentFormat === "post";
+          const isLIDoc = platform === "linkedin" && contentFormat === "document";
+          const isStory = contentFormat === "story";
+          const [lw, lh] = isLIPost ? [1200, 1200] : isLIDoc ? [1080, 1350] : isStory ? [1080, 1920] : [1080, 1080];
+          finalImage = await overlayLogo(finalImage, brandInfo.logo_url, lw, lh,
+            { position: logoPosition, opacity: logoOpacity, widthPct: logoWidthPct });
+          console.log(`[generate-slide-images] logo overlay aplicado (marca=${brandInfo.name}, pos=${logoPosition}, op=${logoOpacity})`);
+        }
+      } catch (e: any) {
+        console.warn(`[generate-slide-images] logo overlay falhou (${e?.message}) — slide sem logo`);
+      }
+    }
+
     // If fallback returned an HTTP URL directly (not base64), use it as-is
     let imageUrl: string;
-    if (fallbackImageResult && fallbackImageResult.startsWith("http")) {
-      imageUrl = fallbackImageResult;
+    if (fallbackUrlPassthrough) {
+      imageUrl = fallbackUrlPassthrough;
       console.log(`[generate-slide-images] ✅ Using fallback URL directly`);
     } else {
-      imageUrl = await uploadBase64ToStorage(supabaseAdmin, base64Image || fallbackImageResult!, contentId || "draft", slideIndex || 0);
+      imageUrl = await uploadBase64ToStorage(supabaseAdmin, finalImage!, contentId || "draft", slideIndex || 0);
     }
     console.log(`[generate-slide-images] ✅ Slide ${(slideIndex || 0) + 1} background uploaded`);
 
