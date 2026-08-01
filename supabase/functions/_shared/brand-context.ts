@@ -150,6 +150,32 @@ export function buildBrandContext(brand: any): string {
 }
 
 /**
+ * Resumo ENXUTO da marca para o RACIOCÍNIO do agente (ai-agent), NÃO para o prompt de imagem.
+ * O agente não desenha — então paleta/tipografia/posição de logo são ruído aqui. Ele precisa só do
+ * que molda TEXTO e CONVERSA: nome, tom, FAÇA/NÃO FAÇA e nota visual. Assim o agente escreve legenda,
+ * sugere ângulo e fala no tom da marca ativa (o VISUAL já é aplicado pelo app na geração).
+ * Prefere os *_summary do style_guide; cai pros campos legados quando não houver. Retorna "" sem marca.
+ */
+export function buildBrandBrief(brand: any): string {
+  if (!brand) return "";
+  const sg = brand.style_guide && typeof brand.style_guide === "object" ? brand.style_guide : null;
+
+  const ident: string[] = [];
+  if (brand.name) ident.push(`nome "${brand.name}"`);
+  if (brand.visual_tone) ident.push(`tom ${brand.visual_tone}`);
+
+  const doList = (bullets(sg?.do_summary).length ? bullets(sg?.do_summary) : (brand.do_rules ? [String(brand.do_rules)] : []));
+  const dontList = (bullets(sg?.dont_summary).length ? bullets(sg?.dont_summary) : (brand.dont_rules ? [String(brand.dont_rules)] : []));
+
+  let out = `MARCA ATIVA selecionada${ident.length ? ` — ${ident.join(", ")}` : ""}. O app já aplica o VISUAL dela na geração automaticamente; use o tom e as regras abaixo ao escrever legenda, sugerir ângulo e conversar (NÃO passe brandId nas ferramentas).`;
+  if (doList.length) out += `\nFAÇA: ${doList.slice(0, 5).join("; ")}`;
+  if (dontList.length) out += `\nNÃO FAÇA: ${dontList.slice(0, 5).join("; ")}`;
+  const prefs = brand.visual_preferences && typeof brand.visual_preferences === "object" ? brand.visual_preferences : null;
+  if (prefs?.custom_notes) out += `\nNota: ${String(prefs.custom_notes).slice(0, 200)}`;
+  return out;
+}
+
+/**
  * Lê os limites de texto (headline/body) do style_guide para um formato dado.
  * Usado pela VALIDAÇÃO de texto gerado, não pelo prompt de imagem.
  *

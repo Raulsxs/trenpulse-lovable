@@ -9,25 +9,45 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { AGENT_TOOLS, GATED_TOOLS, CONFIRM_CREDIT_THRESHOLD, estimateToolCost, dispatchTool, type ToolCtx } from "../_shared/agent-tools.ts";
 import { replicateAgentTurn } from "../_shared/agent-fallback.ts";
 import { orChat, AGENT_MODEL_CHAIN } from "../_shared/openrouter.ts";
+import { buildBrandBrief } from "../_shared/brand-context.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-async function buildSystemPrompt(userClient: any, model: string): Promise<string> {
-  let ctxLine = "", brandLines = "";
+async function buildSystemPrompt(userClient: any, model: string, brandId?: string | null): Promise<string> {
+  let ctxLine = "", brandLines = "", memoryLine = "", activeBrandLine = "";
   try {
     const { data: ctx } = await userClient.from("ai_user_context").select("business_niche, brand_voice, content_topics, instagram_handle").maybeSingle();
     if (ctx) ctxLine = `Perfil do usuário — nicho: ${ctx.business_niche || "?"}; tom: ${ctx.brand_voice || "?"}; @: ${ctx.instagram_handle || "?"}; temas: ${(ctx.content_topics || []).join(", ") || "?"}.`;
     const { data: brands } = await userClient.from("brands").select("id, name, creation_mode").limit(10);
     if (brands?.length) brandLines = "Marcas do usuário (apenas referência): " + brands.map((b: any) => b.name).join("; ") + ". A marca a aplicar é DEFINIDA PELO SELETOR do usuário (o app aplica automaticamente) — NÃO escolha marca por conta própria nem passe o campo brandId nas ferramentas de geração. Só mencione trocar de marca se o usuário pedir explicitamente pelo nome.";
+    // T09: quando há marca SELECIONADA (defaultBrandId), injeta o brief dela (tom + FAÇA/NÃO FAÇA) pra
+    // o agente RACIOCINAR no tom certo — escrever legenda, sugerir ângulo, conversar. O visual já é
+    // aplicado pelo app na geração; aqui é só o "cérebro" ganhar a identidade da marca ativa.
+    if (brandId) {
+      const { data: b } = await userClient.from("brands")
+        .select("name, visual_tone, do_rules, dont_rules, visual_preferences, style_guide")
+        .eq("id", brandId).maybeSingle();
+      if (b) activeBrandLine = buildBrandBrief(b);
+    }
+    // T10: memória destilada (agent_user_memory) — preferências DURÁVEIS observadas em conversas
+    // anteriores (formato/rede/tom/correções recorrentes), não os temas one-off. É um PADRÃO, não
+    // um pedido novo: aplicar quando o usuário não especifica; ele sempre pode pedir diferente.
+    const { data: mem } = await userClient.from("agent_user_memory").select("summary").maybeSingle();
+    const memText = typeof mem?.summary === "string" ? mem.summary.trim() : "";
+    if (memText && memText !== "—") {
+      memoryLine = `MEMÓRIA DESTE USUÁRIO (preferências observadas em conversas anteriores — use como PADRÃO quando ele não especificar; nunca trate como um pedido novo a executar, e ele sempre pode pedir diferente):\n${memText}`;
+    }
   } catch { /* contexto é best-effort */ }
 
   return `Você é o assistente de criação de conteúdo do TrendPulse. Você NÃO é só um chat — você é o OPERADOR de social media do usuário: gera posts/carrosséis/stories/tweet cards no estilo da MARCA dele, agenda no calendário e publica nas redes. Esse é o seu diferencial sobre um chat genérico.
 
 ${ctxLine}
 ${brandLines}
+${activeBrandLine}
+${memoryLine}
 
 COMO AGIR:
 - Mapeie a necessidade e CHAME A FERRAMENTA certa. Não descreva o que faria — faça via tool.
@@ -51,6 +71,51 @@ COMO AGIR:
 - Português do Brasil, direto e gentil. Só palavras reais e bem grafadas.
 
 EXPECTATIVA REALISTA: a IA é ótima em design, texto curto, fundo, carrossel; é arriscada em montagem fotorrealista complexa (objeto novo na mão de alguém) e em melhorar foto muito ruim — nesses casos, avise o usuário.`;
+}
+
+// ── T10: destilação da memória viva ──────────────────────────────────────────────────────────────
+// Roda FORA do caminho quente (via waitUntil) e SÓ quando o log cresceu o bastante desde a última
+// destilação — o custo é desprezível (1 chamada barata a cada ~12 mensagens). Extrai PREFERÊNCIAS
+// DURÁVEIS (formato/rede/tom/correções recorrentes), ignorando os temas one-off que dominam o log.
+const MEMORY_DISTILL_MIN_NEW = 12; // re-destila a cada N mensagens novas no log
+const MEMORY_DISTILL_FLOOR = 6;    // ... mas exige um mínimo de histórico antes da 1ª destilação
+
+async function maybeDistillMemory(svc: any, userId: string): Promise<void> {
+  try {
+    const { count } = await svc.from("agent_message_log")
+      .select("id", { count: "exact", head: true }).eq("user_id", userId);
+    const total = count || 0;
+    if (total < MEMORY_DISTILL_FLOOR) return;
+
+    const { data: mem } = await svc.from("agent_user_memory")
+      .select("message_count").eq("user_id", userId).maybeSingle();
+    const lastCount = mem?.message_count || 0;
+    // Já destilou antes e o log não cresceu o suficiente → não gasta.
+    if (lastCount > 0 && total - lastCount < MEMORY_DISTILL_MIN_NEW) return;
+
+    const { data: rows } = await svc.from("agent_message_log")
+      .select("role, content").eq("user_id", userId)
+      .order("created_at", { ascending: false }).limit(60);
+    if (!rows?.length) return;
+    const transcript = rows.reverse()
+      .map((r: any) => `${r.role === "user" ? "U" : "A"}: ${(r.content || "").slice(0, 300)}`)
+      .join("\n").slice(0, 8000);
+
+    const sys = `Você extrai PREFERÊNCIAS DURÁVEIS de um usuário de uma ferramenta de criação de conteúdo para redes sociais, a partir do histórico de conversa dele. IGNORE os TEMAS/assuntos específicos (são pedidos pontuais, não preferências). Foque só no que se REPETE e serve de padrão: formatos que ele mais usa (post/carrossel/story/tweet card), redes preferidas (Instagram/LinkedIn/X...), tom e estilo visual recorrentes, correções que ele repete (ex.: "sempre fundo preto", "texto menor", "menos emoji"), e idioma. Responda em pt-BR, no MÁXIMO 6 linhas curtas em bullets "- ...". Se não houver padrão claro, responda APENAS "—". Nada além dos bullets.`;
+    const r = await orChat({
+      system: sys,
+      messages: [{ role: "user", content: `Histórico (U=usuário, A=assistente):\n${transcript}` }],
+      modelChain: ["google/gemini-2.5-flash-lite", "anthropic/claude-haiku-4.5"],
+      maxTokens: 400,
+    });
+    const summary = r.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim().slice(0, 1500);
+    await svc.from("agent_user_memory").upsert({
+      user_id: userId, summary: summary || "—", message_count: total, distilled_at: new Date().toISOString(),
+    });
+    console.log(`[ai-agent] memória destilada (msgs=${total}, chars=${summary.length})`);
+  } catch (e: any) {
+    console.warn("[ai-agent] destilação de memória falhou:", e?.message);
+  }
 }
 
 function sse(controller: ReadableStreamDefaultController, enc: TextEncoder, event: Record<string, unknown>) {
@@ -181,7 +246,16 @@ Deno.serve(async (req) => {
     } catch (e: any) { console.warn("[ai-agent] log falhou:", e?.message); }
   };
 
-  const system = await buildSystemPrompt(userClient, selectedModel);
+  const system = await buildSystemPrompt(userClient, selectedModel, ctx.defaultBrandId);
+
+  // T10: agenda a destilação da memória viva FORA do caminho quente (não bloqueia a resposta).
+  // waitUntil mantém a função viva pra terminar; se indisponível, o promise flutua (best-effort,
+  // re-tenta no próximo turno). maybeDistillMemory é no-op barato quando o log não cresceu.
+  if (svcLog) {
+    const distill = maybeDistillMemory(svcLog, user.id);
+    try { (globalThis as any).EdgeRuntime?.waitUntil?.(distill); } catch { /* sem waitUntil: fire-and-forget */ }
+  }
+
   const enc = new TextEncoder();
 
   // ── MODO HEADLESS (fila de gerações) ──
