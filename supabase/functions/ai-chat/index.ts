@@ -4,6 +4,7 @@ import { fetchAI } from "../_shared/ai-gateway.ts";
 import { buildBrandContext, brandTextLimits } from "../_shared/brand-context.ts";
 import { parseLlmJson } from "../_shared/llm-json.ts";
 import { clampSlides, normalizeHashtags, enforceTweetLimit, truncateToChars } from "../_shared/content-validators.ts";
+import { orChat } from "../_shared/openrouter.ts";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TrendPulse AI Chat — Simplified (~1500 lines)
@@ -1367,21 +1368,24 @@ Responda em JSON:
         // Tenta gerar a estrutura. minimax (reasoning) às vezes devolve texto sem JSON, e sob
         // rajada estoura rate-limit (429). Defesa: resposta CURTA (max_tokens baixo → rápido e
         // determinístico) + 3 tentativas com backoff crescente (mata o 429 transitório).
+        // T04: estrutura do carrossel via OpenRouter (Claude Haiku → Gemini Flash). O minimax
+        // (inference.sh) gerava copy de slide QUEBRADA/emendada (ex.: "consultar quando alguém
+        // perguntar qual IA Compartilhe com líderes") e está 402/sem saldo. Haiku dá coerência pt-BR.
         const runStructure = async (extraInstruction = ""): Promise<void> => {
-          const structResp = await aiGatewayFetch({
-            model: "openrouter/minimax-m-25",
+          const r = await orChat({
+            system: "Você é um estrategista de conteúdo especialista em carrosséis virais. Responda SOMENTE com o objeto JSON pedido — sem texto, raciocínio ou markdown antes ou depois. Cada campo de texto deve ser uma frase COMPLETA e coerente em português do Brasil.",
             messages: [{ role: "user", content: structurePrompt + extraInstruction }],
-            max_tokens: 2048,      // JSON de carrossel cabe folgado; evita o minimax "pensar" 64k tokens
-            temperature: 0.5,
+            modelChain: ["anthropic/claude-haiku-4.5", "google/gemini-2.5-flash"],
+            maxTokens: 2048,
           });
-          if (!structResp.ok) return;
-          const structData = await structResp.json();
-          const raw = structData.choices?.[0]?.message?.content || "";
+          const raw = r.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
           const jsonStr = extractJsonObject(raw);
           if (jsonStr) {
             const parsed = JSON.parse(jsonStr);
             carouselTitle = parsed.title || carouselTitle;
-            slides = parsed.slides || [];
+            // Validação (T04): só slides com headline não-vazia; descarta objeto malformado antes de renderizar.
+            slides = (Array.isArray(parsed.slides) ? parsed.slides : [])
+              .filter((s: any) => s && typeof s.headline === "string" && s.headline.trim().length > 0);
           }
         };
 
@@ -1511,7 +1515,14 @@ Responda APENAS com a imagem gerada.`;
 
         const slideResultsPromise = (async () => {
           if (useAnchor) {
-            const cover = await genSlide(slides[0], 0);              // capa primeiro
+            let cover = await genSlide(slides[0], 0);                // capa primeiro
+            // A capa é a ÂNCORA de estilo de TODOS os slides. Se ela falha, o resto vai SEM âncora e
+            // diverge (foi o que quebrou o slide 2 do carrossel do Raul). Re-tenta a capa 1x antes de
+            // seguir — barato e evita o carrossel inteiro sair inconsistente por uma falha na capa.
+            if (!cover.slideImageUrl) {
+              console.warn(`[ai-chat] GENERATE_CAROUSEL: capa (âncora) falhou — re-tentando 1x antes dos demais slides`);
+              cover = await genSlide(slides[0], 0);
+            }
             if (cover.slideImageUrl) anchorRef.push(cover.slideImageUrl); // vira âncora
             const rest = await Promise.all(slides.slice(1).map((s: any, idx: number) => genSlide(s, idx + 1)));
             return [cover, ...rest];
