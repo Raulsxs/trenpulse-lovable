@@ -9,6 +9,7 @@
 
 import React from "https://esm.sh/react@18.2.0";
 import { ImageResponse } from "https://deno.land/x/og_edge@0.0.4/mod.ts";
+import { Image } from "https://deno.land/x/imagescript@1.2.15/mod.ts";
 
 export type LogoPosition =
   | "top-right" | "top-left" | "bottom-right" | "bottom-left" | "top-center" | "bottom-center";
@@ -19,15 +20,52 @@ export interface LogoConfig {
   widthPct?: number;     // largura da caixa do logo em % da largura da imagem (default 0.22)
 }
 
-// Baixa uma imagem pública e devolve data-URI base64 (mesmo helper do render-slide-image).
-async function toDataUri(url: string): Promise<string> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`logo fetch ${res.status}`);
-  const buf = new Uint8Array(await res.arrayBuffer());
-  const mime = res.headers.get("content-type") || "image/png";
+function bytesToDataUri(buf: Uint8Array, mime = "image/png"): string {
   let bin = "";
   for (let i = 0; i < buf.length; i++) bin += String.fromCharCode(buf[i]);
   return `data:${mime};base64,${btoa(bin)}`;
+}
+
+// Chroma-key: muitos logos vêm como "logo sobre card colorido" (o Pulse ID é branco/cyan sobre navy
+// sólido opaco) → sobrepostos, aparecem numa caixa "colada". Se os cantos forem OPACOS e uniformes,
+// removemos essa cor de fundo (alpha 0) num passo único sobre o bitmap. Se os cantos já são
+// transparentes, devolve como está (não mexe em logo que já tem fundo transparente).
+// Tolerância baixa (70 na soma dos diffs RGB) pega o fundo + antialiasing sem tocar no logo em si.
+async function stripBackground(buf: Uint8Array): Promise<Uint8Array> {
+  try {
+    const img = await Image.decode(buf);
+    const bmp = img.bitmap; // Uint8ClampedArray RGBA (w*h*4)
+    if (bmp.length < 16) return buf;
+    // Cor de fundo = pixel do canto superior esquerdo; se já transparente, não mexe.
+    const br = bmp[0], bg = bmp[1], bb = bmp[2], ba = bmp[3];
+    if (ba < 200) return buf;
+    const TOL = 70;
+    let lumSum = 0, lumN = 0;
+    for (let i = 0; i < bmp.length; i += 4) {
+      if (Math.abs(bmp[i] - br) + Math.abs(bmp[i + 1] - bg) + Math.abs(bmp[i + 2] - bb) < TOL) {
+        bmp[i + 3] = 0;
+      } else {
+        lumSum += 0.299 * bmp[i] + 0.587 * bmp[i + 1] + 0.114 * bmp[i + 2];
+        lumN++;
+      }
+    }
+    // Guard: se o LOGO restante for muito CLARO (ex.: branco/cyan sobre navy), removê-lo o deixaria
+    // invisível num slide de fundo claro → melhor devolver o original (card visível) do que um logo
+    // fantasma. Só entrega o strip quando o logo tem contraste próprio (some limpo no fundo claro).
+    if (lumN > 0 && lumSum / lumN > 175) return buf;
+    return await img.encode();
+  } catch {
+    return buf; // qualquer falha de decode/encode → usa o logo original
+  }
+}
+
+// Baixa o logo, remove fundo sólido opaco (se houver) e devolve data-URI base64.
+async function fetchLogoDataUri(url: string): Promise<string> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`logo fetch ${res.status}`);
+  const raw = new Uint8Array(await res.arrayBuffer());
+  const stripped = await stripBackground(raw);
+  return bytesToDataUri(stripped, "image/png");
 }
 
 // Mapeia a posição -> âncoras absolutas + alinhamento do objectPosition (pra colar no canto certo).
@@ -47,7 +85,7 @@ function cornerStyle(pos: LogoPosition, margin: number): Record<string, unknown>
 export async function overlayLogo(
   baseDataUrl: string, logoUrl: string, w: number, h: number, cfg?: LogoConfig,
 ): Promise<string> {
-  const logoDataUri = await toDataUri(logoUrl);
+  const logoDataUri = await fetchLogoDataUri(logoUrl);
   const position = cfg?.position || "top-right";
   const opacity = typeof cfg?.opacity === "number" ? cfg.opacity : 1;
   const boxW = Math.round(w * (cfg?.widthPct || 0.22));
