@@ -263,7 +263,13 @@ export async function orImage(opts: {
 
   const run = async (withRefs: boolean) => {
     const body: any = { model, prompt: opts.prompt, aspect_ratio: ar };
-    if (opts.resolution) body.resolution = opts.resolution;
+    // T05 — Resolução 2K nos modelos que SUPORTAM `resolution` (Nano Banana Pro / Seedream / FLUX) e
+    // são rápidos → mais nitidez sem risco de timeout. Ganho maior em vertical (story em tela cheia).
+    // gpt-image-2 NÃO tem `resolution` (só `quality`, e "high" arriscaria o 504 do carrossel) → default.
+    // gemini-2.5-flash não expõe nenhum dos dois. Aspect 4:5/9:16 é onde 2K rende mais.
+    if (/gemini-3-pro-image|gemini-3\.1-flash-image|seedream|flux/.test(model)) {
+      body.resolution = opts.resolution || "2K";
+    }
     if (withRefs && refs.length) body.input_references = refs.slice(0, 14).map((url) => ({ type: "image_url", image_url: { url } }));
     const res = await fetch(OR_IMAGES_URL, { method: "POST", headers, body: JSON.stringify(body) });
     const raw = await res.text();
