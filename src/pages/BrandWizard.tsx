@@ -269,6 +269,7 @@ export default function BrandWizard() {
                     <input type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
                   </label>
                 </div>
+                <p className="text-xs text-muted-foreground">O logo é aplicado automaticamente em todo post e slide. Melhor resultado: PNG com fundo transparente e marcas escuras/coloridas (logos claros somem em fundo claro).</p>
               </div>
               <div className="flex justify-end pt-4">
                 <Button onClick={handleCreateBrand} disabled={!formData.name || createBrand.isPending}>

@@ -224,7 +224,7 @@ export default function BrandEdit() {
                       )}
                     </div>
                   </div>
-                  <p className="text-xs text-muted-foreground">PNG/JPG, fundo transparente recomendado. Máx ~5MB.</p>
+                  <p className="text-xs text-muted-foreground">O logo é aplicado automaticamente em todo post e slide do carrossel. Para o melhor resultado, use um <strong>PNG com fundo transparente e marcas escuras ou coloridas</strong> (logos claros somem em fundo claro). Máx ~5MB.</p>
                 </div>
 
                 <div className="space-y-2">
