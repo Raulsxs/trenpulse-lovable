@@ -699,7 +699,7 @@ ${brandColorHint}
       const willOverlayLogo = !!brandInfo?.logo_url && brandInfo?.creation_mode !== "photo_backgrounds";
       if (willOverlayLogo) {
         const canto = LOGO_POS_PTBR[logoPosition] || "o canto superior direito";
-        promptText += `\n\nRESERVE ${canto.toUpperCase()}: deixe ${canto} da imagem COMPLETAMENTE LIMPO e vazio (sem texto, sem logo, sem ícone de marca, sem @handle). Esse espaço é reservado para a marca ser aplicada depois.`;
+        promptText += `\n\n⚠️ ÁREA RESERVADA DA MARCA — ${canto.toUpperCase()}: uma faixa de ~28% da largura por ~16% da altura em ${canto} é EXCLUSIVA da marca (o logo é aplicado ali depois). NÃO coloque NADA nessa área: nenhum texto, título, bullet, ícone, número, forma ou ilustração. Empurre TODO o conteúdo (inclusive o último bullet) para FORA dessa faixa. Deixe ${canto} totalmente vazio.`;
       }
 
       const refImages = contentParts

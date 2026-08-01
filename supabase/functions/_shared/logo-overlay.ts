@@ -88,9 +88,9 @@ export async function overlayLogo(
   const logoDataUri = await fetchLogoDataUri(logoUrl);
   const position = cfg?.position || "top-right";
   const opacity = typeof cfg?.opacity === "number" ? cfg.opacity : 1;
-  const boxW = Math.round(w * (cfg?.widthPct || 0.22));
-  const boxH = Math.round(h * 0.12);
-  const margin = Math.round(w * 0.04);
+  const boxW = Math.round(w * (cfg?.widthPct || 0.18));
+  const boxH = Math.round(h * 0.10);
+  const margin = Math.round(w * 0.035);
 
   const base = React.createElement("img", {
     src: baseDataUrl, width: w, height: h,
