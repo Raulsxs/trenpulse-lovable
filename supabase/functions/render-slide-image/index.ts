@@ -624,9 +624,16 @@ function sanitizeForFont(text: string): string {
 type TweetProfile = { name?: string; handle?: string; avatar_url?: string; verified?: boolean };
 
 // Corpo do tweet com formatação rica: **negrito** vira InterBold; linhas iniciadas por → / - / •
-// viram bullets com seta azul. Cada palavra é um span (flex-wrap) pra o texto quebrar naturalmente
-// mantendo pesos mistos — padrão do Satori pra texto inline com estilos diferentes.
-function tweetRichBody(text: string, fontSize: number) {
+// viram bullets com seta azul. Cada palavra é um flex-item (pra manter pesos mistos Inter/InterBold
+// numa mesma linha), e a linha usa flex-wrap pra quebrar naturalmente.
+//
+// ⚠️ BUG HISTÓRICO (corrigido aqui): as rows usavam width:"100%". O Satori resolve mal % quando a row
+// tem muitos flex-items de pesos mistos → depois de 1-2 linhas a largura "colapsava" e cada palavra
+// caía numa linha só (escadinha). Fix: LARGURA EM PIXEL EXPLÍCITA (contentW) na row e no container.
+// Além disso, o espaço entre palavras agora é marginRight (antes era um token " " com whiteSpace:pre,
+// que deixava espaços soltos no INÍCIO das linhas quebradas).
+function tweetRichBody(text: string, fontSize: number, contentW: number) {
+  const spaceGap = Math.round(fontSize * 0.26); // largura aproximada de um espaço, como margem
   const lines = (text || "").split(/\n/);
   const lineEls = lines.map((rawLine, li) => {
     const isBullet = /^\s*(→|-|•|\*)\s+/.test(rawLine);
@@ -636,10 +643,11 @@ function tweetRichBody(text: string, fontSize: number) {
     for (const seg of segs) {
       const bold = /^\*\*[^*]+\*\*$/.test(seg);
       const t = bold ? seg.slice(2, -2) : seg.replace(/\*\*/g, "");
-      for (const tok of t.split(/(\s+)/)) {
+      for (const tok of t.split(/\s+/)) {
         if (tok === "") continue;
         words.push(React.createElement("div", {
-          style: { display: "flex", whiteSpace: "pre" as any, lineHeight: 1.42,
+          // marginRight = espaço; sem whiteSpace:pre → nada de espaço solto ao quebrar a linha.
+          style: { display: "flex", marginRight: spaceGap, lineHeight: 1.42,
             fontFamily: bold ? "InterBold" : "Inter", fontWeight: bold ? 700 : 400 },
         }, tok));
       }
@@ -652,13 +660,13 @@ function tweetRichBody(text: string, fontSize: number) {
     }));
     row.push(...words);
     return React.createElement("div", {
-      // width 100% força cada linha a virar um bloco próprio (senão as linhas fluem juntas no Satori).
+      // largura EM PIXEL (não "100%") — é o que faz o flex-wrap medir certo no Satori.
       style: { display: "flex", flexDirection: "row", flexWrap: "wrap" as any, alignItems: "flex-start",
-        width: "100%", marginTop: li === 0 ? 0 : (isBullet ? 18 : 10) },
+        width: contentW, marginTop: li === 0 ? 0 : (isBullet ? 18 : 10) },
     }, ...row);
   });
   return React.createElement("div", {
-    style: { display: "flex", flexDirection: "column", fontSize, color: "#0f1419" },
+    style: { display: "flex", flexDirection: "column", width: contentW, fontSize, color: "#0f1419" },
   }, ...lineEls);
 }
 
@@ -701,9 +709,11 @@ function buildTweetCardElement(
   const whoCol = React.createElement("div", { style: { display: "flex", flexDirection: "column" } }, nameRow, handleEl);
   const header = React.createElement("div", { style: { display: "flex", flexDirection: "row", alignItems: "center", gap: 24, flexWrap: "nowrap" } }, avatarEl, whoCol);
 
+  // Largura de conteúdo do card = largura total − padding (72*2). É o que o texto tem pra quebrar.
+  const contentW = w - 144;
   const body = React.createElement("div", {
     style: { display: "flex", flexDirection: "column", marginTop: 40, flexGrow: imageDataUri ? 0 : 1 },
-  }, tweetRichBody(text, fontSize));
+  }, tweetRichBody(text, fontSize, contentW));
 
   // Imagem enviada pelo usuário (não gerada) — vive DENTRO do card, estilo tweet com mídia.
   const imageEl = imageDataUri
