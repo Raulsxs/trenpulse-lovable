@@ -613,7 +613,20 @@ Responda SOMENTE JSON: {"title":"título curto interno","caption":"a legenda com
     case "editar_imagem": {
       // O LLM não conhece a URL da foto anexada — cai pra ctx.pendingImageUrls (queixa do Felipe:
       // "não identifica imagem anexada"). Antes exigia input.foto_url, que o modelo não tinha como preencher.
-      const foto = input.foto_url || (ctx.pendingImageUrls || []).find((u) => typeof u === "string" && u.startsWith("http"));
+      let foto = input.foto_url || (ctx.pendingImageUrls || []).find((u) => typeof u === "string" && u.startsWith("http"));
+      // Gap 2: sem anexo NOVO nesta mensagem → é edição EM SEQUÊNCIA ("agora tira o texto", "deixa limpa").
+      // Antes isso errava "anexe a foto de novo" mesmo a imagem tendo acabado de ser gerada. Agora cai
+      // pra ÚLTIMA imagem gerada do usuário, encadeando as edições.
+      if (!foto) {
+        const { data: recent } = await ctx.userClient
+          .from("generated_contents")
+          .select("image_urls, slides")
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        const arr = Array.isArray(recent?.image_urls) ? recent.image_urls.filter((u: any) => typeof u === "string" && u) : [];
+        foto = arr[0] || (Array.isArray(recent?.slides) && (recent.slides[0]?.image_url || recent.slides[0]?.background_image_url)) || undefined;
+      }
       if (!foto) return { ok: false, content: "Nenhuma foto anexada nesta mensagem. Peça ao usuário para anexar a foto (📎) e tente de novo." };
       return genResult(await callAiChat(ctx, { message: input.instrucao, intent_hint: "GENERATE", format: "post", brandId, model, imageUrls: [foto], replicateRef: true }), "Imagem editada");
     }

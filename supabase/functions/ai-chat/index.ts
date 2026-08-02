@@ -191,6 +191,32 @@ async function extractArticleContent(rawUrl: string, tag: string): Promise<strin
   }
 }
 
+// Gap 1 (recuperação de link bloqueado): quando NENHUM scraper lê a página (sites médicos bloqueiam),
+// em vez de dar loop pedindo o texto, extrai um TEMA legível do slug da URL (que carrega o assunto real,
+// ex.: ".../ice-water-drowning-survival-after-147-minute-submersion/" → "ice water drowning survival
+// after 147 minute submersion"). O chamador gera conteúdo educativo GERAL sobre esse tema (sem inventar
+// dados do artigo) e avisa o usuário. Retorna "" quando o slug é pobre (id/genérico) — aí pede o texto.
+function topicFromUrl(rawUrl: string): string {
+  try {
+    const u = new URL(unwrapUrl(rawUrl));
+    const segs = u.pathname.split("/").map((s) => s.trim()).filter(Boolean);
+    const GENERIC = /^(article|articles|article-video|news|post|posts|episode|episodes|blog|p|amp|index|home|en|pt|pt-br|br|topics?|video|videos|jans|viewarticle|pulse)$/i;
+    let best = "";
+    for (const s of segs) {
+      const clean = s.replace(/\.(html?|php|aspx?)$/i, "");
+      if (GENERIC.test(clean)) continue;
+      const words = clean.replace(/[-_]+/g, " ").replace(/\s+/g, " ").trim();
+      const letters = words.replace(/[^a-zA-ZÀ-ÿ]/g, "").length;
+      const wordCount = words.split(" ").filter((w) => w.length > 1).length;
+      // precisa PARECER título: >=3 palavras, letra o bastante (não é só id/hash/número)
+      if (wordCount >= 3 && letters >= 12 && words.length > best.length) best = words;
+    }
+    return best.slice(0, 160);
+  } catch {
+    return "";
+  }
+}
+
 // Strong safe-area rules to prevent text being cropped at edges.
 // Linguagem que um modelo de difusão obedece: % relativo (não px — ele não tem régua),
 // teto de LARGURA DE LINHA (é o que faz a letra da ponta sangrar) e regra de quebra de linha.
@@ -688,6 +714,8 @@ Mensagem: "${message}"`;
 
     // ── Process intent-specific actions ──
     let replyOverride: string | null = null;
+    // Gap 1: nota de transparência quando geramos a partir do TEMA do slug (link não pôde ser lido).
+    let linkFallbackNote = "";
     let quickReplies: string[] | null = null;
     let brandCreationStepResponse: number | null = null;
 
@@ -803,11 +831,18 @@ Mensagem: "${message}"`;
         if (urlMatch) {
           articleContent = await extractArticleContent(urlMatch[0], "GENERATE");
         }
-        // Guard anti-invenção: se o link É o tema mas não conseguimos LER a página, NÃO inventamos
-        // um assunto (um artigo de "Bentall" virou "ponte de safena"). Pede o texto em vez de chutar.
+        // Guard anti-invenção + recuperação (Gap 1): link É o tema mas a página é ilegível. Antes
+        // travava pedindo o texto (loop do Maikon). Agora tenta o TEMA do slug: se ele for legível,
+        // gera conteúdo educativo GERAL sobre o assunto (sem inventar dados do artigo) e avisa; só pede
+        // o texto quando o slug é pobre (id/genérico), aí NÃO chuta.
+        let linkTopic = "";
         if (urlMatch && !articleContent && message.replace(/https?:\/\/\S+/g, "").trim().length < 15) {
-          replyOverride = "Não consegui puxar o conteúdo desse link automaticamente agora. Me manda o **texto** (copia e cola) ou um **print do artigo** que eu crio o conteúdo certo na hora, sem chutar. 🙏";
-          break;
+          linkTopic = topicFromUrl(urlMatch[0]);
+          if (!linkTopic) {
+            replyOverride = "Não consegui puxar o conteúdo desse link automaticamente agora. Me manda o **texto** (copia e cola) ou um **print do artigo** que eu crio o conteúdo certo na hora, sem chutar. 🙏";
+            break;
+          }
+          linkFallbackNote = "⚠️ Não consegui abrir o link (o site bloqueia leitura automática), então criei com base no **tema** do artigo, em termos gerais. Se quiser os números e dados exatos, cola o texto que eu refaço fiel.";
         }
 
         // 4. Get content dimensions
@@ -816,7 +851,9 @@ Mensagem: "${message}"`;
         // 5. Build image prompt — include FORMATO OBRIGATÓRIO so inference.sh generates correct aspect ratio
         // subject = mensagem sem o boilerplate do atalho ("Crie um post sobre: X" → "X"), senão a
         // instrução vaza pro prompt e o modelo renderiza o texto da instrução na imagem.
-        const subject = stripGenerationBoilerplate(message);
+        // linkTopic (Gap 1) manda quando o link não pôde ser lido: o brief "A2" abaixo transforma o
+        // tema em manchete+pontos GERAIS (não inventa dados do artigo).
+        const subject = linkTopic || stripGenerationBoilerplate(message);
         let userTopic = articleContent
           ? `Baseado neste artigo: ${articleContent.substring(0, 2000)}`
           : subject;
@@ -1307,16 +1344,22 @@ Responda APENAS em JSON:
         if (urlMatch) {
           articleContent = await extractArticleContent(urlMatch[0], "GENERATE_CAROUSEL");
         }
-        // Guard anti-invenção (mesmo motivo do GENERATE): link como tema + página ilegível → pede o texto.
+        // Guard anti-invenção + recuperação (Gap 1): link ilegível → tenta o TEMA do slug (gera geral,
+        // sem inventar dados do artigo) e avisa; só pede o texto quando o slug é pobre.
+        let linkTopic = "";
         if (urlMatch && !articleContent && message.replace(/https?:\/\/\S+/g, "").trim().length < 15) {
-          replyOverride = "Não consegui ler esse link — o site deve exigir login ou bloquear leitura automática (comum em artigos médicos ou com vídeo). Me manda o **texto** ou um **resumo do assunto** e eu crio o carrossel certo, sem chutar. 🙏";
-          break;
+          linkTopic = topicFromUrl(urlMatch[0]);
+          if (!linkTopic) {
+            replyOverride = "Não consegui ler esse link — o site deve exigir login ou bloquear leitura automática (comum em artigos médicos ou com vídeo). Me manda o **texto** ou um **resumo do assunto** e eu crio o carrossel certo, sem chutar. 🙏";
+            break;
+          }
+          linkFallbackNote = "⚠️ Não consegui abrir o link (o site bloqueia leitura automática), então montei o carrossel com base no **tema** do artigo, em termos gerais. Se quiser os números e dados exatos, cola o texto que eu refaço fiel.";
         }
 
         // 4. Generate slide structure with minimax
         // subject = mensagem SEM o boilerplate do atalho ("Crie um carrossel... sobre: X" → "X").
         // Sem isso, a instrução vira o TEMA e vaza pros slides/título/legenda.
-        const subject = stripGenerationBoilerplate(message);
+        const subject = linkTopic || stripGenerationBoilerplate(message);
         const userTopic = articleContent
           ? `Baseado neste artigo: ${articleContent.substring(0, 2000)}`
           : subject;
@@ -1337,6 +1380,7 @@ Responda APENAS em JSON:
 
 TEMA: ${userTopic}
 ${articleContent ? `FOCO OBRIGATÓRIO — NÃO GENERALIZE: o carrossel é EXATAMENTE sobre o assunto específico do artigo acima (a técnica, procedimento ou caso concreto que ele descreve), NUNCA sobre a área ampla. Ex.: se o artigo trata de "reparo de Tetralogia de Fallot com atresia pulmonar via válvula RAA", o tema é ISSO — jamais "cardiopatias congênitas" em geral. Use no título e nos slides os termos técnicos específicos do artigo (traduzidos para pt-BR), não abstrações do campo.` : ""}
+${linkTopic ? `IMPORTANTE: você NÃO leu o artigo original (o link ficou inacessível) — escreva conteúdo educativo GERAL, correto e útil sobre este tema, SEM inventar estatísticas, percentuais, datas ou citações específicas como se viessem do artigo.` : ""}
 ${userCtx?.business_niche ? `NICHO DO AUTOR: ${userCtx.business_niche} — use só como pano de fundo do tom, NUNCA para desviar o tema do assunto específico acima.` : ""}
 ${userCtx?.brand_voice ? `TOM DE VOZ DA MARCA: ${userCtx.brand_voice} — escreva o texto dos slides nessa voz.` : ""}
 ${Array.isArray(userCtx?.content_topics) && userCtx.content_topics.length ? `TEMAS RECORRENTES DO AUTOR: ${userCtx.content_topics.join(", ")} — use como contexto de fundo.` : ""}
@@ -1736,11 +1780,24 @@ Responda APENAS em JSON:
         const urlMatch = message.match(/https?:\/\/[^\s]+/);
         const docMatch = message.match(/"""\s*([\s\S]*?)\s*"""/);
         let sourceContent = "";
+        let tweetTopicOnly = false; // Gap 1: true quando a thread vem do TEMA do slug (link ilegível)
         if (docMatch && docMatch[1].trim().length > 40) {
           sourceContent = docMatch[1].trim(); // PDF/DOCX/TXT briefing
         } else if (urlMatch) {
           const article = await extractArticleContent(urlMatch[0], "GENERATE_TWEET_CARD");
-          sourceContent = article || message;
+          if (article) {
+            sourceContent = article;
+          } else {
+            // Gap 1: link ilegível → usa o TEMA do slug (não a URL crua, que virava thread chutada) e avisa.
+            const t = topicFromUrl(urlMatch[0]);
+            if (t) {
+              sourceContent = t;
+              tweetTopicOnly = true;
+              linkFallbackNote = "⚠️ Não consegui abrir o link (o site bloqueia leitura automática), então montei a thread com base no **tema** do artigo, em termos gerais. Se quiser os dados exatos, cola o texto que eu refaço fiel.";
+            } else {
+              sourceContent = message;
+            }
+          }
         } else {
           sourceContent = message;
         }
@@ -1767,6 +1824,7 @@ Responda APENAS em JSON:
 A partir do conteúdo abaixo, escreva uma THREAD de 4 a 7 tweets curtos — cada um vira um card independente de carrossel.
 
 CONTEÚDO: ${sourceContent}
+${tweetTopicOnly ? "IMPORTANTE: o CONTEÚDO acima é apenas o TEMA (não li o artigo original) — escreva a thread de forma educativa e geral sobre o assunto, SEM inventar estatísticas, percentuais ou citações específicas como se fossem do artigo." : ""}
 ${userCtx?.brand_voice ? `TOM DE VOZ: ${userCtx.brand_voice}` : ""}
 ${userCtx?.business_niche ? `NICHO DO AUTOR: ${userCtx.business_niche}` : ""}
 
@@ -3018,7 +3076,8 @@ Mensagem: "${message}"` }],
     let reply: string;
 
     if (replyOverride) {
-      reply = replyOverride;
+      // Gap 1: prefixa a nota de transparência (link ilegível → gerado do tema) quando houver.
+      reply = linkFallbackNote ? `${linkFallbackNote}\n\n${replyOverride}` : replyOverride;
     } else {
       const aiMessages = [
         { role: "system", content: systemPrompt },
