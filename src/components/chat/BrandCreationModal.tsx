@@ -281,6 +281,28 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
               </div>
             </div>
 
+            {/* Logo — visível no passo principal (não escondido no avançado): é o que garante marca
+                consistente em todo post/slide via overlay determinístico. */}
+            <div className="space-y-1.5">
+              <Label className="text-sm">Logo <span className="font-normal text-muted-foreground">(opcional)</span></Label>
+              <div className="flex items-center gap-3">
+                {formData.logo_url ? (
+                  <img src={formData.logo_url} alt="Logo" className="w-12 h-12 object-contain rounded-lg border border-border bg-muted/30" />
+                ) : (
+                  <div className="w-12 h-12 rounded-lg border-2 border-dashed border-border flex items-center justify-center">
+                    <ImageIcon className="w-5 h-5 text-muted-foreground" />
+                  </div>
+                )}
+                <label className="cursor-pointer">
+                  <Button type="button" variant="outline" size="sm" asChild disabled={uploadingLogo}>
+                    <span>{uploadingLogo ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Upload className="w-3.5 h-3.5 mr-1" />}{formData.logo_url ? "Trocar logo" : "Enviar logo"}</span>
+                  </Button>
+                  <input type="file" accept="image/png,image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); e.target.value = ""; }} />
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground">Recomendamos <strong>PNG com fundo transparente</strong> (marcas escuras ou coloridas). O logo é aplicado automaticamente em todo post e slide.</p>
+            </div>
+
             {/* Avançado — progressive disclosure: fica fora do caminho de quem só quer o básico */}
             <div className="border-t border-border/60 pt-2">
               <button onClick={() => setAdvanced((a) => !a)} className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground">
@@ -289,24 +311,6 @@ export default function BrandCreationModal({ open, onOpenChange, onCreated }: Pr
               </button>
               {advanced && (
                 <div className="space-y-3 pt-3">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">Logo (opcional)</Label>
-                    <div className="flex items-center gap-3">
-                      {formData.logo_url ? (
-                        <img src={formData.logo_url} alt="" className="w-12 h-12 object-contain rounded-lg border border-border" />
-                      ) : (
-                        <div className="w-12 h-12 rounded-lg border-2 border-dashed border-border flex items-center justify-center">
-                          <ImageIcon className="w-5 h-5 text-muted-foreground" />
-                        </div>
-                      )}
-                      <label className="cursor-pointer">
-                        <Button type="button" variant="outline" size="sm" asChild disabled={uploadingLogo}>
-                          <span>{uploadingLogo ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Upload className="w-3.5 h-3.5 mr-1" />}Enviar</span>
-                        </Button>
-                        <input type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleLogoUpload(f); e.target.value = ""; }} />
-                      </label>
-                    </div>
-                  </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Fonte títulos</Label>
