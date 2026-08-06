@@ -699,7 +699,7 @@ ${brandColorHint}
       const willOverlayLogo = !!brandInfo?.logo_url && brandInfo?.creation_mode !== "photo_backgrounds";
       if (willOverlayLogo) {
         const canto = LOGO_POS_PTBR[logoPosition] || "o canto superior direito";
-        promptText += `\n\n⚠️ ÁREA RESERVADA DA MARCA — ${canto.toUpperCase()}: uma faixa de ~28% da largura por ~16% da altura em ${canto} é EXCLUSIVA da marca (o logo é aplicado ali depois). NÃO coloque NADA nessa área: nenhum texto, título, bullet, ícone, número, forma ou ilustração. Empurre TODO o conteúdo (inclusive o último bullet) para FORA dessa faixa. Deixe ${canto} totalmente vazio.`;
+        promptText += `\n\n⚠️ ÁREA RESERVADA DA MARCA — ${canto.toUpperCase()}: uma faixa de ~32% da largura por ~18% da altura em ${canto} é EXCLUSIVA da marca (o logo é aplicado ali depois). NÃO coloque NADA nessa área: nenhum texto, título, bullet, ícone, número, forma ou ilustração. Empurre TODO o conteúdo para FORA dessa faixa — em especial o ÚLTIMO bullet e a ÚLTIMA linha de texto, que são os que mais invadem o rodapé. Se o conteúdo não couber acima da faixa, use MENOS texto (corte o último bullet), nunca invada ${canto}. Deixe ${canto} totalmente vazio.`;
       }
 
       const refImages = contentParts

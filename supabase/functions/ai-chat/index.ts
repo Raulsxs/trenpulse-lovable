@@ -1389,10 +1389,16 @@ ${carouselPlatformGuide}
 
 REGRAS DE COPY:
 - Cada headline: máx 60 caracteres, impactante, sem filler words
-- Cada body: máx 200 caracteres, direto ao ponto
-- Cada bullet: máx 120 caracteres, comece com verbo de ação ou dado
+- Cada bullet: máx 90 caracteres, comece com verbo de ação ou dado
 - Evite clichês genéricos ("neste post vou ensinar", "você sabia que")
 - Use números específicos quando possível ("3 erros", "aumento de 47%")
+
+DENSIDADE POR SLIDE (INVIOLÁVEL — texto demais colide com o logo no rodapé):
+- Cada slide de conteúdo escolhe UM de dois formatos, nunca os dois cheios:
+  (A) parágrafo de body (máx 160 caracteres) + NO MÁXIMO 2 bullets curtos, OU
+  (B) body curto ou vazio (máx 60 caracteres) + até 3 bullets curtos.
+- É PROIBIDO body longo + 3 bullets no mesmo slide (não cabe). Na dúvida, menos texto.
+- Prefira 1 ideia por slide: se um slide ficaria cheio, corte o 3º bullet ou encurte o body.
 
 Responda em JSON:
 {
@@ -1457,6 +1463,17 @@ Responda em JSON:
 
         // Enforcement: garante EXATAMENTE o número de slides pedido (o modelo às vezes gera a mais).
         slides = clampSlides(slides, slideCount);
+
+        // Guard de densidade (rec 1) — rede de segurança determinística p/ a regra do prompt: texto
+        // demais empurra o último bullet pra faixa do logo no rodapé (visto no carrossel de automação,
+        // slide "ROI"). Slide com parágrafo (body > 60 chars) fica com no MÁX 2 bullets; body curto, até 3.
+        for (const s of slides) {
+          if (Array.isArray(s?.bullets) && s.bullets.length > 0) {
+            const bodyLen = (typeof s.body === "string" ? s.body : "").trim().length;
+            const maxBullets = bodyLen > 60 ? 2 : 3;
+            if (s.bullets.length > maxBullets) s.bullets = s.bullets.slice(0, maxBullets);
+          }
+        }
 
         const tStructureDone = Date.now();
         console.log(`[ai-chat] GENERATE_CAROUSEL timing: structure=${tStructureDone - tCarouselStart}ms`);
