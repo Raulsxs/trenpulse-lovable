@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Check, Copy, Loader2, QrCode, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
+import RedeemCouponForm from "./RedeemCouponForm";
 
 // Espelha os PACKS da edge function create-credit-charge
 const PACKS = [
@@ -38,6 +39,7 @@ export default function BuyCreditsModal({
   const [charge, setCharge] = useState<Charge | null>(null);
   const [paid, setPaid] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [showCoupon, setShowCoupon] = useState(false);
   // Cartão
   const [cardNumber, setCardNumber] = useState("");
   const [cardName, setCardName] = useState("");
@@ -200,6 +202,22 @@ export default function BuyCreditsModal({
             <div className="rounded-lg border border-[hsl(var(--credit))]/25 bg-[hsl(var(--credit-bg))] px-3 py-2 text-center text-xs font-medium text-[hsl(var(--credit))] tabular-nums">
               {selected.credits.toLocaleString("pt-BR")} créditos ≈ {Math.floor(selected.credits / 8)} posts com imagem · não expiram
             </div>
+
+            {/* Cupom aqui é o ponto de MAIOR intenção: quem abriu este modal está sem crédito e
+                prestes a pagar — é exatamente onde quem ignorou o email vai procurar. */}
+            {showCoupon ? (
+              <div className="rounded-lg border border-border p-3 space-y-2">
+                <p className="text-xs font-medium">Código do cupom</p>
+                <RedeemCouponForm onRedeemed={() => onCredited?.()} autoFocus />
+              </div>
+            ) : (
+              <button
+                onClick={() => setShowCoupon(true)}
+                className="w-full text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+              >
+                Tenho um cupom
+              </button>
+            )}
 
             {/* Abas de método */}
             <div className="flex gap-1 rounded-lg bg-muted/40 p-1">

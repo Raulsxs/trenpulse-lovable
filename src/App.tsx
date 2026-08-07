@@ -27,6 +27,7 @@ import Pricing from "./pages/Pricing";
 import Analytics from "./pages/Analytics";
 import Onboarding from "./pages/Onboarding";
 import AdminAnalytics from "./pages/AdminAnalytics";
+import RedeemCoupon from "./pages/RedeemCoupon";
 
 const queryClient = new QueryClient();
 
@@ -63,6 +64,8 @@ const RoutedApp = () => {
       <Route path="/onboarding" element={<Onboarding />} />
       <Route path="/pricing" element={<Pricing />} />
       <Route path="/privacy" element={<PrivacyPolicy />} />
+      {/* Pública de propósito: é o link do email pós-compra e precisa abrir pra quem ainda não tem conta. */}
+      <Route path="/resgatar" element={<RedeemCoupon />} />
       <Route path="/admin" element={<AdminAnalytics />} />
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />

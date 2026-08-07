@@ -9,6 +9,7 @@ import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { Menu } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import FeatureSpotlight from "@/components/showcase/FeatureSpotlight";
+import { usePendingCoupon } from "@/hooks/usePendingCoupon";
 
 interface DashboardLayoutProps {
   children: ReactNode;
@@ -21,6 +22,9 @@ const DashboardLayout = ({ children }: DashboardLayoutProps) => {
   const [loading, setLoading] = useState(true);
   const isMobile = useIsMobile();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // Resgate automático de cupom pendente: cobre o comprador que JÁ tinha conta e clicou no link do
+  // email depois (o Onboarding só cobre o cadastro novo). O hook é idempotente nos dois mounts.
+  usePendingCoupon();
 
   // Close sidebar on route change (mobile)
   useEffect(() => {

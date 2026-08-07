@@ -8,6 +8,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { usePendingCoupon } from "@/hooks/usePendingCoupon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sparkles, ArrowRight, SkipForward } from "lucide-react";
@@ -94,6 +95,9 @@ export default function Onboarding() {
   const [customNiche, setCustomNiche] = useState("");
   const [saving, setSaving] = useState(false);
   const [userId, setUserId] = useState<string | null>(null);
+  // Cupom do link de compra: resgata sozinho aqui (primeiro caminho do comprador novo).
+  // O hook roda no mount, ANTES do early return de onboarding_done abaixo tirar a pessoa da tela.
+  const { redeemed } = usePendingCoupon();
 
   useEffect(() => {
     supabase.auth.getSession().then(async ({ data }) => {
@@ -160,6 +164,15 @@ export default function Onboarding() {
               O que você faz? A IA cria conteúdo sob medida pro seu negócio.
             </p>
           </div>
+
+          {/* Cupom resgatado sozinho (comprador do curso). Nunca bloqueia o onboarding: se falhar,
+              o hook fica quieto e a pessoa ainda pode resgatar em Perfil → Créditos. */}
+          {redeemed !== null && (
+            <div className="flex items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-sm animate-in fade-in slide-in-from-top-2">
+              <span className="text-base">🎉</span>
+              <span><strong>{redeemed} créditos</strong> adicionados à sua conta!</span>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-2 text-left">
             {NICHES.map((n) => (

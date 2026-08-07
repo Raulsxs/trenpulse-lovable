@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { couponFromUrl, savePendingCoupon } from "@/lib/coupon";
 import { TrendingUp, Sparkles, BarChart3, Zap, Eye, EyeOff, ArrowLeft, ChevronRight, X, Loader2 } from "lucide-react";
 
 const SAVED_ACCOUNTS_KEY = "tp_saved_accounts";
@@ -40,6 +41,8 @@ const Auth = () => {
   const isSignupTab = searchParams.get("tab") === "signup";
   const emailParam = searchParams.get("email") || "";
   const isSessionExpired = searchParams.get("expired") === "1";
+  // ?coupon= (NUNCA ?code= — colide com o parâmetro do PKCE do Supabase Auth).
+  const couponParam = couponFromUrl(`?${searchParams.toString()}`);
   const defaultTab = isSignupTab ? "signup" : "login";
   const [isLoading, setIsLoading] = useState(false);
   const [loadingAccountId, setLoadingAccountId] = useState<string | null>(null);
@@ -170,13 +173,17 @@ const Auth = () => {
     try {
       // /dashboard NÃO existe (cai no NotFound → 404 após confirmar email). Novo usuário vai pro
       // /onboarding, que capta a sessão do hash e guia o primeiro acesso.
-      const redirectUrl = `${window.location.origin}/onboarding`;
+      //
+      // CUPOM: o código precisa sobreviver ao round-trip da confirmação de email, e cada canal
+      // sozinho falha num cenário real — por isso os três (ver src/lib/coupon.ts).
+      if (couponParam) savePendingCoupon(couponParam);                        // L1: localStorage
+      const redirectUrl = `${window.location.origin}/onboarding${couponParam ? `?coupon=${couponParam}` : ""}`; // L2
       const { error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: redirectUrl,
-          data: { name },
+          data: { name, ...(couponParam ? { coupon: couponParam } : {}) },    // L3: user_metadata
         },
       });
       if (error) throw error;
@@ -197,7 +204,9 @@ const Auth = () => {
       const { error } = await supabase.auth.resend({
         type: "signup",
         email: signupEmailSent,
-        options: { emailRedirectTo: `${window.location.origin}/onboarding` },
+        // Mesmo redirect COM cupom do handleSignup: este é o caminho que o comprador confuso usa,
+        // e é o mais fácil de esquecer — sem isto o reenvio perderia o código.
+        options: { emailRedirectTo: `${window.location.origin}/onboarding${couponParam ? `?coupon=${couponParam}` : ""}` },
       });
       if (error) throw error;
       toast.success("Email reenviado! Confira sua caixa de entrada e o spam.");

@@ -3,7 +3,8 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { Save, Loader2, Briefcase, X, Coins, Sparkles, Link2, CheckCircle2, ArrowRight } from "lucide-react";
+import { Save, Loader2, Briefcase, X, Coins, Sparkles, Link2, CheckCircle2, ArrowRight, Gift } from "lucide-react";
+import RedeemCouponForm from "@/components/billing/RedeemCouponForm";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -491,6 +492,20 @@ const Profile = () => {
         <TabsContent value="plano" className="mt-0">
           <div className="grid lg:grid-cols-2 gap-6 items-start">
             {creditsCard}
+
+            {/* Resgate manual: onde a pessoa vem procurar coisa de conta, e o caminho de recuperação
+                quando o resgate automático do link de compra não rolou. */}
+            <Card className="shadow-card border-border/50">
+              <CardHeader>
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Gift className="w-4 h-4 text-[hsl(var(--credit))]" />
+                  Tem um cupom?
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <RedeemCouponForm />
+              </CardContent>
+            </Card>
 
             <Card className="shadow-card border-border/50">
               <CardHeader>
