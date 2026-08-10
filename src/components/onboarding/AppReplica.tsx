@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useEffect, useRef } from "react";
 import { motion } from "framer-motion";
 import { Sparkles, Send, Paperclip, Coins, Palette, ChevronDown, Plus, Check, Bot } from "lucide-react";
 import { CONTENT_FORMATS } from "@/lib/formats";
@@ -19,7 +19,10 @@ import { cn } from "@/lib/utils";
 export function AppFrame({ children, credits = 550 }: { children: ReactNode; credits?: number }) {
   return (
     <div className="rounded-xl border border-border bg-background overflow-hidden shadow-sm select-none">
-      <div className="flex h-[300px]">
+      {/* Altura precisa caber cabeçalho + conversa + card de resultado + composer. Com 300px o
+          card gerado ficava cortado pela metade, que é justamente o momento que o tutorial quer
+          mostrar. min-h-0 nos filhos deixa a área de mensagens encolher e rolar em vez de estourar. */}
+      <div className="flex h-[390px]">
         {/* Sidebar (versão estreita, só o suficiente pra pessoa reconhecer o lugar) */}
         <div className="w-[86px] shrink-0 border-r border-border bg-card/40 flex flex-col py-2.5 px-2 gap-0.5">
           <div className="flex items-center gap-1.5 px-1 pb-2">
@@ -49,7 +52,7 @@ export function AppFrame({ children, credits = 550 }: { children: ReactNode; cre
           </div>
         </div>
 
-        <div className="flex-1 min-w-0 flex flex-col">{children}</div>
+        <div className="flex-1 min-w-0 min-h-0 flex flex-col">{children}</div>
       </div>
     </div>
   );
@@ -66,6 +69,23 @@ export function AppHeader() {
         <p className="text-[10px] font-bold leading-none">Assistente</p>
         <p className="text-[8px] text-muted-foreground leading-none mt-0.5">Eu crio no estilo da sua marca, agendo e publico.</p>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Área de conversa. Rola sozinha para o fim a cada passo novo, igual ao chat real — sem isso o
+ * card gerado (o clímax do tutorial) nascia fora da área visível.
+ */
+export function AppChat({ children, step }: { children: ReactNode; step?: number }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (el) el.scrollTo({ top: el.scrollHeight, behavior: "smooth" });
+  }, [step, children]);
+  return (
+    <div ref={ref} className="flex-1 min-h-0 overflow-y-auto p-2.5 space-y-1.5 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {children}
     </div>
   );
 }
@@ -119,7 +139,7 @@ export function ResultCard({ title, meta, tall }: { title: string; meta: string;
     >
       <div className={cn(
         "grid place-items-center px-3",
-        tall ? "h-24 w-[68px] mx-auto my-1.5 rounded" : "h-16",
+        tall ? "h-20 w-[56px] mx-auto my-1.5 rounded" : "h-14",
       )} style={{ background: "linear-gradient(135deg, hsl(210 100% 35%), hsl(175 72% 40%))" }}>
         <p className="text-white text-[9px] font-bold text-center leading-tight">{title}</p>
       </div>
@@ -144,8 +164,9 @@ export function AppComposer({ highlight, typed = "", caret, brand = "Sem marca" 
   highlight?: string; typed?: string; caret?: boolean; brand?: string;
 }) {
   return (
-    <div className="border-t border-border px-2.5 py-2 space-y-1.5 bg-background">
-      <div className="flex gap-1 overflow-hidden">
+    <div className="border-t border-border px-2.5 py-2 space-y-1.5 bg-background shrink-0">
+      {/* Rola na horizontal como no produto (lá também não cabem os 6 de uma vez em tela estreita). */}
+      <div className="flex gap-1 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {CONTENT_FORMATS.map((f) => {
           const Icon = f.icon;
           const on = highlight === f.id;

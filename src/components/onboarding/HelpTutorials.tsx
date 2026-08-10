@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Play, ChevronRight } from "lucide-react";
 import { CONTENT_FORMATS, BRAND_WIZARD_STEPS } from "@/lib/formats";
 import {
-  AppFrame, AppHeader, AppComposer, Msg, Working, ResultCard, BrandDropdown, BrandWizardPanel,
+  AppFrame, AppHeader, AppChat, AppComposer, Msg, Working, ResultCard, BrandDropdown, BrandWizardPanel,
 } from "./AppReplica";
 
 /**
@@ -42,7 +42,7 @@ function TutorialPost() {
   return (
     <AppFrame>
       <AppHeader />
-      <div className="flex-1 p-2.5 space-y-1.5 overflow-hidden">
+      <AppChat step={step}>
         <Msg role="assistant">Me diz o que postar. Eu faço o resto.</Msg>
         {step >= 3 && <Msg role="user" delay={0.05}>{pedido}</Msg>}
         {step === 4 && <Working text="Gerando imagem…" />}
@@ -52,7 +52,7 @@ function TutorialPost() {
             <ResultCard title="5 sinais de burnout que você ignora" meta="Instagram · Post" />
           </>
         )}
-      </div>
+      </AppChat>
       <AppComposer
         highlight={step >= 1 && step < 3 ? "post" : undefined}
         typed={step >= 2 && step < 3 ? typed(pedido, 2, 2, step) : ""}
@@ -70,7 +70,7 @@ function TutorialFrase() {
   return (
     <AppFrame>
       <AppHeader />
-      <div className="flex-1 p-2.5 space-y-1.5 overflow-hidden">
+      <AppChat step={step}>
         <Msg role="assistant">Me diz o que postar. Eu faço o resto.</Msg>
         {step >= 2 && <Msg role="user" delay={0.05}>{pedido}</Msg>}
         {step === 3 && <Working text="Criando o design…" />}
@@ -80,7 +80,7 @@ function TutorialFrase() {
             <ResultCard title="Pequenos passos levam a grandes conquistas" meta="Instagram · Post" />
           </>
         )}
-      </div>
+      </AppChat>
       {/* Sem atalho aceso: este pedido é digitado direto, não existe botão "Frase". */}
       <AppComposer typed={step === 1 ? typed(pedido, 1, 1, step) : ""} caret={step === 1} />
     </AppFrame>
@@ -95,7 +95,7 @@ function TutorialLink() {
   return (
     <AppFrame>
       <AppHeader />
-      <div className="flex-1 p-2.5 space-y-1.5 overflow-hidden">
+      <AppChat step={step}>
         <Msg role="assistant">Me diz o que postar. Eu faço o resto.</Msg>
         {step >= 2 && <Msg role="user" delay={0.05}>{pedido}</Msg>}
         {step === 3 && <Working text="Lendo o artigo…" />}
@@ -105,7 +105,7 @@ function TutorialLink() {
             <ResultCard title="O que 6h de sono fazem com seu corpo" meta="Instagram · Carrossel · 5 slides" />
           </>
         )}
-      </div>
+      </AppChat>
       <AppComposer typed={step === 1 ? typed(pedido, 1, 1, step) : ""} caret={step === 1} />
     </AppFrame>
   );
@@ -166,7 +166,7 @@ function TutorialCarrossel() {
   return (
     <AppFrame>
       <AppHeader />
-      <div className="flex-1 p-2.5 space-y-1.5 overflow-hidden">
+      <AppChat step={step}>
         <Msg role="assistant">Me diz o que postar. Eu faço o resto.</Msg>
         {step >= 3 && <Msg role="user" delay={0.05}>{pedido}</Msg>}
         {step === 4 && <Working text="Gerando 5 slides…" />}
@@ -176,7 +176,7 @@ function TutorialCarrossel() {
             <ResultCard title="Meditação: 5 benefícios reais" meta="Instagram · Carrossel · 5 slides" />
           </>
         )}
-      </div>
+      </AppChat>
       <AppComposer
         highlight={step >= 1 && step < 3 ? "carrossel" : undefined}
         typed={step >= 2 && step < 3 ? typed(pedido, 2, 2, step) : ""}
@@ -195,7 +195,7 @@ function TutorialPublicar() {
   return (
     <AppFrame>
       <AppHeader />
-      <div className="flex-1 p-2.5 space-y-1.5 overflow-hidden">
+      <AppChat step={step}>
         <Msg role="assistant">Conteúdo pronto. Quer publicar agora ou agendar?</Msg>
         {step >= 1 && <ResultCard title="5 hábitos que melhoram seu sono" meta="Instagram · Post" />}
         {step >= 2 && <Msg role="user" delay={0.05}>Publica no Instagram</Msg>}
@@ -205,7 +205,7 @@ function TutorialPublicar() {
             Publicado. <b>Antes da primeira vez</b>, conecte a conta em Perfil → Conexões.
           </Msg>
         )}
-      </div>
+      </AppChat>
       <AppComposer />
     </AppFrame>
   );
