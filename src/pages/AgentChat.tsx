@@ -18,6 +18,7 @@ import ConfirmAction from "@/components/chat/ConfirmAction";
 import QueuePanel from "@/components/chat/QueuePanel";
 import FirstSteps from "@/components/onboarding/FirstSteps";
 import HelpCenterModal from "@/components/onboarding/HelpCenterModal";
+import { CONTENT_FORMATS } from "@/lib/formats";
 import { useCredits } from "@/hooks/useCredits";
 import { useGenerationQueue } from "@/hooks/useGenerationQueue";
 import { isSupportedDocument, extractDocumentText, truncateForPrompt } from "@/lib/documentExtract";
@@ -92,22 +93,9 @@ const SUGGESTIONS = [
 // (assinatura do design: preço visível). O template termina em ": " → o usuário só completa o tema.
 // Custos espelham credit_pricing (caso típico: carrossel 5 slides, editorial 4). Clicar preenche o
 // input e foca; NÃO envia sozinho (o usuário escreve o tema e decide quando disparar).
-// `hint` existe porque os nomes NÃO se explicam pra quem está chegando: "Editorial" e "Tweet"
-// não dizem nada a um leigo, e ele não vai gastar crédito pra descobrir. Vira o title do botão.
-const QUICK_ACTIONS = [
-  { icon: ImageIcon, label: "Post", cost: 10, template: "Crie um post para Instagram sobre: ",
-    hint: "Uma imagem única pro feed do Instagram." },
-  { icon: LayoutGrid, label: "Carrossel", cost: 50, template: "Crie um carrossel de 5 slides educativos e visualmente impactantes para Instagram sobre: ",
-    hint: "Vários slides que a pessoa desliza pro lado. Bom pra ensinar passo a passo." },
-  { icon: Newspaper, label: "Editorial", cost: 20, template: "Crie um carrossel editorial cinematográfico sobre: ",
-    hint: "Carrossel com cara de revista: foto grande e manchete de impacto." },
-  { icon: Smartphone, label: "Story", cost: 25, template: "Crie um story para Instagram sobre: ",
-    hint: "Formato vertical que ocupa a tela toda e some em 24h." },
-  { icon: MessageSquareQuote, label: "Tweet", cost: 6, template: "Crie um tweet card visual sobre: ",
-    hint: "Card imitando um print de post do X (Twitter), com seu nome e foto. Bom pra frases." },
-  { icon: Linkedin, label: "LinkedIn", cost: 10, template: "Crie um post para LinkedIn sobre: ",
-    hint: "Post quadrado com tom profissional, no formato que o LinkedIn favorece." },
-];
+// Atalhos vêm de src/lib/formats.ts (fonte única): a Central de Ajuda lê a MESMA lista, então
+// mexer num formato aqui atualiza o tutorial junto. Antes eram duas listas que divergiram calado.
+const QUICK_ACTIONS = CONTENT_FORMATS;
 
 export default function AgentChat() {
   const [uiMessages, setUiMessages] = useState<Msg[]>([]);
