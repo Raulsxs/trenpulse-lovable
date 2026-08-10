@@ -128,7 +128,14 @@ Deno.serve(async (req) => {
   if (!token) return json({ error: "Unauthorized" }, 401);
 
   const body = await req.json().catch(() => ({}));
-  const isInternal = token === SERVICE;
+  // Dois chamadores internos legítimos:
+  //   - SERVICE: o próprio worker se re-encadeando (chainSelf) e chamadas internas.
+  //   - CRON_SECRET: o agendador do banco (pg_cron). Token DEDICADO em vez da service key, por dois
+  //     motivos: (1) privilégio mínimo — este token só dispara o worker, não abre o banco inteiro;
+  //     (2) a service key que a função recebe é um secret próprio do projeto, distinto das chaves da
+  //     API, então o cron não teria como reproduzi-la.
+  const cronSecret = Deno.env.get("CRON_SECRET");
+  const isInternal = token === SERVICE || (!!cronSecret && token === cronSecret);
 
   try {
     // ── CAMINHO CRON/INTERNO (service key) ──
