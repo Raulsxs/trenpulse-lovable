@@ -718,7 +718,15 @@ ${brandColorHint}
       // = 504, o bug que a Amanda viu). Nano Banana/Gemini são rápidos (~4s) → carrossel não estoura.
       if (!base64Image && Deno.env.get("OPENROUTER_API_KEY") && !isPersonalPhotoMode) {
         try {
-          const r = await orImage({ model: requestModel, prompt: promptText, aspectRatio, refImages });
+          const r = await orImage({
+            model: requestModel, prompt: promptText, aspectRatio, refImages,
+            // Contexto de telemetria: sem isto, o evento fica órfão e não dá pra cruzar custo do
+            // provedor com o crédito cobrado (é o que a função margem_real faz).
+            // `auth.userId` é NULL aqui: o ai-chat chama com service key (internal=true). Quem sabe o
+            // dono é o body (`requestUserId`), que o ai-chat já enviava. Sem isso a telemetria nasce
+            // órfã e não dá pra cruzar custo de provedor com crédito cobrado (função margem_real).
+            telemetry: { userId: requestUserId ?? auth?.userId ?? null, contentId: contentId ?? null, action: contentStyle || "image" },
+          });
           base64Image = r.dataUrl;
           console.log(`[generate-slide-images] Tier-0 OpenRouter OK: model=${r.model}, custo=$${r.usage?.cost}, aspect=${aspectRatio}, refs=${refImages.length}`);
         } catch (e: any) {

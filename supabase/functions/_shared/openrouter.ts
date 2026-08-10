@@ -6,6 +6,8 @@
 //
 // Ver docs/arquitetura/openrouter-multi-modelo.md (T01).
 
+import { track, statusFromError } from "./telemetry.ts";
+
 declare const Deno: { env: { get(k: string): string | undefined } };
 
 const OR_URL = "https://openrouter.ai/api/v1/chat/completions";
@@ -135,9 +137,15 @@ export async function orChat(opts: {
 
   let lastErr: any = null;
   for (const model of opts.modelChain) {
+    const tStart = Date.now();
+    // Telemetria por MODELO da chain: se o Haiku falha e o Gemini salva, os dois eventos aparecem.
+    // É assim que se enxerga um provedor degradado antes do usuário reclamar.
+    const log = (status: "ok" | "error", extra: Record<string, unknown>) =>
+      track({ kind: "text", provider: "openrouter", model, durationMs: Date.now() - tStart, status, ...extra } as any);
     try {
       if (opts.stream) {
         const r = await streamOne(model, baseBody, headers, opts.onText);
+        log("ok", { costUsd: r.usage?.cost ?? null });
         return r;
       }
       // Não-streaming: fetch PURO (sem AbortController). No edge do Supabase, ler res.json() de uma
@@ -148,14 +156,18 @@ export async function orChat(opts: {
       if (!res.ok) {
         lastErr = new Error(`OpenRouter ${model} HTTP ${res.status}: ${raw.slice(0, 200)}`);
         console.warn(`[openrouter] ${model} HTTP ${res.status} — próximo da chain`);
+        log("error", { statusCode: res.status, error: raw.slice(0, 200) });
         continue;
       }
       const data = JSON.parse(raw);
       const { content, stop_reason } = fromOpenAIResponse(data.choices?.[0]);
+      log("ok", { costUsd: data.usage?.cost ?? null });
       return { content, stop_reason, model, usage: data.usage || null };
     } catch (e: any) {
       lastErr = e;
       console.warn(`[openrouter] ${model} exceção: ${e?.message} — próximo da chain`);
+      const msg = String(e?.message || e);
+      log("error", { error: msg, statusCode: statusFromError(msg) });
     }
   }
   throw lastErr || new Error("OpenRouter: toda a modelChain falhou");
@@ -244,7 +256,10 @@ export interface OrImageResult { dataUrl: string; usage: any; model: string }
  *  que falhar o slide inteiro (e derrubar o carrossel). */
 export async function orImage(opts: {
   model?: string; prompt: string; aspectRatio: string; refImages?: string[]; resolution?: string;
+  // Contexto só de telemetria: não afeta a geração. Opcional para não quebrar chamadores existentes.
+  telemetry?: { userId?: string | null; contentId?: string | null; action?: string | null };
 }): Promise<OrImageResult> {
+  const tStart = Date.now();
   const key = Deno.env.get("OPENROUTER_API_KEY");
   if (!key) throw new Error("OPENROUTER_API_KEY ausente");
   const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": "https://trendpulse.com.br", "X-Title": "TrendPulse" };
@@ -308,13 +323,32 @@ export async function orImage(opts: {
     throw lastErr;
   };
 
+  // Telemetria envolvendo o fluxo inteiro (inclui o tempo dos retries, que é o que o usuário sente).
+  // Fire-and-forget: o `track` engole os próprios erros e nunca é aguardado no caminho de sucesso.
+  const t = opts.telemetry;
+  const log = (status: "ok" | "error", extra: Record<string, unknown>) => {
+    track({
+      userId: t?.userId, contentId: t?.contentId, action: t?.action,
+      kind: "image", provider: "openrouter", model,
+      durationMs: Date.now() - tStart, status, ...extra,
+    } as any);
+  };
+
   try {
-    return await run(true);
-  } catch (e: any) {
-    if (refs.length && /HTTP 400|fetching URL|Unsupported URL/i.test(String(e?.message))) {
-      console.warn(`[openrouter] image ${model} falhou com refs (${String(e?.message).slice(0, 80)}) — re-tentando SEM referências`);
-      return await run(false);
+    let r: OrImageResult;
+    try {
+      r = await run(true);
+    } catch (e: any) {
+      if (refs.length && /HTTP 400|fetching URL|Unsupported URL/i.test(String(e?.message))) {
+        console.warn(`[openrouter] image ${model} falhou com refs (${String(e?.message).slice(0, 80)}) — re-tentando SEM referências`);
+        r = await run(false);
+      } else throw e;
     }
+    log("ok", { costUsd: r.usage?.cost ?? null });
+    return r;
+  } catch (e: any) {
+    const msg = String(e?.message || e);
+    log("error", { error: msg, statusCode: statusFromError(msg) });
     throw e;
   }
 }
