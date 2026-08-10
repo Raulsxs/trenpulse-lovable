@@ -261,6 +261,14 @@ export async function orImage(opts: {
   const model = (appModel && OR_IMAGE_MODELS[appModel]) || appModel || OR_IMAGE_DEFAULT;
   const refs = (opts.refImages || []).filter((u) => typeof u === "string" && u.startsWith("http"));
 
+  // Retry de falha TRANSITÓRIA (429 / 5xx / rede). Sem isto, um único slide que topasse com um
+  // hiccup do provedor derrubava o slide inteiro — e o carrossel saía incompleto, o que na tela
+  // parece "o produto está lento e falhando". Diferente do orChat, aqui NÃO há chain de modelos pra
+  // cair: o usuário escolheu um modelo e trocá-lo mudaria o visual da peça. Então re-tentamos o mesmo.
+  // 400/401/403 NÃO entram: são erro de requisição, e repetir só gasta tempo.
+  const RETRY_DELAYS_MS = [1200, 3500];
+  const isTransient = (msg: string) => /HTTP (429|5\d\d)/.test(msg) || /timeout|network|ECONN|socket/i.test(msg);
+
   const run = async (withRefs: boolean) => {
     const body: any = { model, prompt: opts.prompt, aspect_ratio: ar };
     // T05 — Resolução 2K nos modelos que SUPORTAM `resolution` (Nano Banana Pro / Seedream / FLUX) e
@@ -271,13 +279,33 @@ export async function orImage(opts: {
       body.resolution = opts.resolution || "2K";
     }
     if (withRefs && refs.length) body.input_references = refs.slice(0, 14).map((url) => ({ type: "image_url", image_url: { url } }));
-    const res = await fetch(OR_IMAGES_URL, { method: "POST", headers, body: JSON.stringify(body) });
-    const raw = await res.text();
-    if (!res.ok) throw new Error(`OpenRouter image ${model} HTTP ${res.status}: ${raw.slice(0, 200)}`);
-    const data = JSON.parse(raw);
-    const item = (data.data || [])[0];
-    if (!item?.b64_json) throw new Error(`OpenRouter image ${model}: sem b64_json`);
-    return { dataUrl: `data:${item.media_type || "image/png"};base64,${item.b64_json}`, usage: data.usage || null, model };
+
+    let lastErr: any = null;
+    for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+      try {
+        const res = await fetch(OR_IMAGES_URL, { method: "POST", headers, body: JSON.stringify(body) });
+        const raw = await res.text();
+        if (!res.ok) {
+          const err: any = new Error(`OpenRouter image ${model} HTTP ${res.status}: ${raw.slice(0, 200)}`);
+          // O servidor sabe melhor que nós quando voltar a tentar; se mandar Retry-After, obedecemos.
+          const ra = Number(res.headers.get("retry-after"));
+          if (Number.isFinite(ra) && ra > 0) err.retryAfterMs = Math.min(ra * 1000, 10000);
+          throw err;
+        }
+        const data = JSON.parse(raw);
+        const item = (data.data || [])[0];
+        if (!item?.b64_json) throw new Error(`OpenRouter image ${model}: sem b64_json`);
+        return { dataUrl: `data:${item.media_type || "image/png"};base64,${item.b64_json}`, usage: data.usage || null, model };
+      } catch (e: any) {
+        lastErr = e;
+        const msg = String(e?.message || "");
+        if (attempt === RETRY_DELAYS_MS.length || !isTransient(msg)) throw e;
+        const wait = e?.retryAfterMs ?? RETRY_DELAYS_MS[attempt];
+        console.warn(`[openrouter] image ${model} falha transitória (${msg.slice(0, 90)}) — re-tentando em ${wait}ms [${attempt + 1}/${RETRY_DELAYS_MS.length}]`);
+        await new Promise((r) => setTimeout(r, wait));
+      }
+    }
+    throw lastErr;
   };
 
   try {
