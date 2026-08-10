@@ -11,11 +11,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload, ChevronDown, Palette, Newspaper, Smartphone, MessageSquareQuote, Linkedin, HelpCircle } from "lucide-react";
+import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload, ChevronDown, Palette, Newspaper, Smartphone, MessageSquareQuote, Linkedin, HelpCircle, PlayCircle } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ActionCard from "@/components/chat/ActionCard";
 import ConfirmAction from "@/components/chat/ConfirmAction";
 import QueuePanel from "@/components/chat/QueuePanel";
+import FirstSteps from "@/components/onboarding/FirstSteps";
+import HelpCenterModal from "@/components/onboarding/HelpCenterModal";
 import { useCredits } from "@/hooks/useCredits";
 import { useGenerationQueue } from "@/hooks/useGenerationQueue";
 import { isSupportedDocument, extractDocumentText, truncateForPrompt } from "@/lib/documentExtract";
@@ -90,13 +92,21 @@ const SUGGESTIONS = [
 // (assinatura do design: preço visível). O template termina em ": " → o usuário só completa o tema.
 // Custos espelham credit_pricing (caso típico: carrossel 5 slides, editorial 4). Clicar preenche o
 // input e foca; NÃO envia sozinho (o usuário escreve o tema e decide quando disparar).
+// `hint` existe porque os nomes NÃO se explicam pra quem está chegando: "Editorial" e "Tweet"
+// não dizem nada a um leigo, e ele não vai gastar crédito pra descobrir. Vira o title do botão.
 const QUICK_ACTIONS = [
-  { icon: ImageIcon, label: "Post", cost: 10, template: "Crie um post para Instagram sobre: " },
-  { icon: LayoutGrid, label: "Carrossel", cost: 50, template: "Crie um carrossel de 5 slides educativos e visualmente impactantes para Instagram sobre: " },
-  { icon: Newspaper, label: "Editorial", cost: 20, template: "Crie um carrossel editorial cinematográfico sobre: " },
-  { icon: Smartphone, label: "Story", cost: 25, template: "Crie um story para Instagram sobre: " },
-  { icon: MessageSquareQuote, label: "Tweet", cost: 6, template: "Crie um tweet card visual sobre: " },
-  { icon: Linkedin, label: "LinkedIn", cost: 10, template: "Crie um post para LinkedIn sobre: " },
+  { icon: ImageIcon, label: "Post", cost: 10, template: "Crie um post para Instagram sobre: ",
+    hint: "Uma imagem única pro feed do Instagram." },
+  { icon: LayoutGrid, label: "Carrossel", cost: 50, template: "Crie um carrossel de 5 slides educativos e visualmente impactantes para Instagram sobre: ",
+    hint: "Vários slides que a pessoa desliza pro lado. Bom pra ensinar passo a passo." },
+  { icon: Newspaper, label: "Editorial", cost: 20, template: "Crie um carrossel editorial cinematográfico sobre: ",
+    hint: "Carrossel com cara de revista: foto grande e manchete de impacto." },
+  { icon: Smartphone, label: "Story", cost: 25, template: "Crie um story para Instagram sobre: ",
+    hint: "Formato vertical que ocupa a tela toda e some em 24h." },
+  { icon: MessageSquareQuote, label: "Tweet", cost: 6, template: "Crie um tweet card visual sobre: ",
+    hint: "Card imitando um print de post do X (Twitter), com seu nome e foto. Bom pra frases." },
+  { icon: Linkedin, label: "LinkedIn", cost: 10, template: "Crie um post para LinkedIn sobre: ",
+    hint: "Post quadrado com tom profissional, no formato que o LinkedIn favorece." },
 ];
 
 export default function AgentChat() {
@@ -115,6 +125,7 @@ export default function AgentChat() {
   const [dragging, setDragging] = useState(false);
   const dragDepth = useRef(0);
   const [brandOpen, setBrandOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [brandHelpOpen, setBrandHelpOpen] = useState(false);
   const [modelOpen, setModelOpen] = useState(false);
   const [pendingConfirm, setPendingConfirm] = useState<any>(null);
@@ -506,8 +517,11 @@ export default function AgentChat() {
             <div className="w-11 h-11 rounded-xl bg-accent/10 flex items-center justify-center mb-4 animate-in zoom-in-50 duration-500">
               <Sparkles className="w-5 h-5 text-accent" />
             </div>
-            <h2 className="text-lg font-bold leading-snug">Do prompt ao feed.</h2>
-            <p className="text-sm text-muted-foreground mt-1 mb-5">Descreva o que você quer postar. Eu gero, aplico a marca, agendo e publico pra você.</p>
+            {/* "Do prompt ao feed" saiu: "prompt" é jargão e era a PRIMEIRA palavra que o usuário
+                novo lia. Quem não sabe o que é prompt já começa se sentindo fora do lugar. */}
+            <h2 className="text-lg font-bold leading-snug">Me diz o que postar. Eu faço o resto.</h2>
+            <p className="text-sm text-muted-foreground mt-1 mb-5">Escreva o assunto em português normal. Eu crio a arte, aplico a sua marca, e publico ou agendo pra você.</p>
+            <FirstSteps onPickPrompt={(t) => { setInput(t); inputRef.current?.focus(); }} />
             <div className="grid sm:grid-cols-2 gap-2">
               {SUGGESTIONS.map((s, i) => {
                 const Icon = s.icon;
@@ -524,6 +538,15 @@ export default function AgentChat() {
                 );
               })}
             </div>
+            {/* A Central de Ajuda existia só na sidebar — passivo demais: quem é leigo não vai
+                procurar ajuda, vai desistir. Puxando a porta pra dentro do fluxo, onde a dúvida nasce. */}
+            <button
+              onClick={() => setHelpOpen(true)}
+              className="mt-3 w-full inline-flex items-center justify-center gap-1.5 text-[12px] text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <PlayCircle className="w-3.5 h-3.5" />
+              Nunca usou? Veja em 30 segundos como funciona
+            </button>
           </div>
         )}
         {uiMessages.map((m) => (
@@ -589,7 +612,7 @@ export default function AgentChat() {
                 type="button"
                 disabled={sending}
                 onClick={() => { setInput(qa.template); inputRef.current?.focus(); }}
-                title={`${qa.label} · ~${qa.cost} créditos`}
+                title={`${qa.hint}\n\nCusta ~${qa.cost} créditos.`}
                 className="group inline-flex items-center gap-1.5 h-7 shrink-0 rounded-full border border-border bg-background px-2.5 text-[12px] font-medium text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-primary/[0.03] disabled:opacity-40 disabled:pointer-events-none transition-all"
               >
                 <Icon className="w-3.5 h-3.5 shrink-0 group-hover:text-primary transition-colors" />
@@ -741,6 +764,8 @@ export default function AgentChat() {
         onView={openContent}
         onResume={(prompt) => { setQueueOpen(false); setInput(prompt); inputRef.current?.focus(); }}
       />
+
+      <HelpCenterModal open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   );
 }

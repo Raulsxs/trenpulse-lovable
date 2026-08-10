@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Sparkles, Send, Upload, Check, Calendar, ExternalLink,
-  TrendingUp, Play, ChevronRight, Tag,
+  TrendingUp, Play, ChevronRight, Tag, Wand2,
 } from "lucide-react";
 
 // ── Shared mini-components ──
@@ -129,10 +129,12 @@ function MiniResult({ title, platform = "Instagram · Post", hasImage }: { title
       <div className="p-2.5">
         <p className="text-[10px] text-muted-foreground uppercase">{platform}</p>
         <p className="text-xs font-semibold text-foreground mt-0.5 line-clamp-2">{title}</p>
+        {/* Estes rótulos precisam bater com os do ActionCard real: o tutorial serve pra pessoa
+            reconhecer o botão na tela. "Aprovar" e "Studio" não existem mais. */}
         <div className="flex gap-1.5 mt-2 flex-wrap">
-          <span className="px-2 py-0.5 bg-green-500 text-white text-[9px] rounded font-medium flex items-center gap-0.5"><Check className="w-2.5 h-2.5" /> Aprovar</span>
+          <span className="px-2 py-0.5 bg-green-500 text-white text-[9px] rounded font-medium flex items-center gap-0.5"><Send className="w-2.5 h-2.5" /> Publicar</span>
           <span className="px-2 py-0.5 border border-border text-[9px] rounded flex items-center gap-0.5"><Calendar className="w-2.5 h-2.5" /> Agendar</span>
-          <span className="px-2 py-0.5 border border-border text-[9px] rounded flex items-center gap-0.5"><ExternalLink className="w-2.5 h-2.5" /> Studio</span>
+          <span className="px-2 py-0.5 border border-border text-[9px] rounded flex items-center gap-0.5"><Wand2 className="w-2.5 h-2.5" /> Ajustar</span>
         </div>
       </div>
     </motion.div>
@@ -372,6 +374,44 @@ function TutorialCarrossel() {
   );
 }
 
+// ── Tutorial 6: Publicar nas redes ──
+// O tutorial mais importante pra quem está chegando: é aqui que o usuário novo trava, porque
+// ninguém avisa que a rede precisa estar CONECTADA antes. Sem isso ele gera, gosta, clica em
+// publicar e leva um "conecte uma conta" que parece erro do produto.
+function TutorialPublicar() {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    setStep(0);
+    const t = [
+      setTimeout(() => setStep(1), 700),
+      setTimeout(() => setStep(2), 2400),
+      setTimeout(() => setStep(3), 4200),
+      setTimeout(() => setStep(4), 6000),
+    ];
+    return () => t.forEach(clearTimeout);
+  }, []);
+
+  return (
+    <MiniChat inputText="">
+      <Bubble role="assistant">Conteúdo pronto! Quer publicar agora ou agendar?</Bubble>
+      {step >= 1 && (
+        <MiniResult title="5 hábitos que melhoram seu sono" platform="Instagram · Post" hasImage />
+      )}
+      {step >= 2 && (
+        <Bubble role="user" delay={0.1}>Publica no Instagram</Bubble>
+      )}
+      {step === 3 && <MiniLoading text="Enviando para o Instagram..." />}
+      {step >= 4 && (
+        <>
+          <Bubble role="assistant" delay={0.1}>
+            ✅ Publicado! Antes de publicar pela primeira vez, conecte a rede em <b>Meu Perfil → Conexões</b>.
+          </Bubble>
+        </>
+      )}
+    </MiniChat>
+  );
+}
+
 // ── Tutorial list ──
 
 const TUTORIALS = [
@@ -380,6 +420,7 @@ const TUTORIALS = [
   { id: "link", emoji: "🔗", title: "Post a partir de link", desc: "Cole um artigo → post automático", component: TutorialLink },
   { id: "marca", emoji: "🎨", title: "Criar uma marca", desc: "Nome + imagens → identidade visual", component: TutorialMarca },
   { id: "carrossel", emoji: "🎠", title: "Criar carrossel", desc: "Descreva o tema → slides prontos", component: TutorialCarrossel },
+  { id: "publicar", emoji: "🚀", title: "Publicar nas redes", desc: "Conecte a conta → publique ou agende", component: TutorialPublicar },
 ];
 
 export function HelpTutorials() {

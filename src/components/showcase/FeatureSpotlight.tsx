@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Sparkles, ArrowRight } from "lucide-react";
 
@@ -58,6 +59,8 @@ const SHOWCASES: Showcase[] = [
 
 const DISMISSED_KEY = "tp_spotlight_dismissed";
 const SESSION_KEY = "tp_spotlight_shown";
+// Gerações mínimas antes de divulgar recurso avançado. 2 = já passou do acaso, virou uso.
+const MIN_GENERATIONS = 2;
 
 function getDismissed(): string[] {
   try { return JSON.parse(localStorage.getItem(DISMISSED_KEY) || "[]"); } catch { return []; }
@@ -72,11 +75,29 @@ export default function FeatureSpotlight() {
     const dismissed = getDismissed();
     const next = SHOWCASES.find((s) => !dismissed.includes(s.key));
     if (!next) return;
-    const t = setTimeout(() => {
-      setActive(next);
-      sessionStorage.setItem(SESSION_KEY, "1");
-    }, 9000); // respiro: só aparece depois que o usuário se situou
-    return () => clearTimeout(t);
+
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    (async () => {
+      // GATE DE PRIMEIRA VITÓRIA: não divulgar recurso avançado (vídeo animado, editorial) pra quem
+      // ainda não gerou NADA. Pra esse usuário o modal não é descoberta, é sensação de complexidade
+      // logo no primeiro minuto. Só entra em cena depois que ele já fez algo funcionar sozinho.
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user || cancelled) return;
+      const { count } = await supabase
+        .from("generated_contents")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", user.id);
+      if (cancelled || (count || 0) < MIN_GENERATIONS) return;
+
+      timer = setTimeout(() => {
+        setActive(next);
+        sessionStorage.setItem(SESSION_KEY, "1");
+      }, 9000); // respiro: só aparece depois que o usuário se situou
+    })();
+
+    return () => { cancelled = true; clearTimeout(timer); };
   }, []);
 
   const dismiss = (key: string) => {

@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Button } from "@/components/ui/button";
-import { HelpCircle, Palette, Wand2, MessageSquare, Share2, CalendarDays, LayoutDashboard, FileText, Sparkles, Play, BookOpen, Lightbulb } from "lucide-react";
+import { HelpCircle, Palette, Wand2, MessageSquare, Share2, CalendarDays, FileText, Sparkles, Play, BookOpen, Lightbulb, Coins } from "lucide-react";
 import { HelpTutorials } from "./HelpTutorials";
 
 interface HelpSection {
@@ -31,7 +31,12 @@ const HELP_SECTIONS: HelpSection[] = [
       {
         question: "Posso ter mais de uma Marca?",
         answer:
-          "Sim! O número de marcas depende do seu plano. No plano gratuito você pode ter 1 marca; nos planos Pro, de 2 a 10 marcas. Cada conteúdo gerado pode usar uma marca diferente.",
+          "Pode, sem limite de quantidade. Crie uma para cada negócio ou linha de conteúdo, e escolha qual usar no seletor ao lado do campo de mensagem, antes de gerar.",
+      },
+      {
+        question: "Preciso ter um logo?",
+        answer:
+          "Não é obrigatório, mas ajuda muito: quando a marca tem logo, ele é aplicado automaticamente em toda peça, sempre idêntico. O melhor formato é PNG com fundo transparente e marcas escuras ou coloridas (logo claro some em fundo claro).",
       },
     ],
   },
@@ -43,32 +48,37 @@ const HELP_SECTIONS: HelpSection[] = [
       {
         question: "Como gerar conteúdo com IA?",
         answer:
-          "No Assistente IA (chat), cole um link de artigo ou descreva o tema do conteúdo. O assistente abre um assistente visual de criação onde você escolhe: plataforma (Instagram ou LinkedIn), formato (Post, Carrossel, Story ou Documento), de onde vem o conteúdo (link, sugestões ou escrever do zero), estilo visual e a marca. A IA gera textos e imagens automaticamente!",
+          "Escreva no chat, em português normal, o que você quer postar. Exemplo: 'crie um post sobre 5 sinais de burnout'. Não há formulário nem etapas: ele entende o pedido, cria a arte com a identidade da sua marca e escreve a legenda. Se quiser dar um empurrão, clique num atalho de formato acima do campo, que ele já preenche o começo do pedido.",
       },
       {
-        question: "Como funciona o assistente de criação?",
+        question: "Preciso escrever de um jeito especial?",
         answer:
-          "Ao iniciar uma criação, um assistente visual aparece abaixo do chat guiando você nas escolhas: 1) Plataforma → 2) Formato → 3) Marca → 4) Fonte do conteúdo (link, sugestões automáticas ou escrever do zero) → 5) Estilo visual → Geração. Você pode voltar em qualquer etapa ou cancelar.",
+          "Não. Fale como falaria com uma pessoa. Quanto mais específico o assunto, melhor o resultado: 'post sobre os 3 erros mais comuns na primeira consulta' rende mais que 'post sobre saúde'. Se quiser uma rede específica, é só dizer ('para o LinkedIn').",
       },
       {
         question: "Posso usar um link para gerar conteúdo?",
         answer:
-          "Sim! Cole um link no chat junto ao seu pedido. Exemplo: 'crie um post sobre este artigo: https://...' O assistente extrai automaticamente o conteúdo do link e usa como base para a geração. Você também pode escolher 'Colar um link' dentro do assistente de criação.",
+          "Pode. Cole o link no chat, sozinho ou junto ao pedido, e diga o formato: 'faz um carrossel sobre esse artigo: https://...'. Ele lê a página e usa como base. Alguns sites bloqueiam leitura automática (comum em revista médica e conteúdo com assinatura); quando isso acontece ele avisa, e você pode colar o texto direto no chat.",
       },
       {
         question: "Quais formatos posso gerar?",
         answer:
-          "Post único (1 slide), Carrossel (múltiplos slides, de 3 a 12), Story (formato vertical 9:16) e Documento LinkedIn (slides em formato 4:5). Cada formato tem dimensões e estilos visuais específicos.",
+          "Post (imagem única pro feed), Carrossel (vários slides que a pessoa desliza), Story (vertical 9:16, ocupa a tela toda), Editorial (carrossel com cara de revista: foto grande e manchete), Tweet card (card imitando print do X, com seu nome e foto), post de LinkedIn e vídeo animado curto. Os atalhos logo acima do campo de mensagem já preenchem o pedido pra você.",
       },
       {
         question: "Posso editar o conteúdo depois de gerar?",
         answer:
-          "Sim! Após a geração, use os botões no card de ações: 'Novo texto' para regenerar apenas o texto, 'Nova imagem' para regenerar apenas a imagem, 'Refazer tudo' para começar do zero, ou 'Studio' para editar manualmente textos e elementos visuais.",
+          "Pode. No card do conteúdo use 'Ajustar' para pedir uma mudança no visual (texto menor, outras cores) ou 'Refazer' para gerar de novo. Se quiser mudar só a legenda, peça no chat: 'muda a legenda para...' — isso é bem mais barato, porque não regera a imagem.",
       },
       {
-        question: "O que são os estilos visuais?",
+        question: "Como escolho a qualidade da imagem?",
         answer:
-          "Ao gerar conteúdo, você escolhe como as imagens serão criadas: 'IA — Design completo' (IA cria a imagem inteira com texto), 'IA — Ilustração' (cena fotorrealista sem texto pesado), 'Fundo de marca' (background gerado pela IA com texto sobreposto), 'Template limpo' (cores da sua marca como fundo com texto) ou 'Suas fotos' (fotos da marca como fundo).",
+          "No seletor ao lado do campo de mensagem há três opções: Econômico (Seedream, rende mais peças pelo mesmo saldo), Padrão (GPT-Image 2, o recomendado, melhor texto em português) e Premium (Nano Banana Pro, máxima qualidade, ideal para formatos verticais). O custo em créditos muda conforme a escolha.",
+      },
+      {
+        question: "Posso pedir vários conteúdos de uma vez?",
+        answer:
+          "Sim. Use o botão 'Fila' para enfileirar vários pedidos: eles são gerados um a um em segundo plano e você pode até fechar a aba, que continua. O painel lateral mostra o andamento.",
       },
     ],
   },
@@ -117,17 +127,17 @@ const HELP_SECTIONS: HelpSection[] = [
       {
         question: "Como usar os atalhos rápidos?",
         answer:
-          "Na barra abaixo do chat há atalhos para '✨ Criar conteúdo', '📸 Criar um post', '🎠 Criar um carrossel', '📱 Criar um story', '🔗 Tenho um link' e '🎨 Nova marca'. Clique em qualquer um para iniciar o assistente de criação já com o formato pré-selecionado.",
+          "Logo acima do campo de mensagem há atalhos de formato: Post, Carrossel, Editorial, Story, Tweet e LinkedIn, cada um mostrando quanto custa em créditos. Clicar preenche o pedido no campo e você só completa o assunto. Nada é enviado até você mandar.",
       },
       {
-        question: "Posso enviar imagens no chat?",
+        question: "Posso enviar imagens e documentos no chat?",
         answer:
-          "Sim! Durante a criação de uma marca, o chat habilita o botão de imagem para você enviar exemplos do seu estilo visual. Basta clicar no ícone de imagem que aparece no campo de mensagem.",
+          "Pode. Use o clipe para anexar fotos (o assistente enxerga a imagem e entende o pedido) ou arraste um PDF, DOCX ou TXT para usar como base do conteúdo. Se você anexar uma arte já pronta e quiser publicá-la como está, é só dizer: ele não redesenha.",
       },
       {
-        question: "O que é o modo de geração rápida (⚙️)?",
+        question: "O conteúdo não saiu como eu queria. O que faço?",
         answer:
-          "Clique no ícone ⚙️ ao lado do campo de mensagem para configurar uma plataforma e marca padrão. Com isso configurado, basta descrever o tema no chat e a IA gera o conteúdo direto, sem precisar passar pelo assistente de criação.",
+          "Fale com ele em português normal, como pediria a uma pessoa: 'deixa o texto menor', 'usa cores mais fortes', 'muda a legenda para falar de X'. Pedir só a legenda é bem mais barato que refazer a imagem inteira.",
       },
     ],
   },
@@ -139,12 +149,17 @@ const HELP_SECTIONS: HelpSection[] = [
       {
         question: "Como conectar minhas redes sociais?",
         answer:
-          "Vá em 'Meu Perfil' no menu lateral e role até a seção 'Contas Conectadas'. Clique em 'Conectar' no Instagram ou LinkedIn, autorize o acesso e pronto! Depois de conectar, você pode publicar conteúdos diretamente pela plataforma.",
+          "Vá em 'Meu Perfil' no menu lateral, aba 'Conexões', e clique em conectar na rede desejada. Dá pra conectar Instagram, LinkedIn, TikTok, X, Facebook, Pinterest, Bluesky, Threads e YouTube. É preciso conectar ANTES de publicar: sem isso o botão de publicar não tem para onde enviar.",
       },
       {
         question: "A publicação é automática?",
         answer:
-          "Sim! Quando você agenda um conteúdo, a plataforma publica automaticamente na data e horário escolhidos. Você também pode publicar manualmente a qualquer momento clicando em 'Publicar agora'.",
+          "É. Ao agendar, a plataforma publica sozinha na data e hora marcadas, mesmo com o computador desligado. Você também pode publicar na hora pelo botão 'Publicar' no card do conteúdo.",
+      },
+      {
+        question: "Posso publicar em várias redes de uma vez?",
+        answer:
+          "Pode. Ao publicar ou agendar, escolha quais contas quer usar. A legenda é adaptada automaticamente para cada rede, porque o que funciona no LinkedIn não é o que funciona no Instagram.",
       },
     ],
   },
@@ -166,31 +181,34 @@ const HELP_SECTIONS: HelpSection[] = [
     ],
   },
   {
-    id: "dashboard",
-    icon: LayoutDashboard,
-    title: "Dashboard & Tendências",
+    id: "credits",
+    icon: Coins,
+    title: "Créditos e cobrança",
     items: [
       {
-        question: "O que são as Tendências?",
+        question: "O que são os créditos?",
         answer:
-          "Tendências são notícias e temas relevantes que a plataforma busca automaticamente de fontes confiáveis. Você pode gerar conteúdo a partir de qualquer tendência — a IA transforma a notícia em posts visuais prontos para publicar.",
+          "São o que você gasta ao gerar conteúdo. Você compra um saldo e cada criação desconta dele, então paga só pelo que usa: não há mensalidade nem cobrança automática. O saldo aparece no menu lateral e não expira.",
       },
       {
-        question: "Como buscar tendências?",
+        question: "Quanto custa cada coisa?",
         answer:
-          "No Dashboard, clique em 'Buscar Tendências'. A plataforma faz o scraping automático de fontes de notícias e traz os temas mais relevantes. Você pode filtrar por fonte, tema e salvar favoritos.",
+          "Um post custa cerca de 10 créditos, um carrossel 10 por slide (um de 5 slides sai por 50), um story 25 e um tweet card 6. O valor exato aparece em cada atalho de formato, antes de você clicar. Um crédito equivale a cerca de dez centavos.",
       },
-    ],
-  },
-  {
-    id: "analytics",
-    icon: Sparkles,
-    title: "Analytics",
-    items: [
       {
-        question: "O que é o Analytics?",
+        question: "Como compro mais créditos?",
         answer:
-          "O Analytics mostra métricas e estatísticas dos seus conteúdos gerados e publicados. Acompanhe o volume de gerações, publicações e o desempenho das suas redes sociais conectadas.",
+          "Clique no saldo no menu lateral, ou em 'Recarregar'. Você escolhe o pacote e paga por PIX (cai na hora) ou cartão. Pacotes maiores rendem bônus de créditos.",
+      },
+      {
+        question: "Recebi um cupom. Onde uso?",
+        answer:
+          "Em 'Meu Perfil', aba 'Plano & Créditos', no campo 'Tem um cupom?'. Ele também aparece na janela de recarga. Se você entrou por um link de cupom, os créditos costumam ser aplicados sozinhos ao criar a conta.",
+      },
+      {
+        question: "Se eu não gostar do resultado, perco o crédito?",
+        answer:
+          "A geração é cobrada quando acontece, mesmo que o resultado não agrade. Por isso vale usar o modo Econômico para testar uma ideia, e pedir ajuste só de legenda quando a imagem já está boa (custa bem menos que refazer tudo).",
       },
     ],
   },
