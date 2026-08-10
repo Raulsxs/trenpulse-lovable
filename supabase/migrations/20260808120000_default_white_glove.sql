@@ -1,0 +1,15 @@
+-- profiles.account_type volta a nascer 'white_glove'.
+--
+-- POR QUE: o default no banco era 'self_serve', o que contradiz a decisão vigente (white_glove é o
+-- padrão único em produção desde 2026-06-09; a árvore self_serve/template-first saiu do bundle).
+--
+-- O EFEITO ERA SUTIL, E É O QUE O TORNAVA PERIGOSO: quem ainda não tem linha em `profiles` cai no
+-- fallback 'white_glove' do front e vai parar em /agent, o caminho certo. O desvio só acontecia
+-- DEPOIS que a pessoa salvava o perfil pela primeira vez, quando a linha nascia 'self_serve' e o
+-- roteamento passava a mandá-la para /studio. Ou seja: o usuário era movido de experiência no meio
+-- do uso, sem nada quebrar e sem nenhum teste falhar.
+--
+-- Pego ao criar um acesso novo (2026-08-08), antes de abrir o produto a mais usuários.
+-- Só muda o DEFAULT: linhas existentes ficam como estão, para não reverter escolha deliberada de
+-- quem está testando o Studio de propósito.
+alter table public.profiles alter column account_type set default 'white_glove';
