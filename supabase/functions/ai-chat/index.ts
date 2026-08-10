@@ -4,7 +4,7 @@ import { fetchAI } from "../_shared/ai-gateway.ts";
 import { buildBrandContext, brandTextLimits } from "../_shared/brand-context.ts";
 import { parseLlmJson } from "../_shared/llm-json.ts";
 import { clampSlides, normalizeHashtags, enforceTweetLimit, truncateToChars } from "../_shared/content-validators.ts";
-import { orChat } from "../_shared/openrouter.ts";
+import { orChat, AGENT_MODEL_CHAIN } from "../_shared/openrouter.ts";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TrendPulse AI Chat — Simplified (~1500 lines)
@@ -21,7 +21,53 @@ import { orChat } from "../_shared/openrouter.ts";
 
 // Compatibility wrapper — uses centralized AI gateway (inference.sh > Google > Lovable)
 // Returns a Response so all existing callers (.ok, .json()) work unchanged
+/**
+ * Motor de TEXTO dos passos auxiliares (legendas, briefs, variantes por rede).
+ *
+ * POR QUE MUDOU: isto chamava o `minimax-m-25` via inference.sh, que é o PRIMÁRIO do ai-gateway.
+ * Só que o minimax está quebrado e a conta do inference.sh sem saldo (402) — então cada uma das ~18
+ * chamadas de uma geração ia até um serviço morto, esperava falhar, e só então caía no fallback.
+ * Tempo puro jogado fora, várias vezes por post. Medido: um turno de texto pelo OpenRouter leva ~5s,
+ * enquanto gerar um post inteiro levava ~85s.
+ *
+ * Agora usa `orChat` (mesma chain do agente: Haiku → Gemini Flash → Qwen), que já é o caminho
+ * quente do produto e tem fallback entre modelos.
+ *
+ * A ASSINATURA E O FORMATO DE RESPOSTA ficam idênticos de propósito (Response com
+ * `choices[0].message.content`): os ~18 pontos de chamada continuam funcionando sem tocar em
+ * nenhum deles. Trocar o motor num lugar só é bem menos arriscado que reescrever 18 call sites.
+ *
+ * Se o OpenRouter inteiro falhar, cai no `fetchAI` legado como último recurso (melhor uma legenda
+ * gerada por um caminho lento que nenhuma legenda).
+ */
 async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
+  const msgs = Array.isArray((body as any).messages) ? (body as any).messages : [];
+  const userMsgs = msgs
+    .filter((m: any) => m && m.role !== "system" && typeof m.content === "string")
+    .map((m: any) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.content }));
+  const systemMsg = msgs.find((m: any) => m?.role === "system")?.content;
+
+  const ok = (content: string) =>
+    new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
+      status: 200, headers: { "Content-Type": "application/json" },
+    });
+
+  if (userMsgs.length) {
+    try {
+      const r = await orChat({
+        system: typeof systemMsg === "string" ? systemMsg : "",
+        messages: userMsgs,
+        modelChain: AGENT_MODEL_CHAIN,
+        maxTokens: Number((body as any).max_tokens) || 2048,
+      });
+      const text = r.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
+      if (text.trim()) return ok(text);
+      console.warn("[aiGatewayFetch] OpenRouter devolveu texto vazio — caindo pro gateway legado");
+    } catch (e: any) {
+      console.warn(`[aiGatewayFetch] OpenRouter falhou (${String(e?.message).slice(0, 100)}) — caindo pro gateway legado`);
+    }
+  }
+
   try {
     const result = await fetchAI(body as any);
     return new Response(JSON.stringify({ choices: result.choices }), {
