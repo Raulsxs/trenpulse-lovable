@@ -16,7 +16,7 @@ const HELP_SECTIONS: HelpSection[] = [
   {
     id: "brands",
     icon: Palette,
-    title: "Marcas (Brand Kit)",
+    title: "Marcas",
     items: [
       {
         question: "O que são as Marcas?",
@@ -26,7 +26,7 @@ const HELP_SECTIONS: HelpSection[] = [
       {
         question: "Como criar uma Marca?",
         answer:
-          "Vá ao Assistente IA (chat) e clique em '🎨 Nova marca' ou digite \"criar minha marca\". O assistente vai pedir o nome da marca e exemplos de posts do seu estilo — a IA analisa automaticamente cores, fontes e tom. Você também pode criar e editar marcas manualmente pelo Brand Kit no menu lateral.",
+          "No chat, abra o seletor de marca (ao lado do campo de mensagem) e clique em '+ Criar marca'. Você também chega por 'Marcas' no menu lateral. São 4 passos: 1) Nome & Logo, 2) Paleta & Fontes, 3) Exemplos Visuais (posts que representam seu estilo) e 4) Gerar Estilos, onde a IA analisa tudo e monta o guia da marca. Dá pra parar no passo 1 e completar depois.",
       },
       {
         question: "Posso ter mais de uma Marca?",

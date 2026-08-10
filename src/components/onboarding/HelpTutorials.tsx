@@ -13,12 +13,15 @@ function MiniChat({ children, inputText = "", showQuickBar, activeQuick }: {
   showQuickBar?: boolean;
   activeQuick?: string;
 }) {
+  // Precisa ser IGUAL aos atalhos reais do /agent (QUICK_ACTIONS em AgentChat.tsx). O tutorial
+  // serve pra pessoa reconhecer a tela: mostrar botão que não existe ("Frase", "Link") faz ela
+  // procurar e não achar.
   const QUICK_ACTIONS = [
     { emoji: "📷", label: "Post" },
     { emoji: "🎠", label: "Carrossel" },
+    { emoji: "📰", label: "Editorial" },
     { emoji: "📱", label: "Story" },
-    { emoji: "💬", label: "Frase" },
-    { emoji: "🔗", label: "Link" },
+    { emoji: "💬", label: "Tweet" },
     { emoji: "💼", label: "LinkedIn" },
   ];
 
@@ -202,7 +205,7 @@ function TutorialFrase() {
     <MiniChat
       inputText={step < 3 ? inputText : ""}
       showQuickBar={step >= 1}
-      activeQuick={step === 1 ? "Frase" : undefined}
+      /* Sem activeQuick: não existe atalho "Frase". Este fluxo é digitado direto no chat. */
     >
       <Bubble role="assistant">Olá! Cole um link, descreva um tema ou use os atalhos abaixo 👇</Bubble>
       {step >= 3 && (
@@ -254,7 +257,7 @@ function TutorialLink() {
     <MiniChat
       inputText={step < 3 ? inputText : ""}
       showQuickBar={step >= 1}
-      activeQuick={step === 1 ? "Link" : undefined}
+      /* Sem activeQuick: não existe atalho "Link". Cola-se o link direto no chat. */
     >
       <Bubble role="assistant">Olá! Cole um link, descreva um tema ou use os atalhos abaixo 👇</Bubble>
       {step >= 3 && (
@@ -274,59 +277,87 @@ function TutorialLink() {
 }
 
 // ── Tutorial 4: Criar marca ──
+// ATENÇÃO ao manter: a marca NÃO é mais criada por conversa no chat (o agente não tem tool pra
+// isso). Hoje é um formulário em /brands/new, com os 4 passos abaixo — que precisam bater com
+// os STEPS reais de src/pages/BrandWizard.tsx.
+const WIZARD_STEPS = [
+  { n: 1, label: "Nome & Logo", detail: "O nome que aparece e o logo em PNG (de preferência com fundo transparente)." },
+  { n: 2, label: "Paleta & Fontes", detail: "As cores e as letras da sua identidade." },
+  { n: 3, label: "Exemplos Visuais", detail: "Posts que representam seu estilo, pra IA aprender sua cara." },
+  { n: 4, label: "Gerar Estilos", detail: "A IA analisa tudo e monta o guia de estilo da marca." },
+];
+
 function TutorialMarca() {
   const [step, setStep] = useState(0);
   useEffect(() => {
     setStep(0);
     const t = [
-      setTimeout(() => setStep(1), 500),   // quick bar, "Nova marca" visible
-      setTimeout(() => setStep(2), 1800),  // typing "criar marca"
-      setTimeout(() => setStep(3), 3200),  // sent
-      setTimeout(() => setStep(4), 4000),  // AI asks for name
-      setTimeout(() => setStep(5), 5200),  // user types name
-      setTimeout(() => setStep(6), 6500),  // AI asks for images
-      setTimeout(() => setStep(7), 7800),  // upload shown
-      setTimeout(() => setStep(8), 9000),  // brand ready
+      setTimeout(() => setStep(1), 700),
+      setTimeout(() => setStep(2), 2200),
+      setTimeout(() => setStep(3), 3500),
+      setTimeout(() => setStep(4), 4800),
+      setTimeout(() => setStep(5), 6100),
+      setTimeout(() => setStep(6), 7400),
     ];
     return () => t.forEach(clearTimeout);
   }, []);
 
-  const inputText = step === 2 ? "Quero criar minha marca" : step === 5 ? "Motivacional" : "";
-
   return (
-    <MiniChat
-      inputText={step < 3 || (step >= 5 && step < 6) ? inputText : ""}
-      showQuickBar={step >= 1}
-    >
-      <Bubble role="assistant">Olá! Cole um link, descreva um tema ou use os atalhos abaixo 👇</Bubble>
-      {step >= 3 && <Bubble role="user" delay={0.1}>Quero criar minha marca</Bubble>}
-      {step >= 4 && (
-        <Bubble role="assistant" delay={0.2}>
-          Ótimo! 🎨 Qual é o nome da sua marca?
-        </Bubble>
-      )}
-      {step >= 6 && <Bubble role="user" delay={0.1}>Motivacional</Bubble>}
-      {step >= 6 && (
-        <Bubble role="assistant" delay={0.3}>
-          Perfeito! Agora envie de <strong>3 a 8 imagens</strong> de referência — posts que você gosta ou que representam seu estilo visual.
-        </Bubble>
-      )}
-      {step >= 7 && (
-        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}
-          className="ml-7 border-2 border-dashed border-primary/30 rounded-lg p-3 flex items-center gap-2 bg-primary/5">
-          <Upload className="w-4 h-4 text-primary/60 flex-shrink-0" />
-          <span className="text-[10px] text-muted-foreground">3 imagens enviadas ✓</span>
+    <div className="bg-card border border-border rounded-xl overflow-hidden shadow-sm">
+      <div className="bg-muted/40 border-b border-border px-3 py-2 flex items-center gap-2">
+        <div className="w-6 h-6 bg-gradient-to-br from-blue-500 to-blue-600 rounded-md flex items-center justify-center">
+          <TrendingUp className="w-3 h-3 text-white" />
+        </div>
+        <span className="text-xs font-medium">Nova marca</span>
+      </div>
+
+      <div className="p-4 min-h-[240px] space-y-3">
+        {/* Passo 0: onde fica o botão */}
+        <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+          className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2">
+          <p className="text-[11px] text-muted-foreground leading-snug">
+            No chat, abra o seletor de marca (ao lado do campo de mensagem) e clique em
+            {" "}<span className="font-semibold text-foreground">+ Criar marca</span>.
+          </p>
         </motion.div>
-      )}
-      {step >= 8 && (
-        <Bubble role="assistant" delay={0.3}>
-          <div>
-            <p>✅ Marca <strong>Motivacional</strong> criada!</p>
-            <p className="text-[10px] opacity-70 mt-1">🎨 Paleta detectada · ✍️ Tom de voz definido</p>
-          </div>
-        </Bubble>
-      )}
-    </MiniChat>
+
+        {WIZARD_STEPS.map((s) => {
+          const reached = step >= s.n;
+          const current = step === s.n;
+          return (
+            <motion.div
+              key={s.n}
+              initial={{ opacity: 0, x: -6 }}
+              animate={{ opacity: reached ? 1 : 0.35, x: 0 }}
+              transition={{ duration: 0.3 }}
+              className={`flex items-start gap-2.5 rounded-lg px-2.5 py-2 border ${
+                current ? "border-primary/50 bg-primary/[0.06]" : "border-transparent"
+              }`}
+            >
+              <span className={`w-5 h-5 rounded-full grid place-items-center shrink-0 text-[10px] font-bold ${
+                step > s.n ? "bg-green-500 text-white" : reached ? "bg-primary text-white" : "bg-muted text-muted-foreground"
+              }`}>
+                {step > s.n ? <Check className="w-2.5 h-2.5" /> : s.n}
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold leading-snug">{s.label}</span>
+                <span className="block text-[10px] text-muted-foreground leading-snug mt-0.5">{s.detail}</span>
+              </span>
+            </motion.div>
+          );
+        })}
+
+        {step >= 5 && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+            className="rounded-lg bg-green-500/10 border border-green-500/30 px-3 py-2">
+            <p className="text-[11px] font-semibold text-foreground">✅ Marca criada</p>
+            <p className="text-[10px] text-muted-foreground mt-0.5">
+              A partir daqui, todo conteúdo sai com essas cores e com o logo aplicado sozinho.
+            </p>
+          </motion.div>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -418,7 +449,7 @@ const TUTORIALS = [
   { id: "post", emoji: "📷", title: "Criar um post", desc: "Digite o tema → IA gera direto", component: TutorialPostTema },
   { id: "frase", emoji: "💬", title: "Post com frase", desc: "Cole a frase → IA cria o design", component: TutorialFrase },
   { id: "link", emoji: "🔗", title: "Post a partir de link", desc: "Cole um artigo → post automático", component: TutorialLink },
-  { id: "marca", emoji: "🎨", title: "Criar uma marca", desc: "Nome + imagens → identidade visual", component: TutorialMarca },
+  { id: "marca", emoji: "🎨", title: "Criar uma marca", desc: "4 passos → sua identidade em toda peça", component: TutorialMarca },
   { id: "carrossel", emoji: "🎠", title: "Criar carrossel", desc: "Descreva o tema → slides prontos", component: TutorialCarrossel },
   { id: "publicar", emoji: "🚀", title: "Publicar nas redes", desc: "Conecte a conta → publique ou agende", component: TutorialPublicar },
 ];
@@ -471,7 +502,7 @@ export function HelpTutorials() {
             transition={{ duration: 0.3 }}
           >
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs text-muted-foreground">Veja como usar o prompt:</p>
+              <p className="text-xs text-muted-foreground">Veja o passo a passo:</p>
               <button
                 onClick={() => setKey(k => k + 1)}
                 className="text-xs text-primary flex items-center gap-1 hover:underline"
