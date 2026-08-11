@@ -63,13 +63,35 @@ Deno.serve(async (req) => {
       if (!pfmApiKey) return respond({ connections: [] });
 
       try {
-        const pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts", {
-          headers: { "Authorization": `Bearer ${pfmApiKey}` },
-        });
+        // A API do PFM falha de vez em quando de forma transitória. Duas consequências disso, e as
+        // duas eram tratadas errado aqui:
+        //   1. Sem retry, um soluço virava "nenhuma conta" — reproduzido: 1 chamada vazia seguida de
+        //      6 chamadas com as 4 contas corretas, sem nada mudar no meio.
+        //   2. Devolver lista vazia em caso de ERRO é pior que devolver erro: o usuário lê "nenhuma
+        //      conta conectada", acha que perdeu as conexões e vai reconectar tudo à toa. O front
+        //      precisa poder distinguir "você não tem contas" de "não consegui verificar agora".
+        let pfmResp: Response | null = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 700));
+          try {
+            pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts", {
+              headers: { "Authorization": `Bearer ${pfmApiKey}` },
+            });
+            if (pfmResp.ok) break;
+            console.warn(`[connect-social] PFM HTTP ${pfmResp.status} (tentativa ${attempt + 1}/3)`);
+          } catch (e: any) {
+            console.warn(`[connect-social] PFM rede falhou (tentativa ${attempt + 1}/3): ${e?.message}`);
+            pfmResp = null;
+          }
+        }
 
-        if (!pfmResp.ok) {
-          console.error(`[connect-social] PFM API error: ${pfmResp.status}`);
-          return respond({ connections: [] });
+        if (!pfmResp || !pfmResp.ok) {
+          console.error(`[connect-social] PFM indisponível após 3 tentativas: ${pfmResp?.status ?? "sem resposta"}`);
+          return respond({
+            connections: [],
+            error: "pfm_unavailable",
+            message: "Não consegui verificar suas contas conectadas agora. Tente de novo em instantes.",
+          });
         }
 
         const pfmData = await pfmResp.json();
@@ -104,8 +126,13 @@ Deno.serve(async (req) => {
         );
         return respond({ connections });
       } catch (err: any) {
+        // Mesmo motivo do bloco acima: falha não pode se disfarçar de "você não tem contas".
         console.error("[connect-social] PFM fetch error:", err?.message);
-        return respond({ connections: [] });
+        return respond({
+          connections: [],
+          error: "pfm_unavailable",
+          message: "Não consegui verificar suas contas conectadas agora. Tente de novo em instantes.",
+        });
       }
     }
 

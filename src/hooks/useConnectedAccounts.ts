@@ -12,25 +12,36 @@ let fetchPromise: Promise<ConnectedAccount[]> | null = null;
 let lastFetchTime = 0;
 const CACHE_TTL = 60_000; // 1 minute
 
-async function fetchAccounts(): Promise<ConnectedAccount[]> {
+/**
+ * Devolve as contas E se a consulta FALHOU. A distinção importa: "você não tem contas" e "não
+ * consegui verificar agora" levam a UIs opostas — a primeira manda conectar, a segunda manda esperar.
+ * Antes, um soluço da API do PFM (que acontece: reproduzido em teste) virava lista vazia silenciosa,
+ * e o usuário ia reconectar tudo à toa.
+ */
+async function fetchAccounts(): Promise<{ accounts: ConnectedAccount[]; failed: boolean }> {
   try {
-    const { data } = await supabase.functions.invoke("connect-social", {
+    const { data, error } = await supabase.functions.invoke("connect-social", {
       body: { action: "list" },
     });
+    // A edge function sinaliza indisponibilidade com error:"pfm_unavailable" (e não com lista vazia).
+    if (error || data?.error === "pfm_unavailable") return { accounts: [], failed: true };
     const list = data?.connections || data?.accounts || [];
     const connected = Array.isArray(list)
       ? list.filter((a: any) => a.connected || a.status === "connected")
       : [];
-    return connected.map((a: any) => ({
-      platform: a.platform,
-      connected: true,
-      account_name: a.account_name || a.username || null,
-      pfm_account_id: a.pfm_account_id || a.id || null,
-      expired: a.expired === true,
-      expires_at: a.expires_at || null,
-    }));
+    return {
+      accounts: connected.map((a: any) => ({
+        platform: a.platform,
+        connected: true,
+        account_name: a.account_name || a.username || null,
+        pfm_account_id: a.pfm_account_id || a.id || null,
+        expired: a.expired === true,
+        expires_at: a.expires_at || null,
+      })),
+      failed: false,
+    };
   } catch {
-    return [];
+    return { accounts: [], failed: true };
   }
 }
 
@@ -40,9 +51,14 @@ function getAccounts(): Promise<ConnectedAccount[]> {
     return Promise.resolve(cachedAccounts);
   }
   if (!fetchPromise) {
-    fetchPromise = fetchAccounts().then((accounts) => {
-      cachedAccounts = accounts;
-      lastFetchTime = Date.now();
+    fetchPromise = fetchAccounts().then(({ accounts, failed }) => {
+      // NÃO cacheia resultado de falha: senão um soluço de rede congelava "nenhuma conta conectada"
+      // por 1 minuto inteiro, mesmo depois da API já ter voltado. Em caso de falha, a próxima
+      // montagem tenta de novo.
+      if (!failed) {
+        cachedAccounts = accounts;
+        lastFetchTime = Date.now();
+      }
       fetchPromise = null;
       return accounts;
     });
