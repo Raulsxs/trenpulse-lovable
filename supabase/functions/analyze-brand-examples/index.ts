@@ -109,6 +109,11 @@ ANALYSIS INSTRUCTIONS:
 4. For each format, recommend which templates best match: wave_cover, wave_text_card, wave_bullets, wave_closing, story_cover, story_tip, generic_free.
 5. Extract exact colors seen (confirm against provided palette).
 6. Note text placement zones, safe margins, and composition patterns.
+7. TIPOGRAFIA (detected_fonts): o campo "Fonts" do metadata acima é o DEFAULT DO FORMULÁRIO na
+   maioria das marcas (Inter/Inter), não uma escolha do usuário — trate-o como palpite, não como
+   verdade. Olhe os desenhos das letras nas imagens e diga qual fonte você reconhece. Se não der pra
+   cravar, devolva a família mais próxima com confidence "low" em vez de repetir o que veio no
+   metadata. Nunca ecoe "Inter" só porque estava no input.
 
 Return this EXACT JSON structure:
 {
@@ -129,6 +134,12 @@ Return this EXACT JSON structure:
       "uppercase_headlines": false,
       "headline_alignment": "left|center",
       "body_alignment": "left|center"
+    },
+    "detected_fonts": {
+      "headings": "<nome da fonte OU família mais próxima que você reconhece nas imagens>",
+      "body": "<idem, para o texto corrido>",
+      "confidence": "high|medium|low",
+      "evidence": "<em pt-BR, o que te fez concluir isso: 'sem serifa geométrica, 'a' de bojo único, terminais retos'>"
     },
     "logo": {
       "preferred_position": "top-right|top-left|bottom-center|bottom-right",

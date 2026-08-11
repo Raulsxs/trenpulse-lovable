@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,26 @@ export default function BrandEdit() {
   };
 
   const brand = brands?.find((b) => b.id === id);
+
+  /**
+   * Fontes que a IA reconheceu nas imagens de referência.
+   *
+   * POR QUE ISTO EXISTE: Inter/Inter é o default do formulário de criação e 20 das 22 marcas nunca
+   * saíram dele — mas esse valor é injetado em toda geração como se fosse fato ("Fontes:
+   * títulos=Inter"). O usuário lê "Inter" na tela da própria marca e conclui, com razão, que o
+   * sistema não olhou a identidade dele.
+   *
+   * A sugestão fica VISÍVEL mas não se aplica sozinha: quem escolheu Inter de propósito não pode ter
+   * a escolha sobrescrita por um palpite de modelo.
+   */
+  const detected = (brand as any)?.style_guide?.brand_tokens?.detected_fonts as
+    | { headings?: string; body?: string; confidence?: string; evidence?: string }
+    | undefined;
+  const sugereFonte = (campo: "headings" | "body") => {
+    const s = detected?.[campo];
+    if (!s || !FONT_OPTIONS.includes(s)) return null;   // só sugerimos o que o seletor sabe renderizar
+    return s === formData.fonts[campo] ? null : s;
+  };
   // Marca padrão (mesma chave usada em /brands e no preselect do Studio).
   const isDefault = (() => { try { return localStorage.getItem("tp_default_brand") === id; } catch { return false; } })();
 
@@ -189,7 +209,7 @@ export default function BrandEdit() {
             <TabsTrigger value="images">Exemplos</TabsTrigger>
           </TabsList>
 
-          {/* â”€â”€ Tab 1: Identidade — nome, cores, fontes, tom visual â”€â”€ */}
+          {/* ── Tab 1: Identidade — nome, cores, fontes, tom visual ── */}
           <TabsContent value="identity">
             <Card>
               <CardContent className="space-y-4 pt-6">
@@ -288,6 +308,15 @@ export default function BrandEdit() {
                           {FONT_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
                         </SelectContent>
                       </Select>
+                      {sugereFonte("headings") && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, fonts: { ...formData.fonts, headings: detected!.headings! } })}
+                          className="text-[11px] text-primary hover:underline text-left"
+                        >
+                          A IA reconheceu <strong>{detected!.headings}</strong> nas suas referências — aplicar
+                        </button>
+                      )}
                     </div>
                     <div className="space-y-1">
                       <Label className="text-xs text-muted-foreground">Corpo (body text)</Label>
@@ -297,15 +326,30 @@ export default function BrandEdit() {
                           {FONT_OPTIONS.map(f => <SelectItem key={f} value={f}>{f}</SelectItem>)}
                         </SelectContent>
                       </Select>
+                      {sugereFonte("body") && (
+                        <button
+                          type="button"
+                          onClick={() => setFormData({ ...formData, fonts: { ...formData.fonts, body: detected!.body! } })}
+                          className="text-[11px] text-primary hover:underline text-left"
+                        >
+                          A IA reconheceu <strong>{detected!.body}</strong> nas suas referências — aplicar
+                        </button>
+                      )}
                     </div>
                   </div>
+                  {detected?.evidence && (
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      {detected.evidence}
+                      {detected.confidence === "low" && " (a IA não cravou — confira antes de aplicar)"}
+                    </p>
+                  )}
                 </div>
 
               </CardContent>
             </Card>
           </TabsContent>
 
-          {/* â”€â”€ Tab 2: Geração — como a IA gera conteúdo para esta marca â”€â”€ */}
+          {/* ── Tab 2: Geração — como a IA gera conteúdo para esta marca ── */}
           <TabsContent value="generation">
             <Card>
               <CardContent className="space-y-4 pt-6">
@@ -379,7 +423,7 @@ export default function BrandEdit() {
             </Card>
           </TabsContent>
 
-          {/* â”€â”€ Tab 3: Imagens — referências visuais + fotos pessoais â”€â”€ */}
+          {/* ── Tab 3: Imagens — referências visuais + fotos pessoais ── */}
           <TabsContent value="images">
             <div className="space-y-6">
               {/* Referências de estilo */}

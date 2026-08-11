@@ -81,10 +81,17 @@ export function buildBrandContext(brand: any): string {
     if (colors.length) parts.push(`Cores: ${colors.join(", ")}`);
   }
 
-  // ── Fontes (legado) ──
-  if (brand.fonts && typeof brand.fonts === "object") {
-    const fonts = brand.fonts as any;
-    parts.push(`Fontes: títulos=${fonts.headings || "Inter"}, corpo=${fonts.body || "Inter"}`);
+  // ── Fontes ──
+  // A fonte que a IA RECONHECEU nas referências ganha da que está no formulário: `Inter/Inter` é o
+  // default de criação da marca e 20 das 22 marcas nunca saíram dele, então mandar isso como fato
+  // instruía o modelo a desenhar uma tipografia que a marca não usa. O que veio das imagens é
+  // evidência; o que veio do formulário pode ser só o default que ninguém tocou.
+  const detectadas = (tokens as any)?.detected_fonts;
+  const fonts = brand.fonts && typeof brand.fonts === "object" ? (brand.fonts as any) : null;
+  const headings = detectadas?.headings || fonts?.headings;
+  const body = detectadas?.body || fonts?.body;
+  if (headings || body) {
+    parts.push(`Fontes: títulos=${headings || body}, corpo=${body || headings}`);
   }
 
   // ── Tipografia prescritiva do style_guide (peso/caixa/alinhamento) ──
