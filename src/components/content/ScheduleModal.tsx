@@ -21,9 +21,12 @@ interface ScheduleModalProps {
   connectedAccounts?: ConnectedAccount[];
   preSelectedAccountIds?: string[];
   onReconnect?: () => void;
+  /** Data que o modal já abre selecionada. Usado quando o usuário arrasta um card para um dia:
+   *  ele escolheu o DIA no gesto, e só falta o horário. */
+  defaultDate?: Date | null;
 }
 
-const ScheduleModal = ({ open, onClose, onSchedule, isScheduling, connectedAccounts, preSelectedAccountIds, onReconnect }: ScheduleModalProps) => {
+const ScheduleModal = ({ open, onClose, onSchedule, isScheduling, connectedAccounts, preSelectedAccountIds, onReconnect, defaultDate }: ScheduleModalProps) => {
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [selectedHour, setSelectedHour] = useState("09");
   const [selectedMinute, setSelectedMinute] = useState("00");
@@ -31,6 +34,11 @@ const ScheduleModal = ({ open, onClose, onSchedule, isScheduling, connectedAccou
 
   const showAccounts = Array.isArray(connectedAccounts);
   const validAccounts = (connectedAccounts || []).filter((a) => a.pfm_account_id && !a.expired);
+
+  // Reposiciona no dia que o usuário escolheu ao soltar o card.
+  useEffect(() => {
+    if (open && defaultDate) setSelectedDate(defaultDate);
+  }, [open, defaultDate]);
 
   // Pré-seleção quando abre: usa o que veio, ou todas as contas válidas.
   useEffect(() => {

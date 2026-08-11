@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BackgroundGenerationProvider } from "@/contexts/BackgroundGenerationContext";
 import { useAccountType } from "@/hooks/useAccountType";
@@ -67,6 +67,18 @@ const RoutedApp = () => {
       {/* Pública de propósito: é o link do email pós-compra e precisa abrir pra quem ainda não tem conta. */}
       <Route path="/resgatar" element={<RedeemCoupon />} />
       <Route path="/admin" element={<AdminAnalytics />} />
+
+      {/* Rotas legadas → destino atual.
+          Corrigir os links no código (commit 4cf98af) não conserta quem JÁ tem essas URLs no
+          histórico do navegador, em bookmark ou em email antigo: o botão "voltar" continua caindo
+          nelas e batendo em 404. Redirect com replace pra não empilhar entrada nova no histórico. */}
+      <Route path="/dashboard" element={<Navigate to="/agent" replace />} />
+      <Route path="/dashboard/*" element={<Navigate to="/agent" replace />} />
+      <Route path="/calendario" element={<Navigate to="/calendar" replace />} />
+      <Route path="/conteudos" element={<Navigate to="/contents" replace />} />
+      <Route path="/marcas" element={<Navigate to="/brands" replace />} />
+      <Route path="/perfil" element={<Navigate to="/profile" replace />} />
+
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>

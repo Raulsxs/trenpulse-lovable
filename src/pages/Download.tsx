@@ -231,10 +231,15 @@ const DownloadPage = () => {
       // O nome carrega FORMATO e QUANTIDADE, não só título e dimensão. Sem isso, dois downloads
       // seguidos (um post e um carrossel, por exemplo) viram dois zips indistinguíveis na pasta —
       // e a pessoa abre um esperando o outro, achando que faltou imagem.
-      const safeName = content.title.replace(/[^a-zA-Z0-9À-ú\s]/g, "").slice(0, 40).trim().replace(/\s+/g, "_");
+      // ASCII puro: o Explorer do Windows lê o nome do .zip na codepage do sistema, e um acento no
+      // meio já bastou pra usuário achar que o arquivo veio "quebrado". O conteúdo nunca teve acento
+      // (slide_01.png…), só o nome do container tinha.
+      const safeName = content.title
+        .normalize("NFD")               // separa o acento da letra; o filtro seguinte descarta o acento
+        .replace(/[^a-zA-Z0-9\s]/g, "").slice(0, 40).trim().replace(/\s+/g, "_");
       const tipo = (content.content_type || "post").replace(/[^a-z]/gi, "");
       const qtd = slides.length > 1 ? `_${slides.length}slides` : "";
-      link.download = `${safeName}_${tipo}${qtd}_${dims.width}x${dims.height}.zip`;
+      link.download = `${safeName || "conteudo"}_${tipo}${qtd}_${dims.width}x${dims.height}.zip`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -252,7 +257,11 @@ const DownloadPage = () => {
         setContent((prev) => (prev ? { ...prev, status: "approved" } : null));
       }
 
-      toast.success("Download concluído!", { description: "ZIP com PNGs e legendas." });
+      // O número explícito existe porque "veio só a primeira imagem" é uma queixa que aparece mesmo
+      // quando o ZIP está completo: o usuário abre o arquivo, vê a capa e não rola a lista.
+      toast.success("Download concluído!", {
+        description: `${slides.length} ${slides.length === 1 ? "imagem" : "imagens"} (slide_01…slide_${String(slides.length).padStart(2, "0")}.png) + legendas.txt no ZIP.`,
+      });
     } catch (error) {
       console.error("Download error:", error);
       toast.error("Erro ao gerar download", {

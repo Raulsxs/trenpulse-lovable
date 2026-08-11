@@ -178,7 +178,13 @@ Return this EXACT JSON structure:
   ],
   "do_summary": ["summarize positive rules based on examples + brand rules"],
   "dont_summary": ["summarize negative rules based on examples + brand rules"]
-}`
+}
+
+IMPORTANTE — idioma: os campos "visual_patterns", "do_summary" e "dont_summary" são EXIBIDOS AO
+USUÁRIO na tela da marca ("O que a IA entendeu da sua marca"). Escreva esses três campos em
+PORTUGUÊS DO BRASIL, em frases curtas e concretas que um leigo entenda ("fundo branco com bastante
+respiro", não "minimalist aesthetic with ample white space"). Os demais campos são internos e
+seguem em inglês.`
       }
     ];
 

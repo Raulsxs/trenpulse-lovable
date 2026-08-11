@@ -16,6 +16,7 @@ import BrandExamples from "@/components/brand/BrandExamples";
 import SavedVisualsSection from "@/components/brand/SavedVisualsSection";
 // TemplateSetsSection and SavedBackgroundTemplates removed in simplification
 import BrandPhotoBackgrounds from "@/components/brand/BrandPhotoBackgrounds";
+import BrandRealPreview from "@/components/brand/BrandRealPreview";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -171,7 +172,7 @@ export default function BrandEdit() {
                   </Badge>
                 )}
               </div>
-              <p className="text-muted-foreground">Edite a identidade — a prévia à direita atualiza ao vivo.</p>
+              <p className="text-muted-foreground">Edite a identidade. À direita, o que a IA já aprendeu desta marca.</p>
             </div>
           </div>
           <Button onClick={handleSave} disabled={!formData.name || updateBrand.isPending}>
@@ -245,10 +246,10 @@ export default function BrandEdit() {
                   <Select value={formData.creation_mode || "from_scratch"} onValueChange={(value) => setFormData({ ...formData, creation_mode: value })}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="photo_backgrounds">ðŸ“¸ Fotos pessoais como fundo</SelectItem>
-                      <SelectItem value="style_copy">ðŸŽ¨ Copiar estilo de referências</SelectItem>
-                      <SelectItem value="inspired">ðŸ’¡ Inspirado em referências</SelectItem>
-                      <SelectItem value="from_scratch">âœ¨ Criar do zero (sem referências)</SelectItem>
+                      <SelectItem value="photo_backgrounds">📸 Fotos pessoais como fundo</SelectItem>
+                      <SelectItem value="style_copy">🎨 Copiar estilo de referências</SelectItem>
+                      <SelectItem value="inspired">💡 Inspirado em referências</SelectItem>
+                      <SelectItem value="from_scratch">✨ Criar do zero (sem referências)</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -310,22 +311,22 @@ export default function BrandEdit() {
               <CardContent className="space-y-4 pt-6">
                 <div className="space-y-4">
                   <div className="space-y-2">
-                    <Label>âœ… O que a IA DEVE fazer nos conteúdos</Label>
+                    <Label>✅ O que a IA DEVE fazer nos conteúdos</Label>
                     <p className="text-xs text-muted-foreground">Regras que a IA vai seguir ao gerar textos e imagens para esta marca.</p>
-                    <Textarea value={formData.do_rules} onChange={(e) => setFormData({ ...formData, do_rules: e.target.value })} placeholder={"Exemplos:\nâ€¢ Usar linguagem informal e próxima\nâ€¢ Sempre incluir dados e estatísticas\nâ€¢ Mencionar o nome da marca nos slides\nâ€¢ Usar emojis com moderação\nâ€¢ Headlines curtos e impactantes (máx 60 caracteres)"} rows={4} />
+                    <Textarea value={formData.do_rules} onChange={(e) => setFormData({ ...formData, do_rules: e.target.value })} placeholder={"Exemplos:\n• Usar linguagem informal e próxima\n• Sempre incluir dados e estatísticas\n• Mencionar o nome da marca nos slides\n• Usar emojis com moderação\n• Headlines curtos e impactantes (máx 60 caracteres)"} rows={4} />
                   </div>
 
                   <div className="space-y-2">
-                    <Label>ðŸš« O que a IA NÃO deve fazer</Label>
+                    <Label>🚫 O que a IA NÃO deve fazer</Label>
                     <p className="text-xs text-muted-foreground">Regras do que evitar — a IA não vai fazer nada desta lista.</p>
-                    <Textarea value={formData.dont_rules} onChange={(e) => setFormData({ ...formData, dont_rules: e.target.value })} placeholder={"Exemplos:\nâ€¢ Não usar jargões técnicos\nâ€¢ Não fazer textos longos demais\nâ€¢ Não usar emojis em excesso\nâ€¢ Não mencionar concorrentes\nâ€¢ Não usar CAPS LOCK nos headlines"} rows={4} />
+                    <Textarea value={formData.dont_rules} onChange={(e) => setFormData({ ...formData, dont_rules: e.target.value })} placeholder={"Exemplos:\n• Não usar jargões técnicos\n• Não fazer textos longos demais\n• Não usar emojis em excesso\n• Não mencionar concorrentes\n• Não usar CAPS LOCK nos headlines"} rows={4} />
                   </div>
                 </div>
 
                 {/* Visual Preferences */}
                 <div className="border-t border-border pt-4 space-y-4">
                   <div>
-                    <Label>ðŸŽ¨ Preferências visuais das imagens</Label>
+                    <Label>🎨 Preferências visuais das imagens</Label>
                     <p className="text-xs text-muted-foreground mt-0.5">Controle como a IA gera as imagens. Essas preferências são aplicadas automaticamente em toda geração.</p>
                   </div>
 
@@ -363,12 +364,12 @@ export default function BrandEdit() {
                   </div>
 
                   <div className="space-y-2">
-                    <Label>ðŸ“ Instruções extras para a IA (imagens)</Label>
+                    <Label>📝 Instruções extras para a IA (imagens)</Label>
                     <p className="text-xs text-muted-foreground">Texto livre que será enviado ao gerador de imagens. Use para descrever o estilo que você quer.</p>
                     <Textarea
                       value={formData.visual_preferences.custom_notes}
                       onChange={(e) => setFormData({ ...formData, visual_preferences: { ...formData.visual_preferences, custom_notes: e.target.value } })}
-                      placeholder={"Exemplos:\nâ€¢ Estilo minimalista, fundo escuro com detalhes dourados\nâ€¢ Sempre usar degradê azul para roxo\nâ€¢ Preferir fotos reais ao invés de ilustrações\nâ€¢ Headlines sempre na parte inferior da imagem"}
+                      placeholder={"Exemplos:\n• Estilo minimalista, fundo escuro com detalhes dourados\n• Sempre usar degradê azul para roxo\n• Preferir fotos reais ao invés de ilustrações\n• Headlines sempre na parte inferior da imagem"}
                       rows={4}
                     />
                   </div>
@@ -422,7 +423,7 @@ export default function BrandEdit() {
                   <div className="space-y-1">
                     <h3 className="text-sm font-semibold">Fotos pessoais</h3>
                     <p className="text-xs text-muted-foreground">
-                      Fotos que serão usadas como fundo dos posts no modo "ðŸ“¸ Foto + texto". Ideal para fotos profissionais.
+                      Fotos que serão usadas como fundo dos posts no modo "📸 Foto + texto". Ideal para fotos profissionais.
                     </p>
                   </div>
                   <BrandPhotoBackgrounds brandId={brand.id} />
@@ -452,77 +453,14 @@ export default function BrandEdit() {
           <div className="hidden lg:block">
             <div className="sticky top-6 space-y-2">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                <Eye className="w-3.5 h-3.5" /> Preview ao vivo
+                <Eye className="w-3.5 h-3.5" /> Como a IA vê esta marca
               </div>
-              <BrandPreview formData={formData} />
-              <p className="text-[11px] text-muted-foreground leading-snug">
-                Prévia ilustrativa da identidade (paleta, fontes, logo). O resultado final sai no Studio.
-              </p>
+              <BrandRealPreview brandId={id} brandName={formData.name} />
             </div>
           </div>
         </div>
       </div>
     </DashboardLayout>
-  );
-}
-
-// Mock de post que reflete a identidade da marca em tempo real (sem geração).
-function pickTextColor(hex: string): string {
-  const m = /^#?([0-9a-f]{6})$/i.exec(hex || "");
-  if (!m) return "#ffffff";
-  const n = parseInt(m[1], 16);
-  const r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
-  // Luminância relativa (WCAG) → escolhe texto claro ou escuro pra contraste.
-  const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-  return lum > 0.6 ? "#16202c" : "#ffffff";
-}
-
-function BrandPreview({ formData }: { formData: any }) {
-  const palette: string[] = (formData.palette || []).filter(Boolean);
-  const c0 = palette[0] || "#1f2a37";
-  const c1 = palette[1] || c0;
-  const accent = palette[palette.length - 1] || c1;
-  const fg = pickTextColor(c0);
-  const headingFont = `'${formData.fonts?.headings || "Inter"}', system-ui, sans-serif`;
-  const bodyFont = `'${formData.fonts?.body || "Inter"}', system-ui, sans-serif`;
-  return (
-    <div
-      className="rounded-2xl overflow-hidden border border-border shadow-sm aspect-[4/5] flex flex-col justify-between p-5 relative animate-scale-in"
-      style={{ background: `linear-gradient(150deg, ${c0} 0%, ${c1} 100%)`, color: fg }}
-    >
-      {/* topo: logo ou nome */}
-      <div className="flex items-center gap-2">
-        {formData.logo_url ? (
-          <img src={formData.logo_url} alt="" className="w-8 h-8 rounded-lg object-contain bg-white/15 p-0.5" />
-        ) : null}
-        <span className="text-[11px] font-semibold tracking-wide" style={{ opacity: 0.85, fontFamily: bodyFont }}>
-          {formData.name || "Sua marca"}
-        </span>
-      </div>
-      {/* headline de exemplo na fonte de títulos */}
-      <div>
-        <div className="text-[22px] font-extrabold leading-tight" style={{ fontFamily: headingFont }}>
-          5 sinais de hipertensão que seus pacientes ignoram
-        </div>
-        <div className="text-[12px] mt-2" style={{ fontFamily: bodyFont, opacity: 0.85 }}>
-          Conteúdo gerado com o estilo da sua marca.
-        </div>
-      </div>
-      {/* rodapé: chip de acento + swatches */}
-      <div className="flex items-center justify-between">
-        <span
-          className="text-[10px] font-bold px-2.5 py-1 rounded-full"
-          style={{ background: accent, color: pickTextColor(accent) }}
-        >
-          Saiba mais →
-        </span>
-        <div className="flex gap-1">
-          {palette.slice(0, 4).map((hex, i) => (
-            <span key={i} className="w-3 h-3 rounded-full border border-white/40" style={{ background: hex }} />
-          ))}
-        </div>
-      </div>
-    </div>
   );
 }
 
@@ -547,7 +485,7 @@ function VisualPrefToggle({ label, description, value, onChange }: {
       }`}
     >
       <span className="text-sm mt-0.5">
-        {value === true ? "âœ…" : value === false ? "ðŸš«" : "âž–"}
+        {value === true ? "✅" : value === false ? "🚫" : "➖"}
       </span>
       <div>
         <p className={`text-xs font-medium ${value === true ? "text-green-700" : value === false ? "text-red-600" : "text-muted-foreground"}`}>

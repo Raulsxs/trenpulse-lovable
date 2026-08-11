@@ -39,6 +39,7 @@ import SlideTemplateRenderer from "@/components/content/SlideTemplateRenderer";
 import SlideBgOverlayRenderer from "@/components/content/SlideBgOverlayRenderer";
 import OffScreenSlideRenderer from "@/components/content/OffScreenSlideRenderer";
 import RecurringSchedules from "@/components/calendar/RecurringSchedules";
+import ScheduleModal from "@/components/content/ScheduleModal";
 import { getSlideRenderMode } from "@/lib/slideUtils";
 import { useSlideCapture } from "@/hooks/useSlideCapture";
 import {
@@ -97,6 +98,9 @@ const Calendar = () => {
   const [selectedContent, setSelectedContent] = useState<CalendarContent | null>(null);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dragOverCell, setDragOverCell] = useState<string | null>(null);
+  // Card solto num DIA: guarda quem e quando pra o modal confirmar o horário.
+  const [dropTarget, setDropTarget] = useState<{ contentId: string; date: Date } | null>(null);
+  const [schedulingDrop, setSchedulingDrop] = useState(false);
   const [previewSlideIndex, setPreviewSlideIndex] = useState(0);
   const [isPublishing, setIsPublishing] = useState(false);
   const { captureIndex, captureRef, renderAndUploadAllSlides } = useSlideCapture();
@@ -379,32 +383,48 @@ const Calendar = () => {
     setDragOverCell(null);
   };
 
+  /**
+   * Soltar o card num dia ESCOLHE O DIA, não conclui o agendamento.
+   *
+   * Antes, o drop gravava direto às 9h fixas: quem quisesse outro horário tinha que soltar, esperar
+   * salvar, e depois reabrir pra corrigir. Agora o gesto informa o dia (que é o que ele expressa
+   * naturalmente) e o modal abre já naquela data, faltando só a hora — que é a informação que o
+   * arrastar não tem como transmitir.
+   *
+   * Na visão de SEMANA a célula já carrega a hora, então ali o gesto é completo e agendamos direto.
+   */
   const handleDrop = async (e: React.DragEvent, day: Date, hour?: number) => {
     e.preventDefault();
     setDragOverCell(null);
     const contentId = e.dataTransfer.getData("text/plain");
+    setDraggingId(null);
     if (!contentId) return;
 
-    const dropDate = hour !== undefined
-      ? setMinutes(setHours(new Date(day), hour), 0)
-      : setMinutes(setHours(new Date(day), 9), 0);
+    if (hour === undefined) {
+      setDropTarget({ contentId, date: setMinutes(setHours(new Date(day), 9), 0) });
+      return;
+    }
 
+    await commitSchedule(contentId, setMinutes(setHours(new Date(day), hour), 0));
+  };
+
+  /** Grava o agendamento. Compartilhado pelo drop na semana e pela confirmação do modal. */
+  const commitSchedule = async (contentId: string, when: Date) => {
     try {
       const { error } = await supabase
         .from("generated_contents")
-        .update({ scheduled_at: dropDate.toISOString(), status: "scheduled", publish_attempts: 0, publish_error: null })
+        .update({ scheduled_at: when.toISOString(), status: "scheduled", publish_attempts: 0, publish_error: null })
         .eq("id", contentId);
 
       if (error) throw error;
       toast.success("Conteúdo agendado!", {
-        description: format(dropDate, "dd/MM 'às' HH:mm", { locale: ptBR }),
+        description: format(when, "dd/MM 'às' HH:mm", { locale: ptBR }),
       });
       fetchData();
     } catch (error) {
       console.error("Error scheduling:", error);
       toast.error("Erro ao agendar conteúdo");
     }
-    setDraggingId(null);
   };
 
   const handleRemoveSchedule = async (id: string) => {
@@ -549,12 +569,12 @@ const Calendar = () => {
 
     return (
       <div className="rounded-md overflow-hidden flex-shrink-0" style={{ width: miniW, height: miniH }}>
-        <img src={imageUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+        <img src={imageUrl} alt="" draggable={false} className="w-full h-full object-cover" loading="lazy" />
       </div>
     );
   };
 
-  const ContentCard = ({ item, isDraggable = true, compact = false }: { item: CalendarContent; isDraggable?: boolean; compact?: boolean }) => {
+  const ContentCard = ({ item, isDraggable = true, compact = false, dense = false }: { item: CalendarContent; isDraggable?: boolean; compact?: boolean; dense?: boolean }) => {
     const slide = item.slides?.[0];
     const isStory = item.content_type === "story";
     const rawUrl = item.image_urls?.[0] || slide?.background_image_url || slide?.image_url || slide?.imageUrl;
@@ -585,7 +605,7 @@ const Calendar = () => {
           style={{ height: HOUR_HEIGHT - 12 }}
         >
           {imageUrl ? (
-            <img src={imageUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+            <img src={imageUrl} alt="" draggable={false} className="w-full h-full object-cover" loading="lazy" />
           ) : (
             <div className="w-full h-full bg-muted flex items-center justify-center">
               <span className="text-[9px] text-muted-foreground truncate px-1">{item.title?.slice(0, 12)}</span>
@@ -620,19 +640,25 @@ const Calendar = () => {
         } bg-card border-border/50 hover:border-primary/30`}
       >
         <div className="flex items-center gap-2">
-          {isDraggable && (
+          {isDraggable && !dense && (
             <GripVertical className="w-3.5 h-3.5 text-muted-foreground/40 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing" />
           )}
           {imageUrl ? (
-            <div className="rounded overflow-hidden flex-shrink-0" style={{ width: 36, height: isStory ? 64 : 48 }}>
-              <img src={imageUrl} alt="" className="w-full h-full object-cover" loading="lazy" />
+            <div className="rounded overflow-hidden flex-shrink-0" style={dense ? { width: 24, height: 24 } : { width: 36, height: isStory ? 64 : 48 }}>
+              {/* draggable={false} é o que faz o arrastar funcionar de primeira: sem isso o browser
+                  inicia o drag NATIVO da imagem (payload = URL do arquivo) em vez do drag do card,
+                  e o drop chega sem o id do conteúdo. Era preciso pegar o card fora da miniatura —
+                  daí a sensação de "tem que clicar antes pra depois arrastar". */}
+              <img src={imageUrl} alt="" draggable={false} className="w-full h-full object-cover" loading="lazy" />
             </div>
           ) : <MiniSlidePreview item={item} />}
           <div className="flex-1 min-w-0">
             <p className="text-[11px] font-medium text-foreground truncate leading-tight">{item.title}</p>
-            <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+            <div className={`flex items-center gap-1 mt-0.5 ${dense ? "flex-nowrap" : "flex-wrap"}`}>
               <Badge variant="outline" className="text-[9px] px-1 py-0 leading-tight">{formatBadge(item.content_type)}</Badge>
-              {item.templates && (
+              {/* Na célula do mês o espaço é o recurso escasso: o nome do template quebraria a linha
+                  e empurraria o terceiro card pra fora do dia. Ele continua visível no card grande. */}
+              {item.templates && !dense && (
                 <Badge variant="secondary" className="text-[9px] px-1 py-0 leading-tight truncate max-w-[100px]">{item.templates.name}</Badge>
               )}
               {item.scheduled_at && (
@@ -911,7 +937,7 @@ const Calendar = () => {
                     const pads = [];
                     for (let i = 0; i < dayOfWeek; i++) {
                       pads.push(
-                        <div key={`pad-${i}`} className="border-b border-r border-border min-h-[100px] p-1 bg-muted/10" />
+                        <div key={`pad-${i}`} className="border-b border-r border-border min-h-[132px] p-1 bg-muted/10" />
                       );
                     }
                     return pads;
@@ -923,7 +949,7 @@ const Calendar = () => {
                     return (
                       <div
                         key={day.toISOString()}
-                        className={`border-b border-r border-border min-h-[100px] p-1.5 transition-colors duration-150 ${
+                        className={`border-b border-r border-border min-h-[132px] p-1.5 transition-colors duration-150 ${
                           isToday(day) ? "bg-primary/5" : ""
                         } ${isOver ? "bg-primary/15 ring-1 ring-inset ring-primary/30" : ""}`}
                         onDragOver={(e) => handleDragOver(e, cellKey)}
@@ -935,7 +961,7 @@ const Calendar = () => {
                         </p>
                         <div className="space-y-1">
                           {dayContents.slice(0, 3).map(c => (
-                            <ContentCard key={c.id} item={c} isDraggable />
+                            <ContentCard key={c.id} item={c} isDraggable dense />
                           ))}
                           {dayContents.length > 3 && (
                             <p className="text-[10px] text-muted-foreground text-center">
@@ -1318,6 +1344,24 @@ const Calendar = () => {
           )}
         </SheetContent>
       </Sheet>
+
+      {/* Confirmação de horário do card arrastado: o gesto escolheu o dia, aqui escolhe a hora. */}
+      <ScheduleModal
+        open={!!dropTarget}
+        onClose={() => setDropTarget(null)}
+        defaultDate={dropTarget?.date || null}
+        isScheduling={schedulingDrop}
+        onSchedule={async (date) => {
+          if (!dropTarget) return;
+          setSchedulingDrop(true);
+          try {
+            await commitSchedule(dropTarget.contentId, date);
+            setDropTarget(null);
+          } finally {
+            setSchedulingDrop(false);
+          }
+        }}
+      />
 
       {/* Off-screen renderer for PNG capture before publishing */}
       <OffScreenSlideRenderer
