@@ -411,7 +411,8 @@ export default function BrandWizard() {
               </p>
               <div className="flex gap-3 pt-4">
                 <Button variant="outline" onClick={() => navigate(`/brands/${brandId}/edit`)}>Editar Marca</Button>
-                <Button onClick={() => navigate("/dashboard")}>Ir para o Dashboard</Button>
+                {/* /dashboard não existe (404). Quem acabou de criar a marca quer é usá-la: vai pro chat. */}
+                <Button onClick={() => navigate("/agent")}>Criar conteúdo com ela</Button>
               </div>
             </CardContent>
           </Card>

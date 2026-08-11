@@ -100,7 +100,7 @@ const DownloadPage = () => {
       } catch (error) {
         console.error("Error fetching content:", error);
         toast.error("Erro ao carregar conteúdo");
-        navigate("/dashboard");
+        navigate("/contents");
       } finally {
         setLoading(false);
       }
@@ -228,8 +228,13 @@ const DownloadPage = () => {
       const url = URL.createObjectURL(zipBlob);
       const link = document.createElement("a");
       link.href = url;
+      // O nome carrega FORMATO e QUANTIDADE, não só título e dimensão. Sem isso, dois downloads
+      // seguidos (um post e um carrossel, por exemplo) viram dois zips indistinguíveis na pasta —
+      // e a pessoa abre um esperando o outro, achando que faltou imagem.
       const safeName = content.title.replace(/[^a-zA-Z0-9À-ú\s]/g, "").slice(0, 40).trim().replace(/\s+/g, "_");
-      link.download = `${safeName}_${dims.width}x${dims.height}.zip`;
+      const tipo = (content.content_type || "post").replace(/[^a-z]/gi, "");
+      const qtd = slides.length > 1 ? `_${slides.length}slides` : "";
+      link.download = `${safeName}_${tipo}${qtd}_${dims.width}x${dims.height}.zip`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -338,7 +343,7 @@ const DownloadPage = () => {
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
           <p className="text-muted-foreground">Conteúdo não encontrado</p>
-          <Button onClick={() => navigate("/dashboard")}>Voltar ao Dashboard</Button>
+          <Button onClick={() => navigate("/contents")}>Voltar aos conteúdos</Button>
         </div>
       </DashboardLayout>
     );
@@ -358,7 +363,7 @@ const DownloadPage = () => {
       <div className="p-6 lg:p-8 space-y-6 animate-fade-in">
         {/* Header */}
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate("/dashboard")}>
+          <Button variant="ghost" size="icon" onClick={() => navigate("/contents")}>
             <ArrowLeft className="w-5 h-5" />
           </Button>
           <div className="flex-1">
@@ -553,9 +558,9 @@ const DownloadPage = () => {
         )}
 
         <div className="flex justify-center pt-4">
-          <Button variant="outline" onClick={() => navigate("/dashboard")} className="gap-2">
+          <Button variant="outline" onClick={() => navigate("/contents")} className="gap-2">
             <ArrowLeft className="w-4 h-4" />
-            Voltar ao Dashboard
+            Voltar aos conteúdos
           </Button>
         </div>
       </div>

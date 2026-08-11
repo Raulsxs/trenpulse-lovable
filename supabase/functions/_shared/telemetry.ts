@@ -1,4 +1,8 @@
-import { createClient } from "npm:@supabase/supabase-js@2";
+// O import do supabase-js é DINÂMICO de propósito. Este módulo é importado pelo openrouter.ts, que
+// por sua vez é coberto por teste unitário rodando em Vitest (Node) — e Node não resolve o
+// especificador `npm:` do Deno. Carregando só na primeira escrita, o teste do openrouter continua
+// passando e a telemetria segue funcionando no runtime Deno.
+type SupabaseLike = { from: (t: string) => { insert: (v: unknown) => Promise<unknown> } };
 
 /**
  * Telemetria de geração — grava o que aconteceu em cada chamada a provedor de IA.
@@ -28,13 +32,17 @@ export interface TelemetryEvent {
   metadata?: Record<string, unknown> | null;
 }
 
-let client: ReturnType<typeof createClient> | null = null;
-function svc() {
+let client: SupabaseLike | null = null;
+async function svc(): Promise<SupabaseLike | null> {
   if (client) return client;
   const url = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) return null;
-  client = createClient(url, key);
+  // Especificador em variável + @vite-ignore: sem isso o Vite tenta resolver `npm:` em tempo de
+  // build (ele analisa até import dinâmico) e derruba o teste unitário do openrouter, que roda em Node.
+  const spec = "npm:@supabase/supabase-js@2";
+  const { createClient } = await import(/* @vite-ignore */ spec);
+  client = createClient(url, key) as unknown as SupabaseLike;
   return client;
 }
 
@@ -45,7 +53,7 @@ function svc() {
  */
 export async function track(e: TelemetryEvent): Promise<void> {
   try {
-    const c = svc();
+    const c = await svc();
     if (!c) return;
     // cast: a tabela é nova e ainda não está nos tipos gerados do projeto (mesmo padrão de user_credits).
     await (c as any).from("generation_telemetry").insert({

@@ -88,7 +88,8 @@ export default function AdminAnalytics() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session || session.user.email !== ADMIN_EMAIL) {
         toast.error("Acesso restrito");
-        navigate("/dashboard");
+        // /dashboard não existe (404) — manda pro app.
+        navigate("/agent");
         return;
       }
       setAuthorized(true);

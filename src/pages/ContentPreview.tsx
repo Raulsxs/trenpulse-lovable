@@ -284,7 +284,8 @@ const ContentPreview = () => {
       console.error("Error fetching content:", error);
       if (!silent) {
         toast.error("Erro ao carregar conteúdo");
-        navigate("/dashboard");
+        // /dashboard NÃO existe (cai no 404). Quem estava vendo um conteúdo volta pra biblioteca.
+        navigate("/contents");
       }
     } finally {
       setLoading(false);
@@ -543,7 +544,7 @@ const ContentPreview = () => {
         .eq("id", id);
       
       toast.info("Conteúdo rejeitado");
-      navigate("/dashboard");
+      navigate("/contents");
     } catch (error) {
       console.error("Error rejecting content:", error);
     }
@@ -1063,7 +1064,7 @@ const ContentPreview = () => {
       <DashboardLayout>
         <div className="flex flex-col items-center justify-center h-[60vh] gap-4">
           <p className="text-muted-foreground">Conteúdo não encontrado</p>
-          <Button onClick={() => navigate("/dashboard")}>Voltar ao Dashboard</Button>
+          <Button onClick={() => navigate("/contents")}>Voltar aos conteúdos</Button>
         </div>
       </DashboardLayout>
     );

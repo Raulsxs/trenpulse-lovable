@@ -37,7 +37,8 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   handleGoHome = () => {
-    window.location.href = "/dashboard";
+    // /dashboard não existe: mandava pro 404 justamente quando o app já tinha quebrado.
+    window.location.href = "/agent";
   };
 
   render() {
