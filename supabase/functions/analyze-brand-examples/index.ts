@@ -237,13 +237,34 @@ seguem em inglês.`
 
     // Save to brands with version tracking
     const currentVersion = brand.style_guide_version || 0;
+    const patch: Record<string, unknown> = {
+      style_guide: styleGuide,
+      style_guide_version: currentVersion + 1,
+      style_guide_updated_at: new Date().toISOString(),
+    };
+
+    // ── Semear FAÇA / NÃO FAÇA quando o usuário nunca escreveu nada ──
+    // O style_guide sempre carregou essas regras, mas elas ficavam invisíveis: a aba "Regras para
+    // IA" aparecia VAZIA mesmo com a análise pronta, e a conclusão natural era "o sistema não
+    // entendeu minha marca". Escrever no campo torna visível o que já estava valendo.
+    //
+    // SÓ preenche o que está vazio. Sobrescrever regra escrita à mão seria apagar uma decisão do
+    // usuário com um palpite de modelo — e agora que a regra dele tem precedência no prompt
+    // (brand-context), apagá-la mudaria o resultado da geração de verdade.
+    const asText = (arr: unknown): string =>
+      Array.isArray(arr) ? arr.filter((s) => typeof s === "string" && s.trim()).join("\n") : "";
+    if (!String(brand.do_rules || "").trim()) {
+      const t = asText(styleGuide.do_summary);
+      if (t) patch.do_rules = t;
+    }
+    if (!String(brand.dont_rules || "").trim()) {
+      const t = asText(styleGuide.dont_summary);
+      if (t) patch.dont_rules = t;
+    }
+
     const { error: updateError } = await supabase
       .from("brands")
-      .update({
-        style_guide: styleGuide,
-        style_guide_version: currentVersion + 1,
-        style_guide_updated_at: new Date().toISOString(),
-      })
+      .update(patch)
       .eq("id", brandId);
 
     if (updateError) {

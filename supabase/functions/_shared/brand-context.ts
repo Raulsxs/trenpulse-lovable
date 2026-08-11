@@ -127,18 +127,26 @@ export function buildBrandContext(brand: any): string {
   // ── Tom visual (legado) ──
   if (brand.visual_tone) parts.push(`Tom visual: ${brand.visual_tone}`);
 
-  // ── FAÇA / NÃO FAÇA: preferir do_summary/dont_summary do style_guide quando houver ──
+  // ── FAÇA / NÃO FAÇA ──
+  // O QUE O USUÁRIO ESCREVEU GANHA do que o modelo inferiu. Era o contrário: o do_summary do
+  // style_guide vinha primeiro num `else if`, então quem digitava uma regra explícita tinha ela
+  // silenciosamente descartada. Na marca do Maikon isso descartava uma especificação precisa de
+  // fundo escuro (#0A0E1A) em favor de um palpite.
+  //
+  // Instrução explícita > inferência: o guia é uma leitura das imagens, a regra é uma decisão.
+  // Quando o usuário não escreveu nada, o guia entra no lugar (e é o que o passo de análise agora
+  // grava no campo, justamente pra ele poder editar).
   const doSummary = bullets(sg?.do_summary);
   const dontSummary = bullets(sg?.dont_summary);
-  if (doSummary.length) {
-    parts.push(`FAÇA:\n${doSummary.map((s) => `- ${s}`).join("\n")}`);
-  } else if (brand.do_rules) {
+  if (brand.do_rules) {
     parts.push(`FAÇA: ${brand.do_rules}`);
+  } else if (doSummary.length) {
+    parts.push(`FAÇA:\n${doSummary.map((s) => `- ${s}`).join("\n")}`);
   }
-  if (dontSummary.length) {
-    parts.push(`NÃO FAÇA:\n${dontSummary.map((s) => `- ${s}`).join("\n")}`);
-  } else if (brand.dont_rules) {
+  if (brand.dont_rules) {
     parts.push(`NÃO FAÇA: ${brand.dont_rules}`);
+  } else if (dontSummary.length) {
+    parts.push(`NÃO FAÇA:\n${dontSummary.map((s) => `- ${s}`).join("\n")}`);
   }
 
   // ── Padrões visuais observados (style_guide) — como diretrizes de composição ──
@@ -171,8 +179,9 @@ export function buildBrandBrief(brand: any): string {
   if (brand.name) ident.push(`nome "${brand.name}"`);
   if (brand.visual_tone) ident.push(`tom ${brand.visual_tone}`);
 
-  const doList = (bullets(sg?.do_summary).length ? bullets(sg?.do_summary) : (brand.do_rules ? [String(brand.do_rules)] : []));
-  const dontList = (bullets(sg?.dont_summary).length ? bullets(sg?.dont_summary) : (brand.dont_rules ? [String(brand.dont_rules)] : []));
+  // Mesma precedência do prompt de imagem: o que o usuário escreveu ganha do que o modelo inferiu.
+  const doList = brand.do_rules ? [String(brand.do_rules)] : bullets(sg?.do_summary);
+  const dontList = brand.dont_rules ? [String(brand.dont_rules)] : bullets(sg?.dont_summary);
 
   let out = `MARCA ATIVA selecionada${ident.length ? ` — ${ident.join(", ")}` : ""}. O app já aplica o VISUAL dela na geração automaticamente; use o tom e as regras abaixo ao escrever legenda, sugerir ângulo e conversar (NÃO passe brandId nas ferramentas).`;
   if (doList.length) out += `\nFAÇA: ${doList.slice(0, 5).join("; ")}`;
