@@ -33,6 +33,10 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import RedeemCoupon from "./pages/RedeemCoupon";
 import NotFound from "./pages/NotFound";
 
+// Landing em avaliação. Lazy porque é rota de comparação, não o caminho de ninguém que chega
+// pela home — não tem por que pesar no chunk inicial.
+const LandingNova = lazy(() => import("./pages/LandingNova"));
+
 const ContentPreview = lazy(() => import("./pages/ContentPreview"));
 const DownloadPage = lazy(() => import("./pages/Download"));       // puxa jsPDF + html2canvas
 const Contents = lazy(() => import("./pages/Contents"));
@@ -88,6 +92,8 @@ const RoutedApp = () => {
     <Suspense fallback={<CarregandoTela />}>
     <Routes>
       <Route path="/" element={<Index />} />
+      {/* Direção "Ateliê" em avaliação, ao lado da / que continua no ar. Ver LandingNova.tsx. */}
+      <Route path="/landing-nova" element={<LandingNova />} />
       <Route path="/auth" element={<Auth />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/content/:id" element={<ContentPreview />} />
