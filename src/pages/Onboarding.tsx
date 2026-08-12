@@ -13,16 +13,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sparkles, ArrowRight, SkipForward } from "lucide-react";
 
-// Visual por nicho pro mockup instantâneo (imagens já hospedadas; CSS puro como fallback)
-const NICHE_COLORS: Record<string, { primary: string; secondary: string; image?: string }> = {
-  default: { primary: "#667eea", secondary: "#764ba2" },
-  saude: { primary: "#0891b2", secondary: "#164e63", image: "https://cloud.inference.sh/app/files/u/6d8q5x9g2wsb3kwpk157p4nr3q/01km8a4wyhv8r24rdtb1rwmvx6.png" },
-  coaching: { primary: "#f97316", secondary: "#1a1a2e" },
-  fitness: { primary: "#16a34a", secondary: "#14532d", image: "https://cloud.inference.sh/app/files/u/6d8q5x9g2wsb3kwpk157p4nr3q/01km8a55az6p72tf474w40t4bw.png" },
-  beleza: { primary: "#db2777", secondary: "#831843", image: "https://cloud.inference.sh/app/files/u/6d8q5x9g2wsb3kwpk157p4nr3q/01km8bmy7tx5w2dnca8af4fjhw.png" },
-  advocacia: { primary: "#1e3a5f", secondary: "#0f2440", image: "https://cloud.inference.sh/app/files/u/6d8q5x9g2wsb3kwpk157p4nr3q/01km8a5wkrj2jt42nh82xbd902.png" },
-  marketing: { primary: "#e11d48", secondary: "#4c1d95", image: "https://cloud.inference.sh/app/files/u/6d8q5x9g2wsb3kwpk157p4nr3q/01km8a551hvavacynza5cdvvfb.png" },
-};
+/**
+ * Peças REAIS geradas na plataforma — as mesmas de "Feito com TrendPulse" na landing, servidas do
+ * nosso domínio.
+ *
+ * POR QUE SUBSTITUÍRAM O MOCKUP: a tela desenhava um post falso ("Sua marca", "Patrocinado",
+ * "127 curtidas") com gradiente por nicho. Três problemas de uma vez:
+ *   1. `coaching` e `default` não tinham imagem no mapa, então 2 dos 7 caminhos caíam num gradiente
+ *      pelado com texto por cima — que é o que o usuário reportou como "muito ruim".
+ *   2. As outras 5 vinham de CDN de terceiro (cloud.inference.sh) no caminho da primeira impressão,
+ *      e o onError escondia a imagem em silêncio, devolvendo o mesmo gradiente pelado.
+ *   3. Número de curtidas inventado numa tela de boas-vindas corrói confiança exatamente onde ela
+ *      está sendo construída.
+ *
+ * São todas do nicho de saúde (vieram de um cliente real). Mostrar peça de saúde para um advogado é
+ * menos personalizado do que a promessa antiga — mas é trabalho DE VERDADE, e prova de qualidade
+ * convence mais que personalização falsa. Para personalizar, o caminho é gerar peças reais por nicho.
+ */
+const EXEMPLOS_REAIS = [
+  "/showcase/gerados/exemplo_sinais_coracao.jpg",
+  "/showcase/gerados/exemplo_ansiedade.jpg",
+  "/showcase/gerados/exemplo_sono.jpg",
+];
 
 // 6 nichos (ICP: saúde/coach primeiro) + "Outro". A ideia vira o headline do mockup
 // E o prompt pré-armado que o usuário encontra no chat.
@@ -35,56 +47,19 @@ const NICHES: { id: string; label: string; emoji: string; idea: string }[] = [
   { id: "marketing", label: "Marketing e Publicidade", emoji: "📣", idea: "5 erros de marketing que estão custando clientes" },
 ];
 
-function PostMockup({ headline, nicheId }: { headline: string; nicheId: string }) {
-  const colors = NICHE_COLORS[nicheId] || NICHE_COLORS.default;
-  const hasImage = !!colors.image;
+/** Tira de peças reais. Sem moldura de rede social: é uma amostra do resultado, não um post fingido. */
+function ExemplosReais() {
   return (
-    <div className="w-full max-w-[240px] mx-auto rounded-xl overflow-hidden shadow-xl border border-border">
-      <div className="flex items-center gap-2 px-2.5 py-1.5 bg-background">
-        <div className="w-6 h-6 rounded-full" style={{ background: `linear-gradient(135deg, ${colors.primary}, ${colors.secondary})` }} />
-        <div>
-          <p className="text-[10px] font-semibold text-foreground">Sua marca</p>
-          <p className="text-[8px] text-muted-foreground">Patrocinado</p>
-        </div>
-      </div>
-      <div className="aspect-square relative overflow-hidden">
-        {hasImage && (
-          <img
-            src={colors.image}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
-          />
-        )}
-        <div
-          className="absolute inset-0"
-          style={{
-            background: hasImage
-              ? "linear-gradient(180deg, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.15) 40%, rgba(0,0,0,0.6) 100%)"
-              : `linear-gradient(135deg, ${colors.primary}, ${colors.secondary})`,
-          }}
+    <div className="grid grid-cols-3 gap-2">
+      {EXEMPLOS_REAIS.map((src) => (
+        <img
+          key={src}
+          src={src}
+          alt="Post gerado na plataforma"
+          loading="lazy"
+          className="w-full aspect-square object-cover rounded-lg border border-border bg-muted"
         />
-        <div className="absolute inset-0 flex items-end p-4">
-          <p
-            className="text-base font-bold leading-tight"
-            style={{ color: "#ffffff", textShadow: "0 2px 12px rgba(0,0,0,0.5), 0 1px 4px rgba(0,0,0,0.3)" }}
-          >
-            {headline}
-          </p>
-        </div>
-      </div>
-      <div className="px-2.5 py-1.5 bg-background space-y-1">
-        <div className="flex gap-3">
-          <span className="text-xs">❤️</span>
-          <span className="text-xs">💬</span>
-          <span className="text-xs">📤</span>
-          <span className="text-xs ml-auto">🔖</span>
-        </div>
-        <p className="text-[9px] text-foreground font-semibold">127 curtidas</p>
-        <p className="text-[9px] text-muted-foreground line-clamp-1">
-          <strong className="text-foreground">suamarca</strong> Conteúdo gerado pelo TrendPulse...
-        </p>
-      </div>
+      ))}
     </div>
   );
 }
@@ -124,7 +99,8 @@ export default function Onboarding() {
   const niche = NICHES.find((n) => n.id === selected);
   const isOther = selected === "outro";
   const nicheLabel = isOther ? customNiche.trim() : niche?.label || "";
-  const mockupHeadline = isOther
+  // Ideia que chega pré-escrita no chat (editável, não envia sozinha). Já não alimenta mockup nenhum.
+  const ideiaPrefill = isOther
     ? `Uma dica de ${customNiche.trim() || "especialista"} que seu cliente precisa ver`
     : niche?.idea || "";
   const canContinue = !!selected && (!isOther || customNiche.trim().length > 0);
@@ -143,7 +119,7 @@ export default function Onboarding() {
       );
       // Conta nova (passou pelo onboarding) cai no Assistente (/agent) — a experiência padrão.
       // Prefill = prompt pré-armado do nicho (editável, não envia sozinho; o AgentChat lê location.state).
-      const prefill = !skipped && mockupHeadline ? mockupHeadline : undefined;
+      const prefill = !skipped && ideiaPrefill ? ideiaPrefill : undefined;
       navigate("/agent", prefill ? { state: { prefill } } : undefined);
     } finally {
       setSaving(false);
@@ -213,10 +189,21 @@ export default function Onboarding() {
             />
           )}
 
-          {canContinue && (
-            <div className="animate-in fade-in zoom-in-95 duration-300">
-              <p className="text-xs text-muted-foreground mb-3">Exemplo do que a IA cria pra você:</p>
-              <PostMockup headline={mockupHeadline} nicheId={isOther ? "default" : selected!} />
+          {/* Sempre visível: a tira não depende mais do nicho, então esconder até a escolha só
+              deixava a tela vazia. E ela é o argumento mais forte da página. */}
+          <div className="space-y-2">
+            <ExemplosReais />
+            <p className="text-[11px] text-muted-foreground">
+              Peças reais criadas na plataforma. É este acabamento que você vai ter, com a sua marca.
+            </p>
+          </div>
+
+          {/* Depois da escolha, mostra a ideia que vai chegar pré-escrita no chat: o usuário sai
+              daqui sabendo o que vai acontecer na próxima tela, em vez de ser surpreendido. */}
+          {canContinue && ideiaPrefill && (
+            <div className="rounded-xl border border-primary/25 bg-primary/5 px-4 py-3 text-left animate-in fade-in slide-in-from-bottom-2">
+              <p className="text-[11px] text-muted-foreground mb-1">Vamos começar por esta ideia:</p>
+              <p className="text-sm font-medium text-foreground">{ideiaPrefill}</p>
             </div>
           )}
 
