@@ -8,32 +8,12 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { couponFromUrl, savePendingCoupon } from "@/lib/coupon";
+import { type SavedAccount, loadAccounts, saveAccounts, forgetAccount, rememberAccount } from "@/lib/savedAccounts";
+import GoogleButton from "@/components/auth/GoogleButton";
 import { TrendingUp, Sparkles, BarChart3, Zap, Eye, EyeOff, ArrowLeft, ChevronRight, X, Loader2 } from "lucide-react";
 
-const SAVED_ACCOUNTS_KEY = "tp_saved_accounts";
-const MAX_SAVED_ACCOUNTS = 5;
-
-function saveAccounts(accounts: SavedAccount[]): void {
-  const trimmed = accounts.slice(-MAX_SAVED_ACCOUNTS);
-  try {
-    localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(trimmed));
-  } catch {
-    // localStorage quota exceeded — drop oldest account and retry once
-    try {
-      localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(trimmed.slice(1)));
-    } catch {
-      // give up silently — user just won't have multi-account on this device
-    }
-  }
-}
-
-interface SavedAccount {
-  userId: string;
-  email: string;
-  name: string;
-  accessToken: string;
-  refreshToken: string;
-}
+// Storage das contas salvas mora em @/lib/savedAccounts: o login com Google volta por redirect,
+// numa página que não é esta, então o salvamento precisa ser chamável de fora daqui.
 
 const Auth = () => {
   const navigate = useNavigate();
@@ -56,6 +36,7 @@ const Auth = () => {
   // Email pra o qual mandamos a confirmação (mostra a tela "confirme seu email" pós-signup).
   const [signupEmailSent, setSignupEmailSent] = useState<string | null>(null);
   const [isResending, setIsResending] = useState(false);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
 
   useEffect(() => {
     // If redirected here due to expired session, go straight to login form
@@ -63,9 +44,7 @@ const Auth = () => {
       setMode("login");
       return;
     }
-    const stored: SavedAccount[] = (() => {
-      try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
-    })();
+    const stored = loadAccounts();
     setSavedAccounts(stored);
     if (stored.length > 0 && !isSignupTab) {
       setMode("accounts");
@@ -82,27 +61,12 @@ const Auth = () => {
       if (error) throw error;
 
       // Persist rotated tokens BEFORE navigating — page unload races onAuthStateChange
-      if (newSession) {
-        const uid = newSession.user.id;
-        const em = newSession.user.email || "";
-        const nm = newSession.user.user_metadata?.name || em.split("@")[0];
-        const stored: SavedAccount[] = (() => {
-          try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
-        })();
-        const idx = stored.findIndex(a => a.userId === uid);
-        const acct: SavedAccount = { userId: uid, email: em, name: nm, accessToken: newSession.access_token, refreshToken: newSession.refresh_token };
-        if (idx >= 0) stored[idx] = acct; else stored.push(acct);
-        saveAccounts(stored);
-      }
+      rememberAccount(newSession);
 
       window.location.href = "/agent";
     } catch {
       // Token expired/rotated — go to login form pre-filled with this email
-      const stored: SavedAccount[] = (() => {
-        try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
-      })();
-      const updated = stored.filter(a => a.userId !== account.userId);
-      saveAccounts(updated);
+      forgetAccount(account.userId);
       window.location.href = `/auth?email=${encodeURIComponent(account.email)}&expired=1`;
     } finally {
       setLoadingAccountId(null);
@@ -146,18 +110,7 @@ const Auth = () => {
       if (error) throw error;
 
       // Save tokens immediately so multi-account switcher has fresh tokens right away
-      if (session) {
-        const uid = session.user.id;
-        const em = session.user.email || "";
-        const nm = session.user.user_metadata?.name || em.split("@")[0];
-        const stored: SavedAccount[] = (() => {
-          try { return JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || "[]"); } catch { return []; }
-        })();
-        const idx = stored.findIndex(a => a.userId === uid);
-        const acct: SavedAccount = { userId: uid, email: em, name: nm, accessToken: session.access_token, refreshToken: session.refresh_token };
-        if (idx >= 0) stored[idx] = acct; else stored.push(acct);
-        saveAccounts(stored);
-      }
+      rememberAccount(session);
 
       navigate("/agent");
     } catch (error: any) {
@@ -194,6 +147,42 @@ const Auth = () => {
       toast.error(error.message || "Erro ao criar conta");
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  /**
+   * Login/cadastro com Google.
+   *
+   * Serve para os dois: o Supabase cria a conta se ainda não existir, então não há "signup com
+   * Google" separado — por isso o botão aparece igual nas duas abas.
+   *
+   * CUPOM — aqui o round-trip tem 2 camadas, não 3. A terceira era `user_metadata`, gravada via
+   * `signUp({ options: { data } })`; `signInWithOAuth` não aceita `data`, e o metadata de quem entra
+   * por OAuth é montado pelo próprio Google. Sobram o localStorage e a query do redirect.
+   *
+   * O perfil e os 50 créditos NÃO dependem daqui: quem cria é o trigger trg_handle_new_user, em
+   * auth.users (migration 20260811150000). Vale pra qualquer provedor.
+   */
+  const handleGoogle = async () => {
+    setIsGoogleLoading(true);
+    try {
+      if (couponParam) savePendingCoupon(couponParam);                          // L1: localStorage
+      const redirectTo = `${window.location.origin}/onboarding${couponParam ? `?coupon=${couponParam}` : ""}`; // L2
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo,
+          // Sem isto o Google devolve a mesma conta em silêncio quando o usuário já está logado no
+          // navegador — quem tem duas contas não consegue escolher, e a queixa vira "entrou na conta
+          // errada e não me deixa trocar".
+          queryParams: { prompt: "select_account" },
+        },
+      });
+      if (error) throw error;
+      // Não há sucesso a tratar: em caso de acerto o browser já saiu desta página para o Google.
+    } catch (error: any) {
+      toast.error(error.message || "Não consegui abrir o login do Google. Tente de novo.");
+      setIsGoogleLoading(false);
     }
   };
 
@@ -438,6 +427,16 @@ const Auth = () => {
                       <span className="font-medium">{emailParam}</span>
                     </div>
                   )}
+                  {/* Fora das abas de propósito: com Google não existe "entrar" separado de "criar
+                      conta" — o Supabase cria se não existir. Duplicar o botão nas duas abas só
+                      sugeriria uma escolha que não existe. */}
+                  <GoogleButton onClick={handleGoogle} loading={isGoogleLoading} disabled={isLoading} />
+                  <div className="flex items-center gap-3 my-4">
+                    <span className="h-px flex-1 bg-border" />
+                    <span className="text-xs text-muted-foreground">ou com email</span>
+                    <span className="h-px flex-1 bg-border" />
+                  </div>
+
                   <Tabs defaultValue={defaultTab} className="w-full">
                     <TabsList className="grid w-full grid-cols-2 mb-4">
                       <TabsTrigger value="login">Entrar</TabsTrigger>

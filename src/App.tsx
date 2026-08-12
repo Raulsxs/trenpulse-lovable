@@ -2,7 +2,10 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { rememberAccount } from "@/lib/savedAccounts";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BackgroundGenerationProvider } from "@/contexts/BackgroundGenerationContext";
 import { useAccountType } from "@/hooks/useAccountType";
@@ -35,6 +38,18 @@ const queryClient = new QueryClient();
 // template-first foi removida do bundle; o código vive na branch backup/self-serve.
 const RoutedApp = () => {
   const { loading } = useAccountType();
+
+  // Salva a conta no switcher multi-conta sempre que uma sessão é estabelecida.
+  //
+  // Vive AQUI, e não no Auth.tsx, por causa do login com Google: ele volta por redirect direto pro
+  // /onboarding, então o Auth.tsx nunca chega a rodar e quem entrasse com Google simplesmente sumia
+  // da lista de contas salvas. Um listener na raiz cobre todo caminho de entrada de uma vez.
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" || event === "TOKEN_REFRESHED") rememberAccount(session);
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
 
   if (loading) {
     return (
