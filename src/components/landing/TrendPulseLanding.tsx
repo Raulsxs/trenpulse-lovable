@@ -52,13 +52,21 @@ const galleryCard = (g: { src: string; cap: string; pos?: string }) =>
   `<div style="flex:none;width:248px;background:#fbfcfd;border:1px solid rgba(20,37,58,.09);border-radius:16px;overflow:hidden;box-shadow:0 1px 3px rgba(20,37,58,.06)"><img src="${g.src}" alt="Exemplo gerado na plataforma" loading="lazy" style="width:248px;height:248px;object-fit:cover;${g.pos ? `object-position:${g.pos};` : ""}display:block"><div style="padding:13px 14px"><div style="font-size:12.5px;color:#44546B;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden">${g.cap}</div></div></div>`;
 const GALLERY_HTML = GALLERY.map(galleryCard).join("");
 
-// Seção "Feito com TrendPulse" — 16 posts REAIS gerados na plataforma (gpt-image-2, português
-// impecável). Marquee em sentido inverso ao de #exemplos → efeito de mural de duas fileiras.
+// Seção "Feito com TrendPulse" — posts REAIS gerados na plataforma, em português impecável.
+// Marquee em sentido inverso ao de #exemplos → efeito de mural de duas fileiras.
+//
+// AS TRÊS PRIMEIRAS SÃO DE ESTILOS DIFERENTES DE PROPÓSITO. As 16 originais saíram todas do mesmo
+// template (onda azul, fundo branco, pessoa à direita) — enfileiradas, davam a impressão de que o
+// produto só sabe fazer uma coisa, que é o oposto do argumento. Abrindo com editorial escuro,
+// citação em serifa e infográfico sem foto, a variedade aparece antes de a pessoa rolar.
 const GALLERY_FEITO: { src: string; cap: string }[] = [
+  { src: "/showcase/gerados/estilo_dark_editorial.jpg", cap: "Editorial escuro, tipografia condensada." },
   { src: "/showcase/gerados/exemplo_sinais_coracao.jpg", cap: "5 sinais de que o coração pede atenção." },
+  { src: "/showcase/gerados/estilo_citacao_serif.jpg", cap: "Citação em serifa, sem imagem nenhuma." },
   { src: "/showcase/gerados/exemplo_alimentacao_saudavel.jpg", cap: "Alimentação saudável começa na sua cozinha." },
   { src: "/showcase/gerados/exemplo_hipertensao.jpg", cap: "Hipertensão: o inimigo silencioso." },
   { src: "/showcase/gerados/exemplo_exercicios.jpg", cap: "Por que 30 minutos por dia já mudam tudo." },
+  { src: "/showcase/gerados/estilo_infografico.jpg", cap: "Infográfico de dados, sem foto de banco." },
   { src: "/showcase/gerados/exemplo_ansiedade.jpg", cap: "Técnicas simples para reduzir a ansiedade." },
   { src: "/showcase/gerados/exemplo_sono.jpg", cap: "A importância do sono para a sua saúde." },
   { src: "/showcase/gerados/exemplo_colesterol.jpg", cap: "Colesterol alto tem solução." },
