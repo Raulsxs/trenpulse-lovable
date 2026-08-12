@@ -3,7 +3,10 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAI } from "../_shared/ai-gateway.ts";
 import { requireAuth } from "../_shared/require-auth.ts";
 import { orImage } from "../_shared/openrouter.ts";
-import { overlayLogo, type LogoPosition } from "../_shared/logo-overlay.ts";
+// SÓ O TIPO é estático — `import type` é apagado na compilação e não custa nada em runtime.
+// O overlayLogo entra por import DINÂMICO lá embaixo, no único ponto onde é usado. Ver o porquê
+// no comentário da chamada.
+import type { LogoPosition } from "../_shared/logo-overlay.ts";
 
 async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
   try {
@@ -913,6 +916,16 @@ ${brandColorHint}
           const isLIDoc = platform === "linkedin" && contentFormat === "document";
           const isStory = contentFormat === "story";
           const [lw, lh] = isLIPost ? [1200, 1200] : isLIDoc ? [1080, 1350] : isStory ? [1080, 1920] : [1080, 1080];
+          // IMPORT DINÂMICO — a razão é memória, não estilo.
+          //
+          // logo-overlay puxa React + og_edge (Satori + resvg em WASM) + ImageScript. Estático no
+          // topo, esse conjunto era instanciado no isolate a CADA invocação, mesmo quando a marca
+          // não tinha logo — que é a maioria dos casos, e é 100% dos casos quando não há marca
+          // nenhuma. Somado aos buffers de uma imagem 2K, estourava o limite do isolate e a função
+          // morria com "not having enough compute resources" ANTES de gerar qualquer coisa.
+          //
+          // Aqui dentro, o custo só existe para quem realmente tem logo pra aplicar.
+          const { overlayLogo } = await import("../_shared/logo-overlay.ts");
           finalImage = await overlayLogo(finalImage, brandInfo.logo_url, lw, lh,
             { position: logoPosition, opacity: logoOpacity, widthPct: logoWidthPct });
           console.log(`[generate-slide-images] logo overlay aplicado (marca=${brandInfo.name}, pos=${logoPosition}, op=${logoOpacity})`);
