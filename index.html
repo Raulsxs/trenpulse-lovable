@@ -6,33 +6,41 @@
     <!-- Bloqueia auto-tradução do Chrome — ela manipula o DOM externamente e quebra o React
          com erro "insertBefore: O nó anterior ... não é filho deste nó". -->
     <meta name="google" content="notranslate" />
-    <title>TrendPulse</title>
-    <meta name="description" content="Plataforma de geração de conteúdos">
+
+    <title>TrendPulse — sua marca postando todo dia, sem você travar na tela em branco</title>
+    <meta name="description" content="Você escreve a ideia em português normal. A IA entrega post, carrossel ou story pronto com a sua identidade e publica em 9 redes. Feito para quem vende a própria expertise e não tem tempo de virar social media.">
     <meta name="author" content="TrendPulse" />
-    <meta name="theme-color" content="#7c3aed" />
+    <!-- Azul do --primary (210 100% 35%). Estava #7c3aed, roxo de uma paleta antiga: no celular
+         esta é a cor da barra de status e da splash do PWA, ou seja o primeiro pixel do produto. -->
+    <meta name="theme-color" content="#0059B3" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="TrendPulse" />
     <link rel="manifest" href="/manifest.json" />
+    <link rel="canonical" href="https://trendpulse.com.br/" />
 
-    <!-- TODO: Update og:title to match your application name -->
-    
-    
+    <!-- Cartão de compartilhamento.
+         O og:image e o twitter:image apontavam para um SCREENSHOT DE PREVIEW DO LOVABLE hospedado
+         num bucket R2 de terceiro, e o twitter:site creditava @Lovable. Era o que aparecia quando
+         alguém mandava o link no WhatsApp ou no LinkedIn — num produto que vende conteúdo para
+         redes sociais, o pior lugar possível para essa sobra. O /og.jpg agora é nosso, 1200x630,
+         e mostra peças REAIS geradas na plataforma. Fonte editável em public/og-source.html. -->
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/b39afbc5-43b6-482d-aaf9-ab9d039d1f63/id-preview-afd8250f--78f6c63c-3aa2-46ee-80d4-f73b74e7b257.lovable.app-1771344908917.png">
+    <meta property="og:url" content="https://trendpulse.com.br/" />
+    <meta property="og:site_name" content="TrendPulse" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:title" content="TrendPulse — sua marca postando todo dia">
+    <meta property="og:description" content="Você escreve a ideia. A IA entrega o post pronto com a sua cara e publica em 9 redes.">
+    <meta property="og:image" content="https://trendpulse.com.br/og.jpg">
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="TrendPulse: três posts gerados na plataforma ao lado da frase Sua marca postando todo dia." />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@Lovable" />
-    <meta name="twitter:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/b39afbc5-43b6-482d-aaf9-ab9d039d1f63/id-preview-afd8250f--78f6c63c-3aa2-46ee-80d4-f73b74e7b257.lovable.app-1771344908917.png">
-    
-  
-  
-  
-  <meta property="og:title" content="TrendPulse">
-  <meta name="twitter:title" content="TrendPulse">
-  <meta property="og:description" content="Plataforma de geração de conteúdos">
-  <meta name="twitter:description" content="Plataforma de geração de conteúdos">
-</head>
+    <meta name="twitter:title" content="TrendPulse — sua marca postando todo dia">
+    <meta name="twitter:description" content="Você escreve a ideia. A IA entrega o post pronto com a sua cara e publica em 9 redes.">
+    <meta name="twitter:image" content="https://trendpulse.com.br/og.jpg">
+  </head>
 
   <body translate="no" class="notranslate">
     <div id="root"></div>

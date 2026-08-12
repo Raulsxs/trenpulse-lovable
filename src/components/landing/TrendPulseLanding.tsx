@@ -90,7 +90,7 @@ const BODY = `
       <a href="#precos" style="color:inherit;text-decoration:none">Preços</a>
     </nav>
     <div style="display:flex;align-items:center;gap:10px">
-      <button data-tp="login" style="border:none;background:transparent;font-family:inherit;font-size:14px;font-weight:600;color:#44546B;cursor:pointer;padding:9px 12px">Entrar</button>
+      <button data-tp="login" style="border:none;background:transparent;font-family:inherit;font-size:14px;font-weight:600;color:#44546B;cursor:pointer;padding:13px 14px">Entrar</button>
       <button data-tp="signup" style="border:none;font-family:inherit;font-size:14px;font-weight:600;color:#fff;cursor:pointer;padding:10px 18px;border-radius:10px;background:linear-gradient(135deg,#0059B3,#1DAFA3);box-shadow:0 6px 16px rgba(0,89,179,.26);display:flex;align-items:center;gap:7px">Começar grátis
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
       </button>
@@ -174,7 +174,7 @@ const BODY = `
         </div>
       </div>
       <div style="position:absolute;z-index:3;top:-26px;right:-22px;width:84px;height:84px;border-radius:18px;overflow:hidden;border:3px solid #fff;box-shadow:0 16px 36px -8px rgba(20,37,58,.4);animation:tpFloat 6s ease-in-out infinite">
-        <img src="/landing/foto_pessoal.png" alt="Sua marca" style="width:100%;height:100%;object-fit:cover">
+        <img src="/showcase/gerados/exemplo_sinais_coracao.jpg" alt="Post gerado na plataforma" style="width:100%;height:100%;object-fit:cover">
       </div>
       <div style="position:absolute;z-index:3;bottom:-20px;left:-26px;background:#fff;border:1px solid rgba(20,37,58,.1);border-radius:13px;padding:11px 15px;box-shadow:0 16px 34px -10px rgba(20,37,58,.3);display:flex;align-items:center;gap:10px;animation:tpFloat2 7s ease-in-out infinite">
         <div style="width:32px;height:32px;border-radius:9px;background:#e8f5ee;display:flex;align-items:center;justify-content:center">
@@ -422,16 +422,15 @@ const BODY = `
 </section>
 
 <section style="padding:40px 24px 88px">
-  <div data-reveal style="max-width:820px;margin:0 auto;background:#fff;border:1px solid rgba(20,37,58,.09);border-radius:22px;padding:40px;display:flex;gap:28px;align-items:center;box-shadow:0 16px 40px -22px rgba(20,37,58,.25)">
-    <div style="flex:none;width:96px;height:96px;border-radius:20px;overflow:hidden;border:3px solid #fff;box-shadow:0 10px 24px -8px rgba(20,37,58,.35)">
-      <img src="/landing/foto_pessoal.png" alt="Cliente" style="width:100%;height:100%;object-fit:cover">
-    </div>
-    <div>
-<!-- TODO Raul: trocar esta PROMESSA por um DEPOIMENTO REAL do Dr. Maikon (foto + frase dele + nome/profissão). Prova social real converte muito mais. Aí sim voltam as 5 estrelas. -->
-      <div style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1DAFA3;background:rgba(29,175,163,.12);padding:5px 11px;border-radius:999px;margin-bottom:14px">A promessa</div>
-      <p style="font-family:'Plus Jakarta Sans';font-weight:600;font-size:21px;line-height:1.4;letter-spacing:-.01em;margin:0 0 16px;color:#14253A">Você não precisa escolher entre atender bem e aparecer nas redes. Enquanto você cuida dos seus clientes, o TrendPulse cuida da sua presença.</p>
-      <div style="font-size:14px;color:#79879C">O jeito de nunca mais sumir do feed.</div>
-    </div>
+  <!-- A foto de banco de imagem que ficava aqui, rotulada "Cliente", foi REMOVIDA: rosto genérico
+       apresentado como cliente é prova social fabricada, e some com a credibilidade de tudo em volta.
+       O bloco é uma PROMESSA (está escrito no rótulo) e se sustenta sozinho como tipografia.
+       PENDENTE Raul: um depoimento REAL do Dr. Maikon — frase dele, nome, profissão, foto dele.
+       Aí isto vira prova social de verdade e volta a ter rosto. -->
+  <div data-reveal style="max-width:720px;margin:0 auto;background:#fff;border:1px solid rgba(20,37,58,.09);border-radius:22px;padding:44px 48px;box-shadow:0 16px 40px -22px rgba(20,37,58,.25);text-align:center">
+    <div style="display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#1DAFA3;background:rgba(29,175,163,.12);padding:5px 11px;border-radius:999px;margin-bottom:18px">A promessa</div>
+    <p style="font-family:'Plus Jakarta Sans';font-weight:600;font-size:23px;line-height:1.42;letter-spacing:-.012em;margin:0 0 16px;color:#14253A">Você não precisa escolher entre atender bem e aparecer nas redes. Enquanto você cuida dos seus clientes, o TrendPulse cuida da sua presença.</p>
+    <div style="font-size:14px;color:#79879C">O jeito de nunca mais sumir do feed.</div>
   </div>
 </section>
 
@@ -457,10 +456,10 @@ const BODY = `
       </div>
       <span style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:16px">TrendPulse</span>
     </div>
-    <div style="display:flex;gap:26px;font-size:14px;color:#79879C">
-      <a href="/privacy" style="color:inherit;text-decoration:none">Privacidade</a>
-      <a href="#precos" style="color:inherit;text-decoration:none">Preços</a>
-      <a href="#" style="color:inherit;text-decoration:none">Contato</a>
+    <div style="display:flex;gap:18px;font-size:14px;color:#79879C;flex-wrap:wrap;justify-content:center">
+      <a href="/privacy" style="color:inherit;text-decoration:none;display:inline-flex;align-items:center;min-height:44px;padding:0 6px">Privacidade</a>
+      <a href="#precos" style="color:inherit;text-decoration:none;display:inline-flex;align-items:center;min-height:44px;padding:0 6px">Preços</a>
+      <a href="#" style="color:inherit;text-decoration:none;display:inline-flex;align-items:center;min-height:44px;padding:0 6px">Contato</a>
     </div>
     <p style="font-size:12.5px;color:#9aa6b5;margin:0">© 2026 TrendPulse. Todos os direitos reservados.</p>
   </div>

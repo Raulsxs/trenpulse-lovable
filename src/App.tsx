@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { rememberAccount } from "@/lib/savedAccounts";
@@ -10,27 +10,50 @@ import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { BackgroundGenerationProvider } from "@/contexts/BackgroundGenerationContext";
 import { useAccountType } from "@/hooks/useAccountType";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+
+/**
+ * DIVISÃO DO BUNDLE — o que o visitante ANÔNIMO baixa vs. o resto.
+ *
+ * Tudo era importado estaticamente: um único chunk de 2,8 MB. Quem caía na home vindo do TikTok
+ * baixava o calendário, o gerador de PDF e o html2canvas antes mesmo de ter conta — LCP e TBT na
+ * boca exata do funil, no aparelho mais fraco e na rede mais lenta.
+ *
+ * ESTÁTICO (chunk inicial): só o que uma pessoa deslogada pode ver — landing, login, recuperação
+ * de senha, preços, privacidade, resgate de cupom (link do email pós-compra) e o 404. Se qualquer
+ * um destes virar lazy, a primeira tela pisca um fallback à toa.
+ *
+ * LAZY: todo o resto. São telas atrás de login, então a pessoa já está engajada quando o chunk
+ * carrega, e a espera some atrás da própria navegação.
+ */
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
-import ContentPreview from "./pages/ContentPreview";
-import DownloadPage from "./pages/Download";
-import Contents from "./pages/Contents";
-import Profile from "./pages/Profile";
-import BrandWizard from "./pages/BrandWizard";
-import Brands from "./pages/Brands";
-import BrandEdit from "./pages/BrandEdit";
-import Calendar from "./pages/Calendar";
-import ChatPage from "./pages/ChatPage";
-import Studio from "./pages/Studio";
-import AgentChat from "./pages/AgentChat";
 import ResetPassword from "./pages/ResetPassword";
-import NotFound from "./pages/NotFound";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
 import Pricing from "./pages/Pricing";
-import Analytics from "./pages/Analytics";
-import Onboarding from "./pages/Onboarding";
-import AdminAnalytics from "./pages/AdminAnalytics";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import RedeemCoupon from "./pages/RedeemCoupon";
+import NotFound from "./pages/NotFound";
+
+const ContentPreview = lazy(() => import("./pages/ContentPreview"));
+const DownloadPage = lazy(() => import("./pages/Download"));       // puxa jsPDF + html2canvas
+const Contents = lazy(() => import("./pages/Contents"));
+const Profile = lazy(() => import("./pages/Profile"));
+const BrandWizard = lazy(() => import("./pages/BrandWizard"));
+const Brands = lazy(() => import("./pages/Brands"));
+const BrandEdit = lazy(() => import("./pages/BrandEdit"));
+const Calendar = lazy(() => import("./pages/Calendar"));
+const ChatPage = lazy(() => import("./pages/ChatPage"));
+const Studio = lazy(() => import("./pages/Studio"));
+const AgentChat = lazy(() => import("./pages/AgentChat"));
+const Analytics = lazy(() => import("./pages/Analytics"));
+const Onboarding = lazy(() => import("./pages/Onboarding"));
+const AdminAnalytics = lazy(() => import("./pages/AdminAnalytics"));
+
+/** Fallback do Suspense: mesmo visual do gate do useAccountType, pra a troca não piscar diferente. */
+const CarregandoTela = () => (
+  <div className="flex min-h-screen items-center justify-center bg-background">
+    <div className="animate-pulse text-primary">Carregando...</div>
+  </div>
+);
 
 const queryClient = new QueryClient();
 
@@ -60,6 +83,9 @@ const RoutedApp = () => {
   }
 
   return (
+    // Suspense envolve TODAS as rotas, não cada lazy: as estáticas não suspendem (já estão no
+    // chunk inicial), então um único boundary aqui basta e evita 14 wrappers repetidos.
+    <Suspense fallback={<CarregandoTela />}>
     <Routes>
       <Route path="/" element={<Index />} />
       <Route path="/auth" element={<Auth />} />
@@ -97,6 +123,7 @@ const RoutedApp = () => {
       {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
       <Route path="*" element={<NotFound />} />
     </Routes>
+    </Suspense>
   );
 };
 

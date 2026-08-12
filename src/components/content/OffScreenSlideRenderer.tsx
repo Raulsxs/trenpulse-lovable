@@ -60,6 +60,9 @@ export default function OffScreenSlideRenderer({
           // AI Full Design: image already has text — render as plain image
           <img
             src={slide.background_image_url}
+            // alt vazio de propósito: este renderer vive fora da tela (left:-9999px) só para virar
+            // PNG na captura. Anunciar a URL do arquivo em leitor de tela seria ruído puro.
+            alt=""
             style={{ width: dims.width, height: dims.height, objectFit: "cover" }}
             crossOrigin="anonymous"
           />

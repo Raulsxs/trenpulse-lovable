@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Rotas PÚBLICAS apenas. As autenticadas (/agent, /calendar, /brands...) ficam de fora de
+     propósito: são telas de produto atrás de login, não têm o que indexar. -->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url><loc>https://trendpulse.com.br/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url>
+  <url><loc>https://trendpulse.com.br/pricing</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://trendpulse.com.br/auth</loc><changefreq>monthly</changefreq><priority>0.5</priority></url>
+  <url><loc>https://trendpulse.com.br/privacy</loc><changefreq>yearly</changefreq><priority>0.3</priority></url>
+</urlset>
