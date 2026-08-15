@@ -22,14 +22,27 @@ function CostsTable() {
   return (
     <div className="max-w-md mx-auto bg-muted/40 rounded-xl p-5">
       <p className="text-sm font-semibold text-foreground mb-3">Quanto custa cada criação</p>
-      <ul className="space-y-2">
+      <ul className="space-y-3">
         {CUSTOS.map((c) => (
-          <li key={c.action} className="flex items-center justify-between text-sm gap-4">
-            <span className="text-muted-foreground">{c.label}</span>
-            <span className="font-medium text-foreground whitespace-nowrap">{c.credits} créditos</span>
+          <li key={c.action} className="text-sm">
+            <div className="flex items-center justify-between gap-4">
+              <span className="text-muted-foreground">{c.label}</span>
+              {/* Formato de preço variável mostra o PISO. O modelo escolhido no Studio vence o preço
+                  por formato (ai-chat/index.ts:1294), então "25 créditos" num story que sai por 10
+                  no GPT-Image 2 é anunciar o teto como se fosse o preço. */}
+              <span className="font-medium text-foreground whitespace-nowrap">
+                {c.variaPorModelo ? `a partir de ${c.variaPorModelo.min}` : c.credits} créditos
+              </span>
+            </div>
+            {c.variaPorModelo && (
+              <p className="text-xs text-muted-foreground/80 mt-1 leading-snug">{c.variaPorModelo.nota}</p>
+            )}
           </li>
         ))}
       </ul>
+      <p className="text-xs text-muted-foreground/80 mt-4 leading-snug">
+        Onde aparece “a partir de”, o preço depende do modelo de imagem escolhido na hora de gerar.
+      </p>
     </div>
   );
 }
