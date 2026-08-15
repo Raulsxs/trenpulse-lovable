@@ -95,6 +95,59 @@ const MARCAS: Perfil[] = [
 
 const url = ([nome, pasta]: [string, string]) => `/showcase/${pasta}/${nome}.jpg`;
 
+/**
+ * A marca do TrendPulse. NÃO é um símbolo novo: é o mesmo do app autenticado
+ * (src/components/layout/Sidebar.tsx) — quadrado arredondado na cor primária com o glifo TrendingUp
+ * do lucide. A página não tinha marca nenhuma além da palavra escrita, o que é estranho justo numa
+ * landing que vende identidade visual. O path vem inline pra não puxar o pacote de ícones só por isto.
+ */
+const Marca = () => (
+  <span className="marca-sim" aria-hidden="true">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+      <polyline points="16 7 22 7 22 13" />
+    </svg>
+  </span>
+);
+
+/**
+ * SÉRIES DE TWEET CARD, uma por perfil.
+ *
+ * Por que série e não card avulso: em credit_pricing a ação chama `tweet_card` e a descrição é
+ * "Carrossel de tweet card" — o produto entrega uma SEQUÊNCIA por 6 créditos, e o contador "1/3"
+ * faz parte do template. Mostrar um card solto na landing vendia o formato errado.
+ *
+ * A gramática abaixo é a que o renderer entende de verdade (buildTweetCardElement): `**negrito**`
+ * vira peso 700, e linha começando com "→" vira bullet com o quadrado azul. Não é markdown genérico.
+ */
+const TWEETS: Record<string, string[]> = {
+  medico: [
+    "Pressão alta não dói. É exatamente por isso que ela é perigosa.",
+    "Três hábitos mexem mais no seu coração que qualquer remédio:\n→ dormir 7 horas\n→ cortar o sal escondido\n→ caminhar 30 minutos",
+    "O melhor exame é o que você **faz**, não o que você agenda.",
+  ],
+  advogada: [
+    "Assinar no calor do momento custa caro. Quase sempre dá pra reverter.",
+    "Justa causa exige prova. Se a empresa não tem:\n→ advertência anterior\n→ documento assinado\n→ testemunha\nnão é justa causa.",
+    "Você tem **2 anos** para reclamar na Justiça do Trabalho. Não é o resto da vida.",
+  ],
+  gestor: [
+    "Quase toda equipe que parece desmotivada está, na verdade, confusa.",
+    "Antes de trocar a pessoa, confira três coisas:\n→ ela sabe o que é sucesso aqui?\n→ ela tem a ferramenta?\n→ alguém já foi honesto com ela?",
+    "Meta sem dono não é meta. É **desejo**.",
+  ],
+  coach: [
+    "Disciplina não é acordar às 5h da manhã.",
+    "É escolher o que você quer **mais** em vez do que você quer **agora**.",
+    "Você não está travado. Você está esperando ter certeza.",
+  ],
+  nutri: [
+    "Comida de verdade não precisa de marketing.",
+    "Antes de cortar o carboidrato, tente:\n→ proteína no café da manhã\n→ água antes da fome\n→ mais uma hora de sono",
+    "O que você adia hoje cobra caro depois. Comece pelo **prato**.",
+  ],
+};
+
 /** Texto REAL do style_guide de uma marca de verdade — não é exemplo escrito à mão. */
 const O_QUE_A_IA_ENTENDEU = {
   padrao: "Fundo branco predominante com ampla área de respiro.",
@@ -149,6 +202,11 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
   const larguraNote = Math.max(300, Math.min(660, janela - 56));
   const larguraCal = Math.max(300, Math.min(720, janela - 56));
   const larguraCel = Math.max(228, Math.min(296, janela - 80));
+  // Três tweet cards lado a lado dentro do bloco de 1200px (56 de padding, 18 de gap × 2).
+  // Numa coluna só, o card ocupa a largura disponível.
+  const larguraTw = estreito
+    ? Math.min(360, janela - 52)
+    : Math.max(250, Math.min(346, (Math.min(1200, janela) - 56 - 36) / 3));
   const raiz = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -176,7 +234,7 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
 
       <header className="topo">
         <div className="topo-in">
-          <span className="wm">TrendPulse</span>
+          <span className="wm"><Marca /> TrendPulse</span>
           <div className="topo-a">
             <button className="btxt" onClick={onLogin}>Entrar</button>
             <button className="bt" onClick={onSignup}>Criar conta</button>
@@ -380,10 +438,29 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
             <figure className="fmt">
               <div className="tw">
                 <TweetCard autor={m.autor} handle={m.handle} accent={m.accent} largura={252}
-                  texto="O que você adia hoje cobra caro depois." />
+                  texto={TWEETS[m.id][0]} indice={1} total={3} />
               </div>
-              <figcaption><strong>Tweet card</strong><span>6 cr</span></figcaption>
+              <figcaption><strong>Tweet card</strong><span>6 cr a série</span></figcaption>
             </figure>
+          </div>
+
+          {/* A SÉRIE INTEIRA. O tweet card era o formato mais escondido da página — aparecia como um
+              quadradinho entre outros três, e ainda por cima avulso, quando o produto entrega uma
+              sequência. Aqui ele ganha a largura da seção e mostra o que 6 créditos compram. */}
+          <div className="serie-tw" data-rv data-d="120">
+            <p className="serie-titulo">
+              Um tema vira uma <em>sequência</em>. Estes três saem juntos, por 6 créditos:
+            </p>
+            <div className="serie-linha">
+              {TWEETS[m.id].map((t, k) => (
+                <TweetCard key={m.id + k} autor={m.autor} handle={m.handle} accent={m.accent}
+                  largura={larguraTw} texto={t} indice={k + 1} total={3} />
+              ))}
+            </div>
+            <p className="serie-nota">
+              Texto desenhado por template, não gerado por modelo de imagem — por isso nunca sai com
+              letra torta ou acento errado.
+            </p>
           </div>
         </div>
       </section>
@@ -393,16 +470,25 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
         <div className="bl-in">
           <p className="olho" data-rv>Preço</p>
           <h2 data-rv>Você paga o que usar</h2>
-          <p className="sub" data-rv>Créditos pré-pagos, sem mensalidade e sem pacote parado.</p>
+          <p className="sub" data-rv>
+            Créditos pré-pagos, sem mensalidade e sem pacote parado. Onde aparece “a partir de”, o
+            preço depende do modelo de imagem que você escolher na hora de gerar.
+          </p>
 
           <div className="custos" data-rv>
             {CUSTOS.slice(0, 5).map((c) => (
               <div key={c.action} className="custo">
                 <div className="custo-top">
                   <h3>{c.label}</h3>
-                  <span className="cr">{c.credits}<small>cr</small></span>
+                  {/* Formato com preço variável mostra o PISO, não o padrão: anunciar 25 num story
+                      que sai por 10 no GPT-Image 2 é anunciar o teto como se fosse o preço. */}
+                  <span className="cr">
+                    {c.variaPorModelo ? <small className="de">a partir de </small> : null}
+                    {c.variaPorModelo ? c.variaPorModelo.min : c.credits}<small>cr</small>
+                  </span>
                 </div>
                 <p>{c.detalhe}</p>
+                {c.variaPorModelo && <p className="varia">{c.variaPorModelo.nota}</p>}
               </div>
             ))}
           </div>
@@ -439,7 +525,7 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
       </section>
 
       <footer className="rodape">
-        <span>TrendPulse</span>
+        <span className="wm rod"><Marca /> TrendPulse</span>
         <nav>
           <a href="/pricing">Preços</a>
           <a href="/privacy">Privacidade</a>
@@ -488,7 +574,10 @@ const CSS = `
    ganho visual perdido e nulo e a classe inteira de bug some. */
 .hl .topo{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--papel) 97%,transparent);border-bottom:1px solid var(--linha)}
 .hl .topo-in{max-width:1200px;margin:0 auto;padding:13px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px}
-.hl .wm{font-family:'Plus Jakarta Sans',Inter,sans-serif;font-weight:800;font-size:19px;letter-spacing:-.028em}
+.hl .wm{font-family:'Plus Jakarta Sans',Inter,sans-serif;font-weight:800;font-size:19px;letter-spacing:-.028em;display:inline-flex;align-items:center;gap:9px;color:var(--tinta)}
+.hl .wm.rod{font-size:16px}
+.hl .marca-sim{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--marca);flex:none}
+.hl .wm.rod .marca-sim{width:24px;height:24px;border-radius:7px}
 .hl .topo-a{display:flex;align-items:center;gap:4px}
 
 .hl .bt{font:inherit;font-weight:600;font-size:14px;cursor:pointer;background:var(--tinta);color:var(--papel);border:none;padding:13px 19px;border-radius:8px;min-height:44px;transition:background .25s cubic-bezier(.16,1,.3,1),transform .25s cubic-bezier(.16,1,.3,1)}
@@ -560,6 +649,17 @@ const CSS = `
 .hl .cr{font-size:23px;font-weight:800;color:var(--marca);font-variant-numeric:tabular-nums;letter-spacing:-.03em}
 .hl .cr small{font-size:11px;font-weight:600;margin-left:1px}
 .hl .custo p{font-size:12.5px;color:var(--t2);margin:0;line-height:1.45}
+.hl .cr .de{display:block;font-size:9.5px;font-weight:600;color:var(--t3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:-2px}
+.hl .varia{font-size:11px;color:var(--t3);margin-top:7px;line-height:1.4;font-variant-numeric:tabular-nums}
+
+/* ── Serie de tweet cards ── */
+.hl .serie-tw{margin-top:56px;padding-top:38px;border-top:1px solid var(--linha)}
+.hl .serie-titulo{font-size:15.5px;color:var(--t2);margin:0 0 24px;max-width:64ch;line-height:1.55}
+.hl .serie-titulo em{font-style:normal;color:var(--tinta);font-weight:600}
+/* Largura do card vem por PROP, não por CSS: todas as medidas internas do TweetCard sao derivadas
+   dela (canvas real de 1080), entao esticar a caixa por CSS deixaria o conteudo em outra escala. */
+.hl .serie-linha{display:flex;gap:18px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
+.hl .serie-nota{font-size:12.5px;color:var(--t3);margin:20px 0 0;line-height:1.5;max-width:68ch}
 
 .hl .pacotes{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .hl .pac{background:#fff;border:1px solid var(--linha);border-radius:14px;padding:26px 24px;position:relative;display:flex;flex-direction:column}

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { motion } from "framer-motion";
-import TrendPulseLanding from "@/components/landing/TrendPulseLanding";
+import HistoriaLanding from "@/components/landing/HistoriaLanding";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -45,7 +45,10 @@ const Index = () => {
           transition={{ duration: 0.3 }}
         />
       )}
-      <TrendPulseLanding onSignup={goToSignup} onLogin={goToLogin} />
+      {/* Landing "História" promovida à / em 2026-08-15, depois da comparação lado a lado.
+          O redirect de sessão acima é o motivo de a troca ser aqui e não na rota: quem já está
+          logado tem que cair no /agent, e o LandingNova não faz essa checagem. */}
+      <HistoriaLanding onSignup={goToSignup} onLogin={goToLogin} />
     </>
   );
 };
