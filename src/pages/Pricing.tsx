@@ -11,27 +11,22 @@ import BuyCreditsModal from "@/components/billing/BuyCreditsModal";
 import { PricingSection } from "@/components/landing/PricingSection";
 import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
+import { CUSTOS } from "@/lib/precos";
 import { Sparkles } from "lucide-react";
 
-// O que cada ação custa (espelha a tabela credit_pricing)
-const COSTS = [
-  { label: "Post com imagem", credits: 8 },
-  { label: "Carrossel (por slide)", credits: 8 },
-  { label: "Carrossel editorial (por slide)", credits: 4 },
-  { label: "Story 9:16 (modelo premium)", credits: 20 },
-  { label: "Carrossel de tweet card", credits: 2 },
-  { label: "Imagem livre", credits: 8 },
-];
-
+// A lista vinha escrita À MÃO aqui e tinha DIVERGIDO do que o sistema cobra: anunciava post por 8
+// créditos (cobra 10), story por 20 (cobra 25) e tweet card por 2 (cobra 6 — três vezes mais).
+// Preço divulgado diferente do praticado é problema de confiança, não de layout. Agora vem de
+// @/lib/precos, que é a única fonte e está conferida contra public.credit_pricing.
 function CostsTable() {
   return (
     <div className="max-w-md mx-auto bg-muted/40 rounded-xl p-5">
       <p className="text-sm font-semibold text-foreground mb-3">Quanto custa cada criação</p>
       <ul className="space-y-2">
-        {COSTS.map((c) => (
-          <li key={c.label} className="flex items-center justify-between text-sm">
+        {CUSTOS.map((c) => (
+          <li key={c.action} className="flex items-center justify-between text-sm gap-4">
             <span className="text-muted-foreground">{c.label}</span>
-            <span className="font-medium text-foreground">{c.credits} créditos</span>
+            <span className="font-medium text-foreground whitespace-nowrap">{c.credits} créditos</span>
           </li>
         ))}
       </ul>

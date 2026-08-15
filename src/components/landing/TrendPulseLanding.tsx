@@ -388,8 +388,8 @@ const BODY = `
         <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:6px"><span style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:38px">R$50</span></div>
         <div style="margin-bottom:20px"><span style="font-size:12.5px;font-weight:700;color:#A05E03;background:#FFF4E0;border:1px solid rgba(160,94,3,.25);padding:5px 11px;border-radius:8px;font-variant-numeric:tabular-nums">500 créditos</span></div>
         <ul style="list-style:none;margin:0 0 22px;padding:0;display:flex;flex-direction:column;gap:11px">
-          <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>≈ 62 posts com imagem</li>
-          <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>ou ≈ 125 slides editoriais</li>
+          <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>≈ 50 posts com imagem</li>
+          <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>ou ≈ 100 slides editoriais</li>
           <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>Todos os formatos liberados</li>
           <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>Publicação e agendamento em 9 redes</li>
         </ul>
@@ -402,8 +402,8 @@ const BODY = `
         <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:6px"><span style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:38px">R$100</span></div>
         <div style="margin-bottom:20px"><span style="font-size:12.5px;font-weight:700;color:#A05E03;background:#FFF4E0;border:1px solid rgba(160,94,3,.25);padding:5px 11px;border-radius:8px;font-variant-numeric:tabular-nums">1.050 créditos · +5% bônus</span></div>
         <ul style="list-style:none;margin:0 0 22px;padding:0;display:flex;flex-direction:column;gap:11px">
-          <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>≈ 131 posts com imagem</li>
-          <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>ou ≈ 26 carrosséis completos</li>
+          <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>≈ 105 posts com imagem</li>
+          <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>ou ≈ 21 carrosséis de 5 slides</li>
           <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>Todos os formatos liberados</li>
           <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>Publicação e agendamento em 9 redes</li>
           <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>Legendas bilíngues</li>
@@ -416,8 +416,8 @@ const BODY = `
         <div style="display:flex;align-items:baseline;gap:4px;margin-bottom:6px"><span style="font-family:'Plus Jakarta Sans';font-weight:800;font-size:38px">R$200</span></div>
         <div style="margin-bottom:20px"><span style="font-size:12.5px;font-weight:700;color:#A05E03;background:#FFF4E0;border:1px solid rgba(160,94,3,.25);padding:5px 11px;border-radius:8px;font-variant-numeric:tabular-nums">2.200 créditos · +10% bônus</span></div>
         <ul style="list-style:none;margin:0 0 22px;padding:0;display:flex;flex-direction:column;gap:11px">
-          <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>≈ 275 posts com imagem</li>
-          <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>ou ≈ 55 carrosséis completos</li>
+          <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>≈ 220 posts com imagem</li>
+          <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>ou ≈ 44 carrosséis de 5 slides</li>
           <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>Todos os formatos liberados</li>
           <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>Publicação e agendamento em 9 redes</li>
           <li style="display:flex;gap:9px;font-size:13.5px;color:#14253A"><span style="color:#0059B3">✓</span>Legendas bilíngues</li>

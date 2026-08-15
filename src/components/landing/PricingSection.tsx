@@ -2,60 +2,38 @@ import { motion } from "framer-motion";
 import { Check, ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
+import { PACOTES, postsPorPacote, carrosseisPorPacote } from "@/lib/precos";
 
-// Espelha os PACKS da edge function create-credit-charge (e do BuyCreditsModal).
-// Tradução crédito→resultado usa credit_pricing: post 4cr, carrossel 4cr/slide, story 6cr.
-const PACKS = [
-  {
-    name: "Inicial",
-    price: "50",
-    credits: 500,
-    description: "Pra começar a publicar",
-    features: [
-      "≈ 62 posts com imagem",
-      "ou ≈ 125 slides editoriais",
-      "Todos os formatos liberados",
-      "Publicação e agendamento em 9 redes",
-    ],
-    cta: "Comprar créditos",
-    variant: "outline" as const,
-    popular: false,
-  },
-  {
-    name: "Popular",
-    price: "100",
-    credits: 1050,
-    bonus: "+5% de bônus",
-    description: "4 meses de post diário",
-    features: [
-      "≈ 131 posts com imagem",
-      "ou ≈ 26 carrosséis completos",
-      "Todos os formatos liberados",
-      "Publicação e agendamento em 9 redes",
-      "Legendas bilíngues",
-    ],
-    cta: "Comprar créditos",
-    variant: "default" as const,
-    popular: true,
-  },
-  {
-    name: "Pro",
-    price: "200",
-    credits: 2200,
-    bonus: "+10% de bônus",
-    description: "9 meses de post diário",
-    features: [
-      "≈ 275 posts com imagem",
-      "ou ≈ 55 carrosséis completos",
-      "Todos os formatos liberados",
-      "Publicação e agendamento em 9 redes",
-      "Legendas bilíngues",
-    ],
-    cta: "Comprar créditos",
-    variant: "outline" as const,
-    popular: false,
-  },
-];
+/**
+ * Os pacotes vêm de @/lib/precos, e a tradução crédito→resultado é CALCULADA, não escrita.
+ *
+ * Estava tudo à mão e tinha divergido feio: o comentário citava "post 4cr", os textos assumiam 8cr
+ * ("≈ 62 posts" por 500 créditos), e o sistema cobra 10cr. Ou seja, os três pacotes prometiam ~25%
+ * mais peça do que entregam — na seção que fecha a venda.
+ *
+ * Calculando a partir da fonte única, mudar o preço no banco e esquecer de mexer aqui deixa de ser
+ * possível: os números se recalculam sozinhos.
+ */
+const PACKS = PACOTES.map((p) => ({
+  name: p.nome,
+  price: String(p.precoReais),
+  credits: p.creditos,
+  bonus: p.bonus,
+  description:
+    p.nome === "Inicial" ? "Pra começar a publicar"
+    : p.nome === "Popular" ? "Três meses de post diário"
+    : "Sete meses de post diário",
+  features: [
+    `≈ ${postsPorPacote(p)} posts com imagem`,
+    `ou ≈ ${carrosseisPorPacote(p)} carrosséis de 5 slides`,
+    "Todos os formatos liberados",
+    "Publicação e agendamento em 9 redes",
+    ...(p.nome === "Inicial" ? [] : ["Legendas bilíngues"]),
+  ],
+  cta: "Comprar créditos",
+  variant: (p.destaque ? "default" : "outline") as "default" | "outline",
+  popular: !!p.destaque,
+}));
 
 export function PricingSection() {
   const navigate = useNavigate();
