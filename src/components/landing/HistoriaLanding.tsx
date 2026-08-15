@@ -103,13 +103,27 @@ const O_QUE_A_IA_ENTENDEU = {
 };
 
 
-/** Largura da janela, pra dimensionar os aparelhos em vez de deixá-los serem cortados. */
+/**
+ * Largura da janela, pra dimensionar os aparelhos em vez de deixá-los serem cortados.
+ *
+ * USA ResizeObserver, NÃO o evento `resize`. Motivo medido: ao redimensionar a janela, o CSS
+ * respondia (o herói voltava pra duas colunas) mas o estado React ficava preso na largura antiga —
+ * o notebook continuava com 319px numa tela de 1440. O evento `resize` não é confiável: além de
+ * redimensionamento programático, ele também escapa em zoom do navegador e em mudança da viewport
+ * visual (barra de URL e teclado no celular). O ResizeObserver observa o LAYOUT e dispara em todos
+ * esses casos.
+ *
+ * O listener de `resize` fica junto como rede, custa quase nada.
+ */
 function useLargura() {
   const [w, setW] = useState(typeof window === "undefined" ? 1440 : window.innerWidth);
   useEffect(() => {
-    const on = () => setW(window.innerWidth);
-    window.addEventListener("resize", on);
-    return () => window.removeEventListener("resize", on);
+    const medir = () => setW(window.innerWidth);
+    medir();
+    const ro = new ResizeObserver(medir);
+    ro.observe(document.documentElement);
+    window.addEventListener("resize", medir);
+    return () => { ro.disconnect(); window.removeEventListener("resize", medir); };
   }, []);
   return w;
 }
