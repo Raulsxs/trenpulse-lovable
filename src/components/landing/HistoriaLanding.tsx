@@ -22,43 +22,77 @@ interface Props {
   onLogin: () => void;
 }
 
-/** As quatro identidades, geradas na plataforma com o MESMO texto e briefings diferentes. */
-const MARCAS = [
+/**
+ * CINCO PERFIS, um por tipo de cliente. Não é enfeite de variedade: o visitante precisa se
+ * RECONHECER, e "médico, advogado, gestor" é literalmente o público que o Raul descreve.
+ *
+ * A GRADE DE CADA UM É DO NICHO DELE. Na primeira versão o perfil da advogada mostrava post de
+ * cardiologia, e isso quebra a ilusão em meio segundo — destrói exatamente a prova que a seção
+ * existe pra dar. As peças de advocacia e de gestão foram geradas na plataforma pra isso.
+ *
+ * `pasta` diz onde a peça mora: /gerados (as antigas, de saúde e genéricas) ou /nichos (as novas).
+ */
+type Perfil = {
+  id: string; nicho: string; marca: string; handle: string; bio: string;
+  autor: string; cargo: string; accent: string;
+  grade: [string, "gerados" | "nichos"][];
+  legenda: string;
+};
+
+const MARCAS: Perfil[] = [
   {
-    id: "clinica", nicho: "Saúde", marca: "Clínica Vida", handle: "clinicavida",
+    id: "medico", nicho: "Médico", marca: "Clínica Vida", handle: "clinicavida",
+    bio: "Cardiologia · Prevenção que cabe na sua rotina",
     autor: "Dra. Helena Vidal", cargo: "Cardiologista · Clínica Vida",
     accent: "#1B6CA8",
-    grade: ["exemplo_sinais_coracao", "exemplo_hipertensao", "exemplo_colesterol", "exemplo_prevencao",
-            "exemplo_diabetes", "exemplo_nutricao_coracao", "exemplo_exercicios", "exemplo_obesidade", "exemplo_envelhecer"],
+    grade: [["exemplo_sinais_coracao","gerados"],["exemplo_hipertensao","gerados"],["exemplo_colesterol","gerados"],
+            ["exemplo_prevencao","gerados"],["exemplo_diabetes","gerados"],["exemplo_nutricao_coracao","gerados"],
+            ["exemplo_exercicios","gerados"],["exemplo_obesidade","gerados"],["exemplo_envelhecer","gerados"]],
     legenda: "Muita gente descobre tarde. Estes são os sinais que o corpo dá antes — e que a correria faz a gente ignorar.",
   },
   {
-    id: "coach", nicho: "Coaching", marca: "Método Ferreira", handle: "metodoferreira",
+    id: "advogada", nicho: "Advogado", marca: "Duarte Advocacia", handle: "duarteadv",
+    bio: "Direito do trabalho · O que ninguém te contou sobre o seu contrato",
+    autor: "Camila Duarte", cargo: "Advogada trabalhista · Duarte Advocacia",
+    accent: "#A8853F",
+    grade: [["adv_justa_causa","nichos"],["adv_hora_extra","nichos"],["adv_acordo","nichos"],
+            ["adv_assedio","nichos"],["adv_justa_causa","nichos"],["adv_hora_extra","nichos"],
+            ["adv_acordo","nichos"],["adv_assedio","nichos"],["adv_justa_causa","nichos"]],
+    legenda: "Assinar no calor do momento custa caro. Três situações em que ainda dá para reverter — e o prazo de cada uma.",
+  },
+  {
+    id: "gestor", nicho: "Gestor", marca: "Torres Gestão", handle: "torresgestao",
+    bio: "Consultoria de gestão · Times que entregam sem apagar incêndio",
+    autor: "Bruno Torres", cargo: "Consultor de gestão · Torres Gestão",
+    accent: "#D2601A",
+    grade: [["ges_equipe","nichos"],["ges_reuniao","nichos"],["ges_meta","nichos"],
+            ["ges_contratar","nichos"],["ges_equipe","nichos"],["ges_reuniao","nichos"],
+            ["ges_meta","nichos"],["ges_contratar","nichos"],["ges_equipe","nichos"]],
+    legenda: "Quase toda equipe que parece desmotivada está, na verdade, confusa. Muda o diagnóstico, muda o remédio.",
+  },
+  {
+    id: "coach", nicho: "Mentor", marca: "Método Ferreira", handle: "metodoferreira",
+    bio: "Mentoria de carreira · Do travado ao próximo passo",
     autor: "Rafael Ferreira", cargo: "Mentor de carreira",
     accent: "#C98A06",
-    grade: ["estilo_dark_editorial", "estilo_citacao_serif", "exemplo_produtividade", "exemplo_saude_mental",
-            "estilo_infografico", "exemplo_ansiedade", "exemplo_sono", "estilo_dark_editorial", "estilo_citacao_serif"],
+    grade: [["estilo_dark_editorial","gerados"],["estilo_citacao_serif","gerados"],["exemplo_produtividade","gerados"],
+            ["exemplo_saude_mental","gerados"],["estilo_infografico","gerados"],["exemplo_ansiedade","gerados"],
+            ["estilo_dark_editorial","gerados"],["estilo_citacao_serif","gerados"],["exemplo_sono","gerados"]],
     legenda: "Disciplina não é acordar às 5h. É escolher o que você quer mais em vez do que quer agora.",
   },
   {
-    id: "nutricao", nicho: "Nutrição", marca: "Raiz Nutrição", handle: "raiznutricao",
+    id: "nutri", nicho: "Nutricionista", marca: "Raiz Nutrição", handle: "raiznutricao",
+    bio: "Nutrição clínica · Comida de verdade, sem terrorismo",
     autor: "Marina Raiz", cargo: "Nutricionista clínica",
     accent: "#6E8767",
-    grade: ["exemplo_alimentacao_saudavel", "exemplo_nutricao_coracao", "exemplo_inflamacao", "exemplo_obesidade",
-            "exemplo_colesterol", "exemplo_diabetes", "estilo_citacao_serif", "exemplo_prevencao", "exemplo_sono"],
+    grade: [["exemplo_alimentacao_saudavel","gerados"],["exemplo_nutricao_coracao","gerados"],["exemplo_inflamacao","gerados"],
+            ["exemplo_obesidade","gerados"],["exemplo_colesterol","gerados"],["exemplo_diabetes","gerados"],
+            ["estilo_citacao_serif","gerados"],["exemplo_prevencao","gerados"],["exemplo_sono","gerados"]],
     legenda: "O que você adia hoje cobra caro depois. Comece pelo prato — é o ajuste que dá resultado mais rápido.",
   },
-  {
-    id: "advocacia", nicho: "Advocacia", marca: "Duarte Advocacia", handle: "duarteadv",
-    autor: "Camila Duarte", cargo: "Advogada trabalhista",
-    accent: "#A8853F",
-    grade: ["estilo_citacao_serif", "estilo_dark_editorial", "estilo_infografico", "exemplo_produtividade",
-            "estilo_citacao_serif", "estilo_dark_editorial", "exemplo_saude_mental", "estilo_infografico", "exemplo_prevencao"],
-    legenda: "Prazo perdido não volta. Estes são os três que mais tiram direito de quem tinha razão.",
-  },
-] as const;
+];
 
-const url = (nome: string) => `/showcase/gerados/${nome}.jpg`;
+const url = ([nome, pasta]: [string, string]) => `/showcase/${pasta}/${nome}.jpg`;
 
 /** Texto REAL do style_guide de uma marca de verdade — não é exemplo escrito à mão. */
 const O_QUE_A_IA_ENTENDEU = {
@@ -67,9 +101,27 @@ const O_QUE_A_IA_ENTENDEU = {
   naoFaz: "Não utilizar imagens genéricas de pessoas.",
 };
 
+
+/** Largura da janela, pra dimensionar os aparelhos em vez de deixá-los serem cortados. */
+function useLargura() {
+  const [w, setW] = useState(typeof window === "undefined" ? 1440 : window.innerWidth);
+  useEffect(() => {
+    const on = () => setW(window.innerWidth);
+    window.addEventListener("resize", on);
+    return () => window.removeEventListener("resize", on);
+  }, []);
+  return w;
+}
+
 export default function HistoriaLanding({ onSignup, onLogin }: Props) {
   const [i, setI] = useState(0);
   const m = MARCAS[i];
+  const janela = useLargura();
+  const estreito = janela < 780;
+  // Os aparelhos encolhem pra caber, com um piso pra não virarem ilegíveis.
+  const larguraNote = Math.max(300, Math.min(660, janela - 56));
+  const larguraCal = Math.max(300, Math.min(720, janela - 56));
+  const larguraCel = Math.max(228, Math.min(296, janela - 80));
   const raiz = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -108,16 +160,17 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
       {/* ══ 1. Vai ficar bom? ══════════════════════════════════════════════ */}
       <section className="heroi">
         <div className="heroi-texto">
-          <p className="olho" data-rv>Uma ideia · quatro marcas</p>
+          <p className="olho" data-rv>Para médicos, advogados, gestores e mentores</p>
           <h1 data-rv data-d="60">
             Seu feed<br />cheio.<br /><em>Sem você.</em>
           </h1>
           <p className="lede" data-rv data-d="120">
             Você escreve a ideia em português normal. A IA entrega o post pronto com a sua
-            identidade e publica em nove redes. Troque a marca aqui do lado: é o mesmo produto.
+            identidade e publica em nove redes. <strong>Troque o perfil aqui embaixo</strong> — é o
+            mesmo produto, com cinco caras diferentes.
           </p>
 
-          <div className="chips" data-rv data-d="180" role="tablist" aria-label="Escolher marca">
+          <div className="chips" data-rv data-d="180" role="tablist" aria-label="Escolher tipo de profissional">
             {MARCAS.map((x, k) => (
               <button key={x.id} role="tab" aria-selected={k === i}
                 className={`chip ${k === i ? "on" : ""}`}
@@ -139,10 +192,11 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
         {/* O celular OCLUI o headline de propósito: é o que tira a página do
             "tudo dentro da própria caixa" e dá profundidade. */}
         <div className="heroi-device" data-rv data-d="80">
-          <Celular largura={296}>
-            <GradeDePerfil pecas={m.grade.map(url)} handle={m.handle} accent={m.accent} />
+          <Celular largura={larguraCel}>
+            <GradeDePerfil pecas={m.grade.map(url)} handle={m.handle} nome={m.marca} bio={m.bio} accent={m.accent} />
           </Celular>
           <span className="etiqueta">{m.marca}</span>
+          <span className="simul">Simulação · as peças são reais, geradas na plataforma</span>
         </div>
       </section>
 
@@ -161,7 +215,7 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
               <span className="n">1</span>
               <h3>Você sobe referências</h3>
               <div className="refs">
-                {m.grade.slice(0, 4).map((n) => <img key={n} src={url(n)} alt="" loading="lazy" />)}
+                {m.grade.slice(0, 4).map((g, k) => <img key={g[0] + k} src={url(g)} alt="" loading="lazy" />)}
               </div>
             </div>
 
@@ -198,14 +252,14 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
             mais direta. Você aprova e publica de dentro do TrendPulse.
           </p>
           <div className="redes" data-rv data-d="60">
-            <Notebook largura={660}>
-              <PostLinkedIn peca={url(m.grade[0])} autor={m.autor} cargo={m.cargo} legenda={m.legenda} accent={m.accent} />
+            <Notebook largura={larguraNote}>
+              <PostLinkedIn peca={url(m.grade[0])} autor={m.autor} cargo={m.cargo} legenda={m.legenda} accent={m.accent} compacto={estreito} />
             </Notebook>
-            <div className="redes-cel">
+            {!estreito && <div className="redes-cel">
               <Celular largura={186} sombra={false}>
-                <GradeDePerfil pecas={m.grade.map(url)} handle={m.handle} accent={m.accent} />
+                <GradeDePerfil pecas={m.grade.map(url)} handle={m.handle} nome={m.marca} bio={m.bio} accent={m.accent} />
               </Celular>
-            </div>
+            </div>}
           </div>
         </div>
       </section>
@@ -220,7 +274,7 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
             sozinho — inclusive quando você está em consulta.
           </p>
           <div className="cal" data-rv data-d="60">
-            <Notebook largura={720}>
+            <Notebook largura={larguraCal}>
               <CalendarioDoMes pecas={m.grade.map(url)} accent={m.accent} />
             </Notebook>
           </div>
@@ -342,6 +396,7 @@ const CSS = `
 .hl .heroi-texto{position:relative;z-index:2;grid-column:1}
 .hl .heroi-device{grid-column:2;grid-row:1;justify-self:center;position:relative;z-index:1;margin-left:-64px}
 .hl .etiqueta{display:block;text-align:center;margin-top:14px;font-size:12px;font-weight:600;color:var(--ac);transition:color .4s cubic-bezier(.16,1,.3,1)}
+.hl .simul{display:block;text-align:center;margin-top:5px;font-size:10.5px;color:var(--t3);letter-spacing:.01em}
 .hl .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:34px}
 .hl .chip{font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;background:transparent;color:var(--t2);border:1px solid var(--linha);border-radius:999px;padding:11px 18px;min-height:44px;transition:border-color .25s,color .25s,background .25s}
 .hl .chip:hover{border-color:var(--c);color:var(--tinta)}
@@ -417,8 +472,5 @@ const CSS = `
   .hl .heroi{padding-left:22px;padding-right:22px}
   .hl .custos{grid-template-columns:1fr}
   .hl .bt.g{width:100%}
-  /* Notebook em viewport estreito vira a tela pura: a moldura roubaria os pixels que
-     interessam e ainda faria overflow. */
-  .hl .redes>div:first-child,.hl .cal>div{width:100%!important}
 }
 `;
