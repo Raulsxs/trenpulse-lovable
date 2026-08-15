@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Celular, Notebook } from "./Devices";
 import { GradeDePerfil, PostLinkedIn, CalendarioDoMes } from "./Telas";
+import { TweetCard } from "./TweetCard";
 import { CUSTOS, PACOTES, CREDITOS_DE_BOAS_VINDAS, postsPorPacote, carrosseisPorPacote } from "@/lib/precos";
 
 /**
@@ -114,8 +115,20 @@ function useLargura() {
 }
 
 export default function HistoriaLanding({ onSignup, onLogin }: Props) {
-  const [i, setI] = useState(0);
+  // Começa no Gestor, não no Médico: abrir em consultório fazia a página inteira ler como produto
+  // de saúde já na primeira dobra.
+  const [i, setI] = useState(2);
+  const [escolheu, setEscolheu] = useState(false);
   const m = MARCAS[i];
+
+  // Rodízio lento até o visitante escolher. É o que comunica "serve pra vários" sem depender de
+  // ele clicar — e para no primeiro toque pra não brigar com quem está lendo.
+  useEffect(() => {
+    if (escolheu) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    const id = window.setInterval(() => setI((k) => (k + 1) % MARCAS.length), 5200);
+    return () => window.clearInterval(id);
+  }, [escolheu]);
   const janela = useLargura();
   const estreito = janela < 780;
   // Os aparelhos encolhem pra caber, com um piso pra não virarem ilegíveis.
@@ -175,7 +188,7 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
               <button key={x.id} role="tab" aria-selected={k === i}
                 className={`chip ${k === i ? "on" : ""}`}
                 style={{ ["--c" as string]: x.accent }}
-                onClick={() => setI(k)}>
+                onClick={() => { setI(k); setEscolheu(true); }}>
                 {x.nicho}
               </button>
             ))}
@@ -239,6 +252,23 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
               <img className="saida" src={url(m.grade[0])} alt="Peça gerada com a identidade da marca" loading="lazy" />
             </div>
           </div>
+
+          {/* A MESMA FRASE, QUATRO IDENTIDADES. Prova direta e sem texto: quatro peças geradas na
+              plataforma com o mesmo texto e briefings de marca diferentes. */}
+          <div className="mesma-frase" data-rv data-d="120">
+            <p className="mf-titulo">
+              A mesma frase — <em>“O que você adia hoje cobra caro depois.”</em> — gerada quatro vezes,
+              mudando só a marca:
+            </p>
+            <div className="mf-linha">
+              {[["clinica","Clínica"],["coach","Mentoria"],["nutricao","Nutrição"],["advocacia","Advocacia"]].map(([f, l]) => (
+                <figure key={f}>
+                  <img src={`/showcase/marcas/${f}.jpg`} alt={`A mesma frase com a identidade de ${l}`} loading="lazy" />
+                  <figcaption>{l}</figcaption>
+                </figure>
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -281,7 +311,49 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
         </div>
       </section>
 
-      {/* ══ 5. Quanto custa? ═══════════════════════════════════════════════ */}
+      {/* ══ 5. O que ela sabe fazer ════════════════════════════════════════ */}
+      <section className="bl">
+        <div className="bl-in">
+          <p className="olho" data-rv>Quatro formatos</p>
+          <h2 data-rv>Não é só post quadrado</h2>
+          <p className="sub" data-rv>
+            Carrossel com fio narrativo, story vertical, card de tweet em série. Tudo com a sua
+            identidade, e você escolhe na hora de pedir.
+          </p>
+
+          <div className="formatos" data-rv data-d="60">
+            <figure className="fmt">
+              <img src="/showcase/gerados/estilo_dark_editorial.jpg" alt="Post gerado na plataforma" loading="lazy" />
+              <figcaption><strong>Post</strong><span>10 cr</span></figcaption>
+            </figure>
+
+            <figure className="fmt carrossel">
+              {/* Três peças escalonadas: é o que faz ler como carrossel e não como post solto. */}
+              <div className="pilha">
+                <img src="/showcase/nichos/ges_equipe.jpg" alt="" loading="lazy" />
+                <img src="/showcase/nichos/ges_reuniao.jpg" alt="" loading="lazy" />
+                <img src="/showcase/nichos/ges_meta.jpg" alt="Carrossel gerado na plataforma" loading="lazy" />
+              </div>
+              <figcaption><strong>Carrossel</strong><span>10 cr / slide</span></figcaption>
+            </figure>
+
+            <figure className="fmt">
+              <img className="vertical" src="/showcase/nichos/story_decisao.jpg" alt="Story vertical gerado na plataforma" loading="lazy" />
+              <figcaption><strong>Story 9:16</strong><span>25 cr</span></figcaption>
+            </figure>
+
+            <figure className="fmt">
+              <div className="tw">
+                <TweetCard autor={m.autor} handle={m.handle} accent={m.accent} largura={252}
+                  texto="O que você adia hoje cobra caro depois." />
+              </div>
+              <figcaption><strong>Tweet card</strong><span>6 cr</span></figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ 6. Quanto custa? ═══════════════════════════════════════════════ */}
       <section className="bl">
         <div className="bl-in">
           <p className="olho" data-rv>Preço</p>
@@ -454,6 +526,39 @@ const CSS = `
 .hl .rodape nav{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
 .hl .rodape a{color:var(--t2);text-decoration:none;padding:12px;min-height:44px;display:inline-flex;align-items:center}
 .hl .rodape a:hover{color:var(--tinta)}
+
+/* ── A mesma frase, quatro identidades ── */
+.hl .mesma-frase{margin-top:52px;padding-top:36px;border-top:1px solid var(--linha)}
+.hl .mf-titulo{font-size:15.5px;color:var(--t2);margin:0 0 22px;max-width:64ch;line-height:1.55}
+.hl .mf-titulo em{font-style:normal;color:var(--tinta);font-weight:600}
+.hl .mf-linha{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.hl .mf-linha figure{margin:0}
+.hl .mf-linha img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;border:1px solid var(--linha);display:block}
+.hl .mf-linha figcaption{font-size:11.5px;font-weight:600;color:var(--t3);margin-top:8px;text-align:center}
+
+/* ── Os quatro formatos ── */
+.hl .formatos{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;align-items:end}
+.hl .fmt{margin:0;display:flex;flex-direction:column}
+.hl .fmt>img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:12px;border:1px solid var(--linha);display:block;box-shadow:0 12px 28px -18px rgba(20,37,58,.45)}
+.hl .fmt>img.vertical{aspect-ratio:9/16;object-fit:cover}
+.hl .fmt figcaption{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-top:11px}
+.hl .fmt figcaption strong{font-family:'Plus Jakarta Sans',Inter,sans-serif;font-size:15px;font-weight:700;letter-spacing:-.015em;color:var(--tinta)}
+.hl .fmt figcaption span{font-size:12.5px;font-weight:600;color:var(--marca);font-variant-numeric:tabular-nums;white-space:nowrap}
+.hl .pilha{position:relative;aspect-ratio:1}
+.hl .pilha img{position:absolute;width:84%;aspect-ratio:1;object-fit:cover;border-radius:12px;border:1px solid var(--linha);display:block;box-shadow:0 10px 24px -14px rgba(20,37,58,.5)}
+.hl .pilha img:nth-child(1){top:0;left:0;opacity:.5;transform:scale(.9) translate(-4%,-2%)}
+.hl .pilha img:nth-child(2){top:6%;left:8%;opacity:.78;transform:scale(.95)}
+.hl .pilha img:nth-child(3){top:14%;left:16%}
+.hl .tw{display:flex;justify-content:center;align-items:center;aspect-ratio:1}
+
+@media (max-width:1080px){
+  .hl .formatos{grid-template-columns:repeat(2,1fr);gap:28px}
+  .hl .mf-linha{grid-template-columns:repeat(2,1fr)}
+}
+@media (max-width:560px){
+  .hl .formatos{grid-template-columns:1fr;gap:34px}
+  .hl .tw{aspect-ratio:auto}
+}
 
 @media (max-width:1080px){
   .hl .custos{grid-template-columns:repeat(2,1fr)}
