@@ -104,12 +104,17 @@ export function Notebook({
   children,
   largura = 720,
   className = "",
+  aspecto = 16 / 10,
 }: {
   children: ReactNode;
   largura?: number;
   className?: string;
+  /** Proporção da TELA. O padrão é 16:10 (MacBook). O feed do LinkedIn é mais alto que isso e
+   *  a barra de ações do post ficava cortada fora da moldura — justo o pedaço que faz a tela
+   *  ler como LinkedIn. Passar 4/3 dá a altura necessária sem espremer o conteúdo. */
+  aspecto?: number;
 }) {
-  const alturaTela = Math.round((largura * 10) / 16);
+  const alturaTela = Math.round(largura / aspecto);
   const moldura = Math.max(6, Math.round(largura * 0.011));
 
   return (

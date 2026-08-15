@@ -14,10 +14,15 @@ const corsHeaders = {
 const ASAAS_BASE = "https://api.asaas.com/v3";
 
 // Packs (R$ → créditos). 1 crédito ≈ R$0,10; packs maiores ganham bônus.
+// ⚠️ ESPELHA src/lib/precos.ts. Este arquivo é quem COBRA: divergir dele significa cobrar um
+// valor e creditar outro. Piso subiu para R$100 em 2026-08-12 porque o consumo real medido era de
+// 597 a 1.671 créditos/mês e o pacote de 500 acabava no meio do mês.
+// O "50" fica aceito por compatibilidade: cobrança já emitida com esse pack precisa liquidar.
 const PACKS: Record<string, { value: number; credits: number }> = {
-  "50": { value: 50, credits: 500 },
-  "100": { value: 100, credits: 1050 },   // +5% bônus
-  "200": { value: 200, credits: 2200 },   // +10% bônus
+  "50": { value: 50, credits: 500 },       // legado — não é mais oferecido na UI
+  "100": { value: 100, credits: 1000 },
+  "200": { value: 200, credits: 2200 },    // +10% bônus
+  "400": { value: 400, credits: 4800 },    // +20% bônus
 };
 
 async function asaas(path: string, method: string, body?: unknown) {

@@ -65,12 +65,17 @@ export function GradeDePerfil({
   nome,
   bio,
   accent,
+  compacto = false,
 }: {
   pecas: string[];
   handle: string;
   nome: string;
   bio: string;
   accent: string;
+  /** Abaixo de ~240px de largura o chrome completo do Instagram nao cabe: os tres contadores
+   *  colidem e viram borrao. No compacto some contador, destaque e botao, e a grade cresce —
+   *  que e o que interessa numa miniatura de apoio. */
+  compacto?: boolean;
 }) {
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column", background: "#fff", fontFamily: "system-ui, -apple-system, sans-serif" }}>
@@ -89,43 +94,51 @@ export function GradeDePerfil({
 
       {/* Linha do perfil: avatar + três contadores. É o elemento mais reconhecível
           da tela — sem ele, não lê como Instagram. */}
-      <div style={{ padding: "0 14px", display: "flex", alignItems: "center", gap: 14, minWidth: 0 }}>
+      <div style={{ padding: compacto ? "6px 12px 8px" : "0 14px", display: "flex", alignItems: "center", gap: compacto ? 10 : 12, minWidth: 0 }}>
         <div
           style={{
-            width: 78, height: 78, borderRadius: "50%", flex: "none", background: accent,
-            display: "grid", placeItems: "center", color: "#fff", fontWeight: 700, fontSize: 30,
+            width: compacto ? 46 : 78, height: compacto ? 46 : 78, borderRadius: "50%", flex: "none", background: accent,
+            display: "grid", placeItems: "center", color: "#fff", fontWeight: 700, fontSize: compacto ? 19 : 30,
             border: "2px solid #fff", boxShadow: "0 0 0 1.5px #DBDBDB",
           }}
         >
           {nome[0]?.toUpperCase()}
         </div>
-        <div style={{ display: "flex", gap: 10, flex: 1, minWidth: 0, justifyContent: "space-around" }}>
-          {[["128", "publicações"], ["2.940", "seguidores"], ["312", "seguindo"]].map(([n, l]) => (
-            <div key={l} style={{ textAlign: "center", minWidth: 0 }}>
-              <div style={{ fontSize: 15.5, fontWeight: 700, color: "#0B0B0B", lineHeight: 1.15, fontVariantNumeric: "tabular-nums" }}>{n}</div>
-              <div style={{ fontSize: 11.5, color: "#0B0B0B", whiteSpace: "nowrap" }}>{l}</div>
-            </div>
-          ))}
-        </div>
+        {!compacto && (
+          <div style={{ display: "flex", gap: 6, flex: 1, minWidth: 0, justifyContent: "space-between" }}>
+            {[["128", "publicações"], ["2.940", "seguidores"], ["312", "seguindo"]].map(([n, l]) => (
+              <div key={l} style={{ textAlign: "center", minWidth: 0, flex: 1 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: "#0B0B0B", lineHeight: 1.15, fontVariantNumeric: "tabular-nums" }}>{n}</div>
+                <div style={{ fontSize: 10.5, color: "#0B0B0B", whiteSpace: "nowrap", letterSpacing: "-.02em" }}>{l}</div>
+              </div>
+            ))}
+          </div>
+        )}
+        {compacto && (
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 12, fontWeight: 600, color: "#0B0B0B", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{nome}</div>
+            <div style={{ fontSize: 10.5, color: "#737373" }}>Perfil profissional</div>
+          </div>
+        )}
       </div>
 
       {/* Nome, categoria e bio */}
-      <div style={{ padding: "11px 16px 0" }}>
+      {!compacto && <div style={{ padding: "11px 16px 0" }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "#0B0B0B", lineHeight: 1.35 }}>{nome}</div>
         <div style={{ fontSize: 13, color: "#737373", lineHeight: 1.35 }}>{bio}</div>
-      </div>
+      </div>}
 
       {/* Botões de ação */}
-      <div style={{ padding: "12px 16px 0", display: "flex", gap: 6 }}>
+      {!compacto && <div style={{ padding: "12px 16px 0", display: "flex", gap: 6 }}>
         <div style={{ flex: 1, background: "#0095F6", color: "#fff", borderRadius: 8, padding: "7px 0", textAlign: "center", fontSize: 13, fontWeight: 600 }}>Seguir</div>
         <div style={{ flex: 1, background: "#EFEFEF", color: "#0B0B0B", borderRadius: 8, padding: "7px 0", textAlign: "center", fontSize: 13, fontWeight: 600 }}>Mensagem</div>
         <div style={{ width: 34, background: "#EFEFEF", borderRadius: 8, display: "grid", placeItems: "center" }}>
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#0B0B0B" strokeWidth="2.4"><polyline points="6 9 12 15 18 9" /></svg>
         </div>
-      </div>
+      </div>}
 
       {/* Destaques */}
-      <div style={{ padding: "14px 16px 12px", display: "flex", gap: 16 }}>
+      {!compacto && <div style={{ padding: "14px 16px 12px", display: "flex", gap: 16, overflow: "hidden" }}>
         {["Antes", "Dicas", "Casos"].map((d) => (
           <div key={d} style={{ textAlign: "center" }}>
             <div style={{ width: 52, height: 52, borderRadius: "50%", border: "1.5px solid #DBDBDB", background: "#FAFAFA", display: "grid", placeItems: "center" }}>
@@ -134,7 +147,7 @@ export function GradeDePerfil({
             <div style={{ fontSize: 11, color: "#0B0B0B", marginTop: 4 }}>{d}</div>
           </div>
         ))}
-      </div>
+      </div>}
 
       {/* Abas */}
       <div style={{ display: "flex", borderTop: "1px solid #DBDBDB" }}>
@@ -247,7 +260,7 @@ export function PostLinkedIn({
         {/* Coluna central: o post */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ background: "#fff", borderRadius: 8, border: "1px solid rgba(0,0,0,.08)", overflow: "hidden" }}>
-            <div style={{ padding: "11px 13px 7px", display: "flex", gap: 8, alignItems: "flex-start" }}>
+            <div style={{ padding: "9px 13px 6px", display: "flex", gap: 8, alignItems: "flex-start" }}>
               <div style={{ width: 40, height: 40, borderRadius: "50%", flex: "none", background: accent, display: "grid", placeItems: "center", color: "#fff", fontWeight: 700, fontSize: 16 }}>
                 {autor[0]?.toUpperCase()}
               </div>
@@ -262,11 +275,11 @@ export function PostLinkedIn({
               <span style={{ color: "#00000099", fontSize: 15, letterSpacing: 1, flex: "none" }}>···</span>
             </div>
 
-            <p style={{ margin: 0, padding: "0 13px 9px", fontSize: 12.5, lineHeight: 1.45, color: "#000000E6" }}>
+            <p style={{ margin: 0, padding: "0 13px 8px", fontSize: 12, lineHeight: 1.4, color: "#000000E6", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
               {legenda} <span style={{ color: "#00000099" }}>…ver mais</span>
             </p>
 
-            <img src={peca} alt="" loading="lazy" style={{ width: "100%", display: "block", aspectRatio: "1", objectFit: "cover" }} />
+            <img src={peca} alt="" loading="lazy" style={{ width: "100%", display: "block", aspectRatio: compacto ? "1" : "1.65", objectFit: "cover" }} />
 
             {/* Linha de reações: os ícones do LinkedIn real, sem número.
                 A contagem viria aqui — deixamos vazio de propósito, e a landing

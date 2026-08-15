@@ -252,12 +252,12 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
             mais direta. Você aprova e publica de dentro do TrendPulse.
           </p>
           <div className="redes" data-rv data-d="60">
-            <Notebook largura={larguraNote}>
+            <Notebook largura={larguraNote} aspecto={4 / 3}>
               <PostLinkedIn peca={url(m.grade[0])} autor={m.autor} cargo={m.cargo} legenda={m.legenda} accent={m.accent} compacto={estreito} />
             </Notebook>
             {!estreito && <div className="redes-cel">
-              <Celular largura={186} sombra={false}>
-                <GradeDePerfil pecas={m.grade.map(url)} handle={m.handle} nome={m.marca} bio={m.bio} accent={m.accent} />
+              <Celular largura={196} sombra={false}>
+                <GradeDePerfil pecas={m.grade.map(url)} handle={m.handle} nome={m.marca} bio={m.bio} accent={m.accent} compacto />
               </Celular>
             </div>}
           </div>
@@ -422,7 +422,7 @@ const CSS = `
 .hl .saida{width:100%;aspect-ratio:1;object-fit:cover;border-radius:11px;border:1px solid var(--linha);box-shadow:0 14px 32px -16px rgba(20,23,28,.4)}
 
 .hl .redes{display:flex;align-items:flex-end;gap:0;justify-content:center;flex-wrap:wrap}
-.hl .redes-cel{margin-left:-52px;margin-bottom:-26px;position:relative;z-index:2}
+.hl .redes-cel{margin-left:-26px;margin-bottom:-30px;position:relative;z-index:2}
 
 .hl .cal{display:flex;justify-content:center}
 
@@ -457,7 +457,7 @@ const CSS = `
 
 @media (max-width:1080px){
   .hl .custos{grid-template-columns:repeat(2,1fr)}
-  .hl .redes-cel{margin-left:-38px}
+  .hl .redes-cel{margin-left:-18px}
 }
 @media (max-width:900px){
   .hl .heroi{grid-template-columns:1fr;gap:44px;padding-top:56px}

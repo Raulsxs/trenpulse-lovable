@@ -10,9 +10,10 @@ import RedeemCouponForm from "./RedeemCouponForm";
 
 // Espelha os PACKS da edge function create-credit-charge
 const PACKS = [
-  { id: "50", value: 50, credits: 500, label: "Inicial" },
-  { id: "100", value: 100, credits: 1050, label: "Popular", bonus: "+5%" },
-  { id: "200", value: 200, credits: 2200, label: "Pro", bonus: "+10%" },
+  // Espelha src/lib/precos.ts e o PACKS da edge function create-credit-charge.
+  { id: "100", value: 100, credits: 1000, label: "Essencial" },
+  { id: "200", value: 200, credits: 2200, label: "Constante", bonus: "+10%" },
+  { id: "400", value: 400, credits: 4800, label: "Estúdio", bonus: "+20%" },
 ];
 
 interface Charge {
