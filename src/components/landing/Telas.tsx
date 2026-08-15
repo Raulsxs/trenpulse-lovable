@@ -223,85 +223,148 @@ export function PostLinkedIn({
   cargo: string;
   legenda: string;
   accent: string;
-  /** Em tela estreita o LinkedIn real também derruba as colunas laterais. Sem isto o post
-   *  ficava cortado ao meio pela moldura do notebook — justo o que a seção precisa mostrar. */
+  /** Em tela estreita o LinkedIn real também derruba as colunas laterais.
+   *
+   *  ALTURA MUDA JUNTO: no compacto a tela cresce conforme o conteúdo em vez de fingir 100% de uma
+   *  moldura que não cabe. A conta é simples e não tinha saída: o chrome do post ocupa ~222px fixos
+   *  e a peça é QUADRADA, então numa coluna de 294px o post pede 516px de altura — mais alto que
+   *  largo. Espremer isso numa tela de notebook cortava o post ao meio (medido: 261px pra fora).
+   *  Quem chama decide a moldura; aqui só paramos de mentir sobre a altura. */
   compacto?: boolean;
 }) {
+  const inicial = autor[0]?.toUpperCase();
   return (
-    <div style={{ height: "100%", background: "#F4F2EE", overflow: "hidden", fontFamily: "system-ui, -apple-system, sans-serif", display: "flex", flexDirection: "column" }}>
-      {/* Barra de navegação do LinkedIn */}
-      <div style={{ background: "#fff", borderBottom: "1px solid rgba(0,0,0,.08)", padding: "0 24px", display: "flex", alignItems: "center", gap: 10, height: 44, flex: "none" }}>
-        <div style={{ width: 24, height: 24, borderRadius: 4, background: "#0A66C2", color: "#fff", fontWeight: 800, fontSize: 15, display: "grid", placeItems: "center", fontFamily: "Georgia, serif", flex: "none" }}>in</div>
-        <div style={{ background: "#EDF3F8", borderRadius: 4, height: 27, width: compacto ? 120 : 190, display: "flex", alignItems: "center", gap: 6, padding: "0 8px" }}>
+    <div style={{ height: compacto ? "auto" : "100%", background: "#F4F2EE", overflow: "hidden", fontFamily: "system-ui, -apple-system, sans-serif", display: "flex", flexDirection: "column" }}>
+      {/* Barra de navegação. Os itens do LinkedIn são ícone EM CIMA do rótulo, empilhados —
+          escrito só como texto lado a lado, a barra lia como menu de site qualquer. */}
+      <div style={{ background: "#fff", borderBottom: "1px solid rgba(0,0,0,.08)", padding: "0 20px", display: "flex", alignItems: "center", gap: 8, height: 46, flex: "none" }}>
+        <div style={{ width: 26, height: 26, borderRadius: 4, background: "#0A66C2", color: "#fff", fontWeight: 800, fontSize: 16, lineHeight: 1, display: "grid", placeItems: "center", fontFamily: "Georgia, serif", flex: "none" }}>in</div>
+        <div style={{ background: "#EDF3F8", borderRadius: 4, height: 28, width: compacto ? 110 : 176, display: "flex", alignItems: "center", gap: 6, padding: "0 8px", flex: "none" }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#00000099" strokeWidth="2.4"><circle cx="11" cy="11" r="7" /><line x1="16.5" y1="16.5" x2="21" y2="21" /></svg>
           <span style={{ fontSize: 11.5, color: "#00000066" }}>Pesquisar</span>
         </div>
         <div style={{ flex: 1 }} />
-        {!compacto && ["Início", "Rede", "Vagas", "Mensagens"].map((t) => (
-          <span key={t} style={{ fontSize: 11, color: "#00000099", padding: "0 8px" }}>{t}</span>
+        {!compacto && NAV_LINKEDIN.map(({ rotulo, d }, i) => (
+          <div key={rotulo} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 1, padding: "0 10px", color: i === 0 ? "#000000E6" : "#00000099", borderBottom: i === 0 ? "2px solid #000000E6" : "2px solid transparent", height: 46, justifyContent: "center" }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d={d} /></svg>
+            <span style={{ fontSize: 10, lineHeight: 1 }}>{rotulo}</span>
+          </div>
         ))}
+        {!compacto && <div style={{ width: 1, height: 28, background: "rgba(0,0,0,.12)", margin: "0 4px" }} />}
+        {!compacto && (
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, color: "#00000099" }}>
+            <div style={{ width: 18, height: 18, borderRadius: "50%", background: accent }} />
+            <span style={{ fontSize: 10, lineHeight: 1 }}>Eu ⌄</span>
+          </div>
+        )}
       </div>
 
-      <div style={{ display: "flex", gap: 14, padding: compacto ? "12px 14px" : "14px 24px", flex: 1, minHeight: 0 }}>
+      <div style={{ display: "flex", gap: 14, padding: compacto ? "12px 14px" : "14px 12px", flex: compacto ? "none" : 1, minHeight: 0, justifyContent: "center" }}>
         {/* Coluna esquerda: cartão de perfil. Some no compacto. */}
-        {!compacto && <div style={{ width: 150, flex: "none" }}>
+        {!compacto && <div style={{ width: 160, flex: "none" }}>
           <div style={{ background: "#fff", borderRadius: 8, border: "1px solid rgba(0,0,0,.08)", overflow: "hidden" }}>
             <div style={{ height: 38, background: `linear-gradient(120deg, ${accent}, ${accent}AA)` }} />
-            <div style={{ padding: "0 12px 12px", marginTop: -22, textAlign: "center" }}>
+            <div style={{ padding: "0 12px 11px", marginTop: -22, textAlign: "center" }}>
               <div style={{ width: 44, height: 44, borderRadius: "50%", background: accent, border: "2px solid #fff", margin: "0 auto", display: "grid", placeItems: "center", color: "#fff", fontWeight: 700, fontSize: 17 }}>
-                {autor[0]?.toUpperCase()}
+                {inicial}
               </div>
               <div style={{ fontSize: 12.5, fontWeight: 600, color: "#000000E6", marginTop: 6, lineHeight: 1.2 }}>{autor}</div>
               <div style={{ fontSize: 10.5, color: "#00000099", lineHeight: 1.3, marginTop: 2 }}>{cargo}</div>
             </div>
+            {/* O card de perfil do LinkedIn tem esta faixa de estatística embaixo. Sem número:
+                inventar contagem numa página de venda é prova social fabricada. */}
+            <div style={{ borderTop: "1px solid rgba(0,0,0,.08)", padding: "7px 12px", display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 10, color: "#00000099" }}>Impressões</span>
+              <span style={{ fontSize: 10, color: "#0A66C2", fontWeight: 600 }}>—</span>
+            </div>
           </div>
         </div>}
 
-        {/* Coluna central: o post */}
-        <div style={{ flex: 1, minWidth: 0 }}>
+        {/* Coluna central: o post. Largura FIXA, não flex — a peça é quadrada e a altura dela
+            é a largura desta coluna, então quem manda no encaixe vertical é este número. */}
+        <div style={{ width: compacto ? "auto" : 262, flex: compacto ? 1 : "none", minWidth: 0 }}>
           <div style={{ background: "#fff", borderRadius: 8, border: "1px solid rgba(0,0,0,.08)", overflow: "hidden" }}>
-            <div style={{ padding: "9px 13px 6px", display: "flex", gap: 8, alignItems: "flex-start" }}>
-              <div style={{ width: 40, height: 40, borderRadius: "50%", flex: "none", background: accent, display: "grid", placeItems: "center", color: "#fff", fontWeight: 700, fontSize: 16 }}>
-                {autor[0]?.toUpperCase()}
+            <div style={{ padding: "9px 12px 5px", display: "flex", gap: 8, alignItems: "flex-start" }}>
+              <div style={{ width: 38, height: 38, borderRadius: "50%", flex: "none", background: accent, display: "grid", placeItems: "center", color: "#fff", fontWeight: 700, fontSize: 15 }}>
+                {inicial}
               </div>
               <div style={{ minWidth: 0, flex: 1 }}>
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: "#000000E6", lineHeight: 1.25 }}>{autor}</div>
-                <div style={{ fontSize: 11, color: "#00000099", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cargo}</div>
-                <div style={{ fontSize: 10.5, color: "#00000099", display: "flex", alignItems: "center", gap: 3 }}>
+                <div style={{ fontSize: 10.5, color: "#00000099", lineHeight: 1.3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{cargo}</div>
+                <div style={{ fontSize: 10, color: "#00000099", display: "flex", alignItems: "center", gap: 3, marginTop: 1 }}>
                   1 h ·
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#00000099" strokeWidth="2"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3a15 15 0 0 1 0 18a15 15 0 0 1 0-18" /></svg>
+                  {/* Globo de "público". O path anterior era um rabisco que não fechava. */}
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#00000099" strokeWidth="1.8">
+                    <circle cx="12" cy="12" r="9" /><ellipse cx="12" cy="12" rx="4" ry="9" /><line x1="3" y1="12" x2="21" y2="12" />
+                  </svg>
                 </div>
               </div>
-              <span style={{ color: "#00000099", fontSize: 15, letterSpacing: 1, flex: "none" }}>···</span>
+              <span style={{ color: "#00000099", fontSize: 14, letterSpacing: 1, flex: "none" }}>···</span>
             </div>
 
-            <p style={{ margin: 0, padding: "0 13px 8px", fontSize: 12, lineHeight: 1.4, color: "#000000E6", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            <p style={{ margin: 0, padding: "0 12px 7px", fontSize: 11.5, lineHeight: 1.4, color: "#000000E6", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>
               {legenda} <span style={{ color: "#00000099" }}>…ver mais</span>
             </p>
 
-            <img src={peca} alt="" loading="lazy" style={{ width: "100%", display: "block", aspectRatio: compacto ? "1" : "1.65", objectFit: "cover" }} />
+            {/* A PEÇA INTEIRA, quadrada. Antes ia em aspecto 1.65 com object-fit cover, e o corte
+                central comia as bordas do título — no print do Raul o "5" tinha sumido na margem
+                esquerda. A coluna central foi estreitada (com a coluna direita entrando, como no
+                LinkedIn real) justamente pra a peça caber inteira sem cortar nada. */}
+            <img src={peca} alt="" loading="lazy" style={{ width: "100%", display: "block", aspectRatio: "1", objectFit: "cover" }} />
 
-            {/* Linha de reações: os ícones do LinkedIn real, sem número.
-                A contagem viria aqui — deixamos vazio de propósito, e a landing
-                rotula o aparelho como simulação. */}
-            <div style={{ padding: "7px 13px", display: "flex", alignItems: "center", gap: 4, borderBottom: "1px solid rgba(0,0,0,.08)" }}>
-              <span style={{ width: 15, height: 15, borderRadius: "50%", background: "#378FE9", display: "grid", placeItems: "center", fontSize: 8, color: "#fff" }}>👍</span>
-              <span style={{ width: 15, height: 15, borderRadius: "50%", background: "#DF704D", display: "grid", placeItems: "center", fontSize: 8, marginLeft: -5 }}>❤</span>
+            {/* Reações. Sem número: contagem inventada é prova social fabricada. */}
+            <div style={{ padding: "6px 12px", display: "flex", alignItems: "center", gap: 2, borderBottom: "1px solid rgba(0,0,0,.08)" }}>
+              <Reacao cor="#378FE9" d="M6.5 20h9.2a1.8 1.8 0 0 0 1.8-1.4l1.4-5.6a1.5 1.5 0 0 0-1.5-1.9h-4.3l.7-3.2A1.7 1.7 0 0 0 12 5.8L8.4 11h-1.9v9ZM3.5 11h2.2v9H3.5v-9Z" />
+              <Reacao cor="#DF704D" desloca d="M12 20.3s-7.6-4.7-7.6-9.6a4.3 4.3 0 0 1 7.6-2.7 4.3 4.3 0 0 1 7.6 2.7c0 4.9-7.6 9.6-7.6 9.6Z" />
+              <Reacao cor="#6DAE4F" desloca d="M12 3.2a8.8 8.8 0 1 1 0 17.6 8.8 8.8 0 0 1 0-17.6Zm-3.4 6.4h1.6v2.1H8.6V9.6Zm5.2 0h1.6v2.1h-1.6V9.6Zm-5.4 4.2h7.2a3.6 3.6 0 0 1-7.2 0Z" />
             </div>
 
-            <div style={{ display: "flex", padding: "3px 5px" }}>
-              {[["Gostei", "👍"], ["Comentar", "💬"], ["Compartilhar", "🔁"], ["Enviar", "➤"]].map(([a, ic]) => (
-                <div key={a} style={{ flex: 1, textAlign: "center", padding: "8px 0", fontSize: 11, fontWeight: 600, color: "#00000099", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
-                  <span style={{ fontSize: 11, filter: "grayscale(1)" }}>{ic}</span>{a}
+            <div style={{ display: "flex", padding: "2px 4px" }}>
+              {ACOES_LINKEDIN.map(({ rotulo, d }) => (
+                <div key={rotulo} style={{ flex: 1, textAlign: "center", padding: "7px 0", fontSize: 10, fontWeight: 600, color: "#00000099", display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d={d} /></svg>
+                  {rotulo}
                 </div>
               ))}
             </div>
           </div>
         </div>
+
+        {/* Coluna direita. Sem ela a tela lê como "um card solto num fundo bege", não como
+            LinkedIn — o feed real é sempre três colunas no desktop. */}
+        {!compacto && <div style={{ width: 160, flex: "none" }}>
+          <div style={{ background: "#fff", borderRadius: 8, border: "1px solid rgba(0,0,0,.08)", padding: "10px 12px" }}>
+            <div style={{ fontSize: 11.5, fontWeight: 600, color: "#000000E6", marginBottom: 8 }}>Publicado pelo TrendPulse</div>
+            {["Agendado para hoje", "Sai também no Instagram", "Legenda adaptada à rede"].map((l) => (
+              <div key={l} style={{ display: "flex", alignItems: "flex-start", gap: 6, padding: "4px 0" }}>
+                <span style={{ width: 5, height: 5, borderRadius: "50%", background: accent, flex: "none", marginTop: 5 }} />
+                <span style={{ fontSize: 10, color: "#00000099", lineHeight: 1.35 }}>{l}</span>
+              </div>
+            ))}
+          </div>
+        </div>}
       </div>
     </div>
   );
 }
+
+const Reacao = ({ cor, d, desloca }: { cor: string; d: string; desloca?: boolean }) => (
+  <span style={{ width: 16, height: 16, borderRadius: "50%", background: cor, display: "grid", placeItems: "center", marginLeft: desloca ? -5 : 0, border: "1.5px solid #fff", flex: "none" }}>
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="#fff"><path d={d} /></svg>
+  </span>
+);
+
+const NAV_LINKEDIN = [
+  { rotulo: "Início", d: "M12 3 2 11h3v9h5.5v-6h3v6H19v-9h3L12 3Z" },
+  { rotulo: "Rede", d: "M9 11.5a3.6 3.6 0 1 0 0-7.2 3.6 3.6 0 0 0 0 7.2Zm7.3-.4a3 3 0 1 0 0-6 3 3 0 0 0 0 6ZM1.8 20.5c0-4 3.2-7.2 7.2-7.2s7.2 3.2 7.2 7.2H1.8Zm16.1 0c0-2.4-.8-4.5-2.2-6.2 3.6.2 6.5 3.1 6.5 6.2h-4.3Z" },
+  { rotulo: "Vagas", d: "M9.2 4h5.6a2 2 0 0 1 2 2v1.8h3.4a1.8 1.8 0 0 1 1.8 1.8v8.6A1.8 1.8 0 0 1 20.2 20H3.8A1.8 1.8 0 0 1 2 18.2V9.6a1.8 1.8 0 0 1 1.8-1.8h3.4V6a2 2 0 0 1 2-2Zm.2 3.8h5.2V6.2H9.4v1.6Z" },
+];
+
+const ACOES_LINKEDIN = [
+  { rotulo: "Gostei", d: "M6.5 20h9.2a1.8 1.8 0 0 0 1.8-1.4l1.4-5.6a1.5 1.5 0 0 0-1.5-1.9h-4.3l.7-3.2A1.7 1.7 0 0 0 12 5.8L8.4 11h-1.9v9ZM3.5 11h2.2v9H3.5v-9Z" },
+  { rotulo: "Comentar", d: "M3 4.8A1.8 1.8 0 0 1 4.8 3h14.4A1.8 1.8 0 0 1 21 4.8v9.6a1.8 1.8 0 0 1-1.8 1.8H8.6L3 21V4.8Z" },
+  { rotulo: "Enviar", d: "M14 4.2v3.6C7.4 8.6 4.2 13.4 3 20c2.6-3.6 6.2-5.4 11-5.4v3.7l7-7-7-7.1Z" },
+];
 
 /* ── Calendário do produto ────────────────────────────────────────────────── */
 

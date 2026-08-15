@@ -204,6 +204,11 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
                 style={{ ["--c" as string]: x.accent }}
                 onClick={() => { setI(k); setEscolheu(true); }}>
                 {x.nicho}
+                {/* Barra de carga do rodízio. Sem ela a troca automática lê como falha da página
+                    ("por que isso mudou sozinho?"); com ela lê como demonstração, e o visitante
+                    entende que existe uma FILA de perfis pra ver. A `key` remonta o elemento a
+                    cada troca, que é o que reinicia a animação de CSS. */}
+                {k === i && !escolheu && <span key={i} className="carga" aria-hidden="true" />}
               </button>
             ))}
           </div>
@@ -220,9 +225,13 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
             "tudo dentro da própria caixa" e dá profundidade. */}
         <div className="heroi-device" data-rv data-d="80">
           <Celular largura={larguraCel}>
-            <GradeDePerfil pecas={m.grade.map(url)} handle={m.handle} nome={m.marca} bio={m.bio} accent={m.accent} />
+            {/* `key` no perfil: remonta a tela a cada troca, e a animação de CSS transforma o corte
+                seco num fade curto. Trocar a grade inteira sem transição parecia glitch. */}
+            <div key={m.id} className="troca">
+              <GradeDePerfil pecas={m.grade.map(url)} handle={m.handle} nome={m.marca} bio={m.bio} accent={m.accent} />
+            </div>
           </Celular>
-          <span className="etiqueta">{m.marca}</span>
+          <span key={m.id} className="etiqueta">{m.marca}</span>
           <span className="simul">Simulação · as peças são reais, geradas na plataforma</span>
         </div>
       </section>
@@ -295,16 +304,28 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
             A legenda muda sozinha: no LinkedIn ela fica mais longa e profissional, no Instagram
             mais direta. Você aprova e publica de dentro do TrendPulse.
           </p>
+          {/* ADAPTAÇÃO POR MOLDURA, não por encolhimento. No desktop o LinkedIn aparece num
+              notebook, que é onde ele é usado. Num celular o notebook é a moldura errada: a peça é
+              quadrada e o post pede mais altura do que largura, então a tela de notebook cortava o
+              post ao meio. Aí a moldura sai e o post vira o que ele é — um cartão de feed —, e o
+              celular ao lado assume o papel de mostrar a outra rede. */}
           <div className="redes" data-rv data-d="60">
-            <Notebook largura={larguraNote} aspecto={4 / 3}>
-              <PostLinkedIn peca={url(m.grade[0])} autor={m.autor} cargo={m.cargo} legenda={m.legenda} accent={m.accent} compacto={estreito} />
-            </Notebook>
-            {!estreito && <div className="redes-cel">
-              <Celular largura={196} sombra={false}>
-                <GradeDePerfil pecas={m.grade.map(url)} handle={m.handle} nome={m.marca} bio={m.bio} accent={m.accent} compacto />
+            {estreito ? (
+              <div className="li-solto">
+                <PostLinkedIn peca={url(m.grade[0])} autor={m.autor} cargo={m.cargo} legenda={m.legenda} accent={m.accent} compacto />
+              </div>
+            ) : (
+              <Notebook largura={larguraNote} aspecto={4 / 3}>
+                <PostLinkedIn peca={url(m.grade[0])} autor={m.autor} cargo={m.cargo} legenda={m.legenda} accent={m.accent} />
+              </Notebook>
+            )}
+            <div className="redes-cel">
+              <Celular largura={estreito ? larguraCel : 196} sombra={estreito}>
+                <GradeDePerfil pecas={m.grade.map(url)} handle={m.handle} nome={m.marca} bio={m.bio} accent={m.accent} compacto={!estreito} />
               </Celular>
-            </div>}
+            </div>
           </div>
+          <p className="redes-nota" data-rv>Simulação do LinkedIn e do Instagram · as peças são reais, geradas na plataforma</p>
         </div>
       </section>
 
@@ -444,7 +465,13 @@ const CSS = `
   --marca:#0059B3; --teal:#1DAFA3;
   --ac:#0059B3;
   background:var(--papel); color:var(--tinta);
-  font-family:Inter,system-ui,sans-serif; min-height:100vh; overflow-x:hidden;
+  font-family:Inter,system-ui,sans-serif; min-height:100vh;
+  /* CLIP, NAO HIDDEN. overflow-x:hidden faz o overflow-y virar 'auto' pela especificacao, e isso
+     transforma este container num SCROLL CONTAINER. O .topo (position:sticky) passa entao a grudar
+     neste container em vez de na viewport, e o Chrome erra o calculo de repintura durante o scroll —
+     e o rastro que aparecia no fundo escuro. overflow-x:clip corta o transbordo horizontal SEM criar
+     scroll container, que e exatamente o que a pagina precisa (o celular do heroi invade a coluna). */
+  overflow-x:clip;
 }
 .hl *{box-sizing:border-box}
 .hl [data-rv]{opacity:0;transform:translateY(24px);transition:opacity .75s cubic-bezier(.16,1,.3,1),transform .75s cubic-bezier(.16,1,.3,1)}
@@ -454,7 +481,12 @@ const CSS = `
 }
 .hl :focus-visible{outline:2px solid var(--marca);outline-offset:3px;border-radius:4px}
 
-.hl .topo{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--papel) 90%,transparent);backdrop-filter:blur(12px);border-bottom:1px solid var(--linha)}
+/* SEM backdrop-filter. Um filtro de fundo num cabecalho fixo obriga o compositor a re-amostrar a
+   area atras dele a cada quadro; passando por cima de um bloco escuro de contraste alto, o Chrome
+   arrasta ladrilho antigo e deixa faixa/fantasma — o segundo motivo do glitch no fundo azul.
+   O fundo ja estava em 90% de opacidade, entao o desfoque quase nao aparecia: subindo pra 97% o
+   ganho visual perdido e nulo e a classe inteira de bug some. */
+.hl .topo{position:sticky;top:0;z-index:30;background:color-mix(in srgb,var(--papel) 97%,transparent);border-bottom:1px solid var(--linha)}
 .hl .topo-in{max-width:1200px;margin:0 auto;padding:13px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .hl .wm{font-family:'Plus Jakarta Sans',Inter,sans-serif;font-weight:800;font-size:19px;letter-spacing:-.028em}
 .hl .topo-a{display:flex;align-items:center;gap:4px}
@@ -484,9 +516,15 @@ const CSS = `
 .hl .etiqueta{display:block;text-align:center;margin-top:14px;font-size:12px;font-weight:600;color:var(--ac);transition:color .4s cubic-bezier(.16,1,.3,1)}
 .hl .simul{display:block;text-align:center;margin-top:5px;font-size:10.5px;color:var(--t3);letter-spacing:.01em}
 .hl .chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:34px}
-.hl .chip{font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;background:transparent;color:var(--t2);border:1px solid var(--linha);border-radius:999px;padding:11px 18px;min-height:44px;transition:border-color .25s,color .25s,background .25s}
+.hl .chip{position:relative;overflow:hidden;font:inherit;font-size:13.5px;font-weight:600;cursor:pointer;background:transparent;color:var(--t2);border:1px solid var(--linha);border-radius:999px;padding:11px 18px;min-height:44px;transition:border-color .25s,color .25s,background .25s}
 .hl .chip:hover{border-color:var(--c);color:var(--tinta)}
 .hl .chip.on{background:var(--c);border-color:var(--c);color:#fff}
+/* Barra de carga do rodizio: percorre o chip ativo no mesmo tempo do intervalo (5.2s). */
+.hl .carga{position:absolute;left:0;bottom:0;height:2.5px;width:100%;background:rgba(255,255,255,.85);transform-origin:left;animation:carga 5.2s linear forwards}
+@keyframes carga{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+/* Fade curto na troca de perfil, no aparelho e na etiqueta. */
+.hl .troca{height:100%;animation:troca .5s cubic-bezier(.16,1,.3,1)}
+@keyframes troca{from{opacity:0;transform:scale(.985)}to{opacity:1;transform:none}}
 .hl .cta-bloco{display:flex;flex-direction:column;align-items:flex-start;gap:11px}
 .hl .nota{font-size:13px;color:var(--t3)}
 
@@ -509,6 +547,9 @@ const CSS = `
 
 .hl .redes{display:flex;align-items:flex-end;gap:0;justify-content:center;flex-wrap:wrap}
 .hl .redes-cel{margin-left:-26px;margin-bottom:-30px;position:relative;z-index:2}
+/* LinkedIn sem moldura, pra telas onde o notebook nao cabe. */
+.hl .li-solto{width:100%;max-width:420px;border-radius:14px;overflow:hidden;border:1px solid rgba(255,255,255,.12);box-shadow:0 30px 60px -30px rgba(0,0,0,.6)}
+.hl .redes-nota{text-align:center;margin:26px 0 0;font-size:11.5px;color:#8894A5;letter-spacing:.01em}
 
 .hl .cal{display:flex;justify-content:center}
 
@@ -583,7 +624,7 @@ const CSS = `
   .hl .heroi-device{grid-column:1;grid-row:2;margin-left:0}
   .hl .tres{grid-template-columns:1fr;gap:32px}
   .hl .pacotes{grid-template-columns:1fr}
-  .hl .redes{flex-direction:column;align-items:center;gap:24px}
+  .hl .redes{flex-direction:column;align-items:center;gap:30px}
   .hl .redes-cel{margin:0;transform:none}
 }
 @media (max-width:640px){
