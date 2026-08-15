@@ -132,7 +132,9 @@ Landing "normal" converte; landing **compartilhável** cresce sozinha. Mecanismo
 
 ## 11. Assets e código já existentes (reaproveitar, não recriar)
 
-- **Landing atual:** `src/components/landing/TrendPulseLanding.tsx` (rota `/` via `Index`). Sub-componentes: `ChatMockup.tsx`, `HowItWorks.tsx`, `FeatureShowcase.tsx`, `ResultGallery.tsx`, `PricingSection.tsx`.
+- **Landing atual:** `src/components/landing/HistoriaLanding.tsx` — arquivo principal, na rota `/` via `Index.tsx` (que faz o redirect de sessão antes de renderizar). Sub-componentes: `Devices.tsx` (molduras de celular e notebook em CSS), `Telas.tsx` (Instagram, LinkedIn e calendário dentro das molduras), `TweetCard.tsx` (reprodução do template Satori). Preço vem de `src/lib/precos.ts`, fonte única compartilhada com a `/pricing`.
+  - `PricingSection.tsx` continua vivo, mas hoje só é usado pela página `/pricing`, não pela landing.
+  - Promovida à `/` em 2026-08-15. A direção anterior (`TrendPulseLanding.tsx`) e a alternativa "Ateliê" (`AtelieLanding.tsx`) foram apagadas na mesma data — estão no histórico do git se precisar consultar.
 - **Exemplos reais de peças:** `public/showcase/` (posts de vários modelos: gpt_post, nano_editorial, nano_story, seedream_post…) e `landing-examples/` (post_copa, post_g7, tweet_gestao…). Usar na vitrine.
 - **Stack:** React + Vite + TypeScript + Tailwind + shadcn/ui. Deploy Vercel (push na main).
 - **Preços (referência atual, confirmar com Raul):** modelo de créditos pré-pagos (PIX + cartão). Free com créditos de boas-vindas.
