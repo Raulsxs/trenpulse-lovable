@@ -110,57 +110,73 @@ const Marca = () => (
   </span>
 );
 
+type Tuite = { t: string; midia?: [string, "gerados" | "nichos"] };
+
 /**
  * SÉRIES DE TWEET CARD, uma por perfil.
  *
- * Por que série e não card avulso: em credit_pricing a ação chama `tweet_card` e a descrição é
- * "Carrossel de tweet card" — o produto entrega uma SEQUÊNCIA por 6 créditos, e o contador "1/3"
- * faz parte do template. Mostrar um card solto na landing vendia o formato errado.
+ * DUAS COISAS QUE MUDARAM depois do retorno do Raul, e as duas eram defeito de verdade:
  *
- * A gramática abaixo é a que o renderer entende de verdade (buildTweetCardElement): `**negrito**`
- * vira peso 700, e linha começando com "→" vira bullet com o quadrado azul. Não é markdown genérico.
+ * 1. TEXTO CURTO DEMAIS. Frase de uma linha num card quadrado deixa metade do quadrado vazio, e
+ *    isso le como rascunho, nao como peca profissional. O template dimensiona a fonte pelo numero
+ *    de caracteres justamente pra encher o card — com 40 caracteres ele nao tem o que fazer.
+ * 2. SEM MIDIA. O renderer aceita imagem DENTRO do card (`slide.image_url`) e a landing nunca
+ *    mostrou essa variante, que e a mais forte: gancho + argumento + peca visual no mesmo post.
+ *
+ * A gramática é a que o renderer entende: `**negrito**` vira peso 700 e linha começando com "→"
+ * vira bullet com o quadrado azul. Não é markdown genérico.
  */
-const TWEETS: Record<string, string[]> = {
+const TWEETS: Record<string, Tuite[]> = {
   medico: [
-    "Pressão alta não dói. É exatamente por isso que ela é perigosa.",
-    "Três hábitos mexem mais no seu coração que qualquer remédio:\n→ dormir 7 horas\n→ cortar o sal escondido\n→ caminhar 30 minutos",
-    "O melhor exame é o que você **faz**, não o que você agenda.",
+    { t: "Seu paciente chega quando já dói. **Prevenção** não é exame caro: é rotina simples, repetida.", midia: ["exemplo_prevencao", "gerados"] },
+    { t: "Pressão alta não dói. É exatamente por isso que ela é perigosa.\n\nA maioria descobre num exame de rotina, ou num susto. Meça a sua a cada seis meses, **mesmo se estiver tudo bem**." },
+    { t: "Três hábitos mexem mais no seu coração que qualquer remédio:\n→ dormir 7 horas\n→ cortar o sal escondido\n→ caminhar 30 minutos" },
   ],
   advogada: [
-    "Assinar no calor do momento custa caro. Quase sempre dá pra reverter.",
-    "Justa causa exige prova. Se a empresa não tem:\n→ advertência anterior\n→ documento assinado\n→ testemunha\nnão é justa causa.",
-    "Você tem **2 anos** para reclamar na Justiça do Trabalho. Não é o resto da vida.",
+    { t: "Assinar no calor do momento custa caro. E quase sempre **dá pra reverter**, se você agir no prazo.", midia: ["adv_acordo", "nichos"] },
+    { t: "Justa causa exige prova. Se a empresa não tem:\n→ advertência anterior\n→ documento assinado\n→ testemunha\nnão é justa causa." },
+    { t: "Você tem **2 anos** para reclamar na Justiça do Trabalho. Não é o resto da vida.", midia: ["adv_justa_causa", "nichos"] },
   ],
   gestor: [
-    "Quase toda equipe que parece desmotivada está, na verdade, confusa.",
-    "Antes de trocar a pessoa, confira três coisas:\n→ ela sabe o que é sucesso aqui?\n→ ela tem a ferramenta?\n→ alguém já foi honesto com ela?",
-    "Meta sem dono não é meta. É **desejo**.",
+    { t: "Quase toda equipe que parece desmotivada está, na verdade, **confusa**.", midia: ["ges_equipe", "nichos"] },
+    { t: "Antes de demitir, confira três coisas:\n→ ela sabe o que é sucesso aqui?\n→ ela tem a ferramenta?\n→ alguém já foi honesto com ela?" },
+    { t: "Meta sem dono não é meta. É **desejo**. Se duas pessoas respondem pelo mesmo número, ninguém responde.", midia: ["ges_meta", "nichos"] },
   ],
   coach: [
-    "Disciplina não é acordar às 5h da manhã.",
-    "É escolher o que você quer **mais** em vez do que você quer **agora**.",
-    "Você não está travado. Você está esperando ter certeza.",
+    { t: "Disciplina não é acordar às 5h. É escolher o que você quer **mais** em vez do que quer **agora**.", midia: ["estilo_dark_editorial", "gerados"] },
+    { t: "Você não está travado. Você está esperando ter certeza.\n\nA certeza vem depois do primeiro passo, nunca antes dele. Comece pequeno e comece hoje." },
+    { t: "O que trava carreira quase nunca é falta de talento:\n→ medo de parecer iniciante\n→ esperar o momento certo\n→ pedir permissão pra começar" },
   ],
   nutri: [
-    "Comida de verdade não precisa de marketing.",
-    "Antes de cortar o carboidrato, tente:\n→ proteína no café da manhã\n→ água antes da fome\n→ mais uma hora de sono",
-    "O que você adia hoje cobra caro depois. Comece pelo **prato**.",
+    { t: "Comida de verdade não precisa de marketing. Se você não sabe pronunciar o rótulo, o problema **não é a caloria**.", midia: ["exemplo_alimentacao_saudavel", "gerados"] },
+    { t: "Antes de cortar o carboidrato, tente:\n→ proteína no café da manhã\n→ água antes da fome\n→ mais uma hora de sono" },
+    { t: "O que você adia hoje cobra caro depois. Comece pelo **prato**: é o ajuste mais rápido e mais barato.", midia: ["exemplo_inflamacao", "gerados"] },
   ],
 };
+
+/**
+ * A PAREDE: cards de perfis DIFERENTES ao mesmo tempo. Fixa de propósito — a seção existe pra
+ * mostrar que a máquina serve a vários nichos, e seguir o perfil escolhido mostraria seis variações
+ * do mesmo consultório.
+ */
+/** Por ação, não por índice: reordenar CUSTOS não pode mudar o preço anunciado aqui. */
+const CUSTO_TWEET = CUSTOS.find((c) => c.action === "tweet_card")?.credits ?? 0;
 
 /**
  * Peças do mosaico "possibilidades". Fixas de propósito (não seguem o perfil escolhido): a seção
  * existe pra mostrar AMPLITUDE, então tem que aparecer saúde, advocacia, gestão e estilo editorial
  * ao mesmo tempo. Se seguisse o perfil, mostraria nove variações do mesmo nicho.
  */
-/** Por ação, não por índice: reordenar CUSTOS não pode mudar o preço anunciado aqui. */
-const CUSTO_TWEET = CUSTOS.find((c) => c.action === "tweet_card")?.credits ?? 0;
-
 const MOSAICO: [string, "gerados" | "nichos"][] = [
   ["estilo_dark_editorial", "gerados"], ["adv_hora_extra", "nichos"], ["ges_meta", "nichos"],
   ["estilo_citacao_serif", "gerados"], ["exemplo_sinais_coracao", "gerados"], ["ges_contratar", "nichos"],
   ["estilo_infografico", "gerados"], ["adv_assedio", "nichos"], ["exemplo_produtividade", "gerados"],
   ["ges_reuniao", "nichos"], ["exemplo_alimentacao_saudavel", "gerados"], ["adv_acordo", "nichos"],
+];
+
+const PAREDE: { id: string; i: number }[] = [
+  { id: "coach", i: 0 }, { id: "advogada", i: 1 }, { id: "medico", i: 0 },
+  { id: "gestor", i: 2 }, { id: "nutri", i: 1 }, { id: "advogada", i: 2 },
 ];
 
 /** Texto REAL do style_guide de uma marca de verdade — não é exemplo escrito à mão. */
@@ -219,11 +235,11 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
   const larguraCel = Math.max(228, Math.min(296, janela - 80));
   // Três tweet cards lado a lado dentro do bloco de 1200px (56 de padding, 18 de gap × 2).
   // Numa coluna só, o card ocupa a largura disponível.
-  // Os três cards dividem a coluna que sobra ao lado do celular do palco:
-  // bloco 1200 − 56 de padding − 286 do celular − 44 de gap − 36 dos dois vãos, dividido por 3.
+  // Parede de 3 colunas: bloco de 1200 − 56 de padding − 36 dos dois vãos, dividido por 3.
+  // 3 colunas e não 4 de propósito: em 4 o corpo do card cai pra ~12px e o texto vira borrão.
   const larguraTw = estreito
-    ? Math.min(360, janela - 52)
-    : Math.max(196, Math.min(252, (Math.min(1200, janela) - 56 - 286 - 44 - 36) / 3));
+    ? Math.min(380, janela - 52)
+    : Math.max(240, Math.min(364, (Math.min(1200, janela) - 56 - 36) / 3));
   const raiz = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -455,9 +471,11 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
             <figure className="fmt">
               <div className="tw">
                 <TweetCard autor={m.autor} handle={m.handle} accent={m.accent} largura={252}
-                  texto={TWEETS[m.id][0]} indice={1} total={3} />
+                  texto={TWEETS[m.id][0].t}
+                  midia={TWEETS[m.id][0].midia ? url(TWEETS[m.id][0].midia!) : undefined}
+                  indice={1} total={3} />
               </div>
-              <figcaption><strong>Tweet card</strong><span>6 cr a série</span></figcaption>
+              <figcaption><strong>Tweet card</strong><span>{CUSTO_TWEET} cr a série</span></figcaption>
             </figure>
           </div>
 
@@ -479,11 +497,11 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
       </section>
 
       {/* ══ 6. O print de tweet ════════════════════════════════════════════ */}
-      <section className="bl">
+      <section className="bl escuro">
         <div className="bl-in">
-          <p className="olho" data-rv>O print de tweet</p>
-          <h2 data-rv>Aquele print que você salva sem pensar</h2>
-          <p className="sub" data-rv>
+          <p className="olho claro" data-rv>O print de tweet</p>
+          <h2 className="claro" data-rv>Uma frase sua. Um post pronto.<br />Quantas vezes você quiser.</h2>
+          <p className="sub claro" data-rv>
             Frase curta, fundo branco, cara de tweet. Funciona porque não parece anúncio: parece
             alguém pensando alto. Você já passou por vários esta semana, provavelmente sem reparar
             que foram montados — e é justo o formato mais chato de fazer na mão.
@@ -512,45 +530,32 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
             </div>
           </div>
 
-          {/* NO FEED, não solto. O card flutuando na página lê como asset; dentro do post do
-              Instagram, com bolinha de carrossel e "1/3" no canto, ele lê como o que o seguidor
-              vai ver de verdade. É a moldura que prova o valor do formato. */}
-          <div className="tw-palco" data-rv data-d="80">
-            <div className="tw-fone">
-              <Celular largura={estreito ? larguraCel : 286}>
-                <div key={m.id} className="troca">
-                  <PostInstagram
-                    autor={m.autor} handle={m.handle} accent={m.accent}
-                    legenda={TWEETS[m.id][0].replace(/\*\*/g, "").split("\n")[0]}
-                    slides={3} slideAtual={1}
-                    midia={<TweetCard autor={m.autor} handle={m.handle} accent={m.accent}
-                      largura={estreito ? larguraCel - 20 : 266} texto={TWEETS[m.id][0]}
-                      indice={1} total={3} sombra={false} />}
-                  />
-                </div>
-              </Celular>
-              <span className="simul">Simulação do Instagram · o card é o que a plataforma gera</span>
-            </div>
-
-            <div className="tw-aberto">
-              <p className="serie-titulo">
-                Arrastando, o seguidor vê os três. É uma geração só, para {m.marca}:
-              </p>
-              <div className="serie-linha aberta">
-                {TWEETS[m.id].map((t, k) => (
-                  <TweetCard key={m.id + k} autor={m.autor} handle={m.handle} accent={m.accent}
-                    largura={larguraTw} texto={t} indice={k + 1} total={3} />
-                ))}
-              </div>
-            </div>
+          {/* A PAREDE. O Raul escolheu esta direcao: o argumento e o VOLUME — varios perfis,
+              varios nichos, tudo saido da mesma maquina. E os cards agora seguem o padrao da
+              referencia dele: texto denso com negrito e PECA DENTRO do card, em vez de uma frase
+              curta boiando num quadrado meio vazio. */}
+          <div className="parede" data-rv data-d="80">
+            {PAREDE.map(({ id, i: k }, n) => {
+              const perfil = MARCAS.find((x) => x.id === id)!;
+              const tw = TWEETS[id][k];
+              return (
+                <TweetCard key={`${id}-${k}-${n}`} autor={perfil.autor} handle={perfil.handle}
+                  accent={perfil.accent} largura={larguraTw} texto={tw.t}
+                  midia={tw.midia ? url(tw.midia) : undefined}
+                  indice={k + 1} total={3} />
+              );
+            })}
           </div>
 
-          <div className="serie-tw" data-rv data-d="100">
-            <p className="serie-nota">
-              O texto é desenhado por template, não gerado por modelo de imagem. É por isso que ele
-              nunca sai com letra torta, acento faltando ou palavra embolada — o defeito clássico de
-              quem tenta fazer card de texto com IA de imagem.
+          <div className="parede-pe" data-rv data-d="120">
+            <p>
+              O texto é desenhado por template, não gerado por modelo de imagem: nunca sai com letra
+              torta, acento faltando ou palavra embolada. A peça de dentro, essa sim, é gerada.
             </p>
+            <div className="parede-cta">
+              <span className="pill">{CUSTO_TWEET} créditos a série</span>
+              <button className="bt claro" onClick={onSignup}>Criar os meus</button>
+            </div>
           </div>
         </div>
       </section>
@@ -760,53 +765,25 @@ const CSS = `
 .hl .tw-col li::before{content:"";position:absolute;left:0;top:8px;width:6px;height:6px;border-radius:50%;background:var(--linha)}
 .hl .tw-col:last-child li::before{background:var(--teal)}
 
-/* ── Palco do tweet card: celular com o post real + serie aberta ao lado ── */
-.hl .tw-palco{display:grid;grid-template-columns:auto 1fr;gap:44px;align-items:center;margin-top:44px}
-/* A legenda "Simulação" e mais larga que o celular e engordava esta coluna em 10px, o que
-   empurrava o terceiro card pra linha de baixo. Travando a coluna na largura do aparelho. */
-.hl .tw-fone{display:flex;flex-direction:column;align-items:center;width:286px;max-width:100%}
-.hl .tw-fone .simul{width:100%}
-.hl .tw-aberto{min-width:0}
-.hl .serie-linha.aberta{justify-content:flex-start}
+/* ── A parede de tweet cards ── */
+.hl .parede{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;margin-top:8px;justify-items:center}
+.hl .parede-pe{display:flex;align-items:center;justify-content:space-between;gap:28px;flex-wrap:wrap;margin-top:30px;padding-top:26px;border-top:1px solid rgba(255,255,255,.12)}
+.hl .parede-pe p{font-size:14px;line-height:1.55;color:#8894A5;margin:0;max-width:62ch}
+.hl .parede-cta{display:flex;align-items:center;gap:14px}
+.hl .pill{background:rgba(29,175,163,.16);color:var(--teal);font-size:13px;font-weight:700;padding:7px 14px;border-radius:999px;white-space:nowrap}
+.hl .bt.claro{background:var(--papel);color:var(--tinta)}
+.hl .bt.claro:hover{background:#fff;transform:translateY(-1px)}
 
-/* ── Serie de tweet cards ── */
-.hl .serie-tw{margin-top:38px;padding-top:30px;border-top:1px solid var(--linha)}
-.hl .serie-titulo{font-size:15.5px;color:var(--t2);margin:0 0 24px;max-width:64ch;line-height:1.55}
-.hl .serie-titulo em{font-style:normal;color:var(--tinta);font-weight:600}
-/* Largura do card vem por PROP, não por CSS: todas as medidas internas do TweetCard sao derivadas
-   dela (canvas real de 1080), entao esticar a caixa por CSS deixaria o conteudo em outra escala. */
-.hl .serie-linha{display:flex;gap:18px;align-items:flex-start;justify-content:center;flex-wrap:wrap}
-.hl .serie-nota{font-size:12.5px;color:var(--t3);margin:20px 0 0;line-height:1.5;max-width:68ch}
-
-.hl .pacotes{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.hl .pac{background:#fff;border:1px solid var(--linha);border-radius:14px;padding:26px 24px;position:relative;display:flex;flex-direction:column}
-.hl .pac.dest{border-color:var(--marca);box-shadow:0 0 0 1px var(--marca)}
-.hl .tag{position:absolute;top:-10px;left:24px;background:var(--marca);color:#fff;font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:4px 10px;border-radius:999px}
-.hl .pac h3{font-family:'Plus Jakarta Sans',Inter,sans-serif;font-size:16px;font-weight:700;margin:0 0 8px}
-.hl .preco{font-family:'Plus Jakarta Sans',Inter,sans-serif;font-size:38px;font-weight:800;letter-spacing:-.04em;line-height:1}
-.hl .cred{font-size:13px;color:var(--t2);margin:6px 0 16px}
-.hl .bon{color:var(--marca);font-weight:600}
-.hl .pac ul{list-style:none;margin:0 0 20px;padding:0;display:grid;gap:7px;flex:1}
-.hl .pac li{font-size:13.5px;color:var(--t2);padding-left:16px;position:relative}
-.hl .pac li::before{content:"";position:absolute;left:0;top:8px;width:6px;height:6px;border-radius:50%;background:var(--teal)}
-
-.hl .fecho{border-top:1px solid var(--linha);max-width:1200px;margin:0 auto;padding:96px 28px 104px;text-align:center}
-.hl .fecho h2{margin-bottom:8px}
-.hl .fecho p{font-size:19px;color:var(--t2);margin:0 0 32px}
-
-.hl .rodape{border-top:1px solid var(--linha);max-width:1200px;margin:0 auto;padding:24px 28px 40px;display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;font-size:14px;color:var(--t3)}
-.hl .rodape nav{display:flex;align-items:center;gap:2px;flex-wrap:wrap}
-.hl .rodape a{color:var(--t2);text-decoration:none;padding:12px;min-height:44px;display:inline-flex;align-items:center}
-.hl .rodape a:hover{color:var(--tinta)}
-
-/* ── A mesma frase, quatro identidades ── */
-.hl .mesma-frase{margin-top:52px;padding-top:36px;border-top:1px solid var(--linha)}
-.hl .mf-titulo{font-size:15.5px;color:var(--t2);margin:0 0 22px;max-width:64ch;line-height:1.55}
-.hl .mf-titulo em{font-style:normal;color:var(--tinta);font-weight:600}
-.hl .mf-linha{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
-.hl .mf-linha figure{margin:0}
-.hl .mf-linha img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:10px;border:1px solid var(--linha);display:block}
-.hl .mf-linha figcaption{font-size:11.5px;font-weight:600;color:var(--t3);margin-top:8px;text-align:center}
+/* ── O print de tweet: na mao x aqui (sobre fundo escuro) ── */
+.hl .tw-duas{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:44px 0 8px}
+.hl .tw-col{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.11);border-radius:13px;padding:20px 22px}
+.hl .tw-tag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin-bottom:13px}
+.hl .tw-tag.ruim{background:rgba(223,112,77,.18);color:#E8907A}
+.hl .tw-tag.bom{background:rgba(29,175,163,.16);color:#5FD3C6}
+.hl .tw-col ul{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.hl .tw-col li{font-size:14px;line-height:1.45;color:#B6BCC6;padding-left:18px;position:relative}
+.hl .tw-col li::before{content:"";position:absolute;left:0;top:8px;width:6px;height:6px;border-radius:50%;background:rgba(255,255,255,.28)}
+.hl .tw-col:last-child li::before{background:var(--teal)}
 
 /* ── Os quatro formatos ── */
 .hl .formatos{display:grid;grid-template-columns:repeat(4,1fr);gap:22px;align-items:end}
@@ -829,13 +806,14 @@ const CSS = `
   .hl .mos-grade{grid-template-columns:repeat(4,1fr)}
 }
 @media (max-width:980px){
-  /* Celular em cima, serie embaixo: lado a lado o card cai abaixo de 200px e o texto some. */
-  .hl .tw-palco{grid-template-columns:1fr;gap:34px;justify-items:center}
-  .hl .serie-linha.aberta{justify-content:center}
-  .hl .tw-aberto{width:100%}
+  .hl .parede{grid-template-columns:repeat(2,1fr)}
 }
 @media (max-width:780px){
   .hl .tw-duas{grid-template-columns:1fr}
+}
+@media (max-width:620px){
+  .hl .parede{grid-template-columns:1fr}
+  .hl .parede-pe{flex-direction:column;align-items:flex-start}
 }
 @media (max-width:560px){
   .hl .formatos{grid-template-columns:1fr;gap:34px}

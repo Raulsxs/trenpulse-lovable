@@ -40,6 +40,8 @@ export function TweetCard({
   indice,
   total,
   sombra = true,
+  midia,
+  avatar,
 }: {
   autor: string;
   handle: string;
@@ -52,11 +54,22 @@ export function TweetCard({
   indice?: number;
   total?: number;
   sombra?: boolean;
+  /**
+   * Imagem DENTRO do card, como no tweet com midia. O renderer aceita isto
+   * (`slide.image_url` -> `imageDataUri` em buildTweetCardElement) e a landing nunca mostrava:
+   * o card so com frase curta deixa metade do quadrado vazio, o que le como rascunho e nao como
+   * peca profissional. Geometria copiada de la: largura w-144, altura 44% do card, marginTop 32,
+   * raio 24, borda #cfd9de.
+   */
+  midia?: string;
+  /** Foto de perfil. Sem ela o renderer desenha a inicial num circulo, que e o que acontecia aqui. */
+  avatar?: string;
 }) {
   // Tudo em proporção ao canvas real de 1080px.
   const s = largura / 1080;
   const px = (n: number) => n * s;
-  const fs = corpoFs(texto) * s;
+  // Com midia o renderer limita o corpo a 46 pra sobrar espaco pro visual.
+  const fs = (midia ? Math.min(corpoFs(texto), 46) : corpoFs(texto)) * s;
   const espaco = fs * 0.26;
 
   // Mesma gramática de texto do renderer: **negrito**, e linha com marcador vira bullet azul.
@@ -85,17 +98,26 @@ export function TweetCard({
         display: "flex",
         flexDirection: "column",
         flex: "none",
+        // O arquivo real e um PNG de 1080x1080: se o texto passar, o Satori CORTA, nao cresce.
+        // Sem isto o card da landing esticava (medido: 364x413 num quadrado de 364) e virava
+        // retangulo — mostrando uma forma que o produto nao entrega.
+        overflow: "hidden",
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: px(24) }}>
-        <div
-          style={{
-            width: px(112), height: px(112), borderRadius: "50%", flexShrink: 0, background: accent,
-            display: "grid", placeItems: "center", color: "#fff", fontWeight: 700, fontSize: px(44),
-          }}
-        >
-          {autor[0]?.toUpperCase()}
-        </div>
+        {avatar ? (
+          <img src={avatar} alt="" loading="lazy"
+            style={{ width: px(112), height: px(112), borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+        ) : (
+          <div
+            style={{
+              width: px(112), height: px(112), borderRadius: "50%", flexShrink: 0, background: accent,
+              display: "grid", placeItems: "center", color: "#fff", fontWeight: 700, fontSize: px(44),
+            }}
+          >
+            {autor[0]?.toUpperCase()}
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: px(8) }}>
             <span style={{ fontSize: px(42), fontWeight: 700, color: "#0f1419", letterSpacing: "-.01em", whiteSpace: "nowrap" }}>{autor}</span>
@@ -107,7 +129,7 @@ export function TweetCard({
 
       {/* flex:1 espelha o `flexGrow: imageDataUri ? 0 : 1` do renderer: sem imagem, o corpo cresce e
           empurra o contador da série pro rodapé do card. */}
-      <div style={{ marginTop: px(40), fontSize: fs, color: "#0f1419", display: "flex", flexDirection: "column", flex: 1, minHeight: 0 }}>
+      <div style={{ marginTop: px(40), fontSize: fs, color: "#0f1419", display: "flex", flexDirection: "column", flex: midia ? "none" : 1, minHeight: 0 }}>
         {linhas.map(({ li, ehBullet, partes }) => (
           <div
             key={li}
@@ -133,6 +155,15 @@ export function TweetCard({
           </div>
         ))}
       </div>
+
+      {midia && (
+        <>
+          <img src={midia} alt="" loading="lazy"
+            style={{ width: "100%", height: `${44}%`, marginTop: px(32), borderRadius: px(24),
+                     objectFit: "cover", border: "1px solid #cfd9de", display: "block", flexShrink: 0 }} />
+          <div style={{ flex: 1 }} />
+        </>
+      )}
 
       {/* Contador da série — existe no template quando total > 1, e é o que mostra que
           tweet card é vendido EM SÉRIE, não como card avulso. */}
