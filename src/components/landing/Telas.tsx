@@ -420,3 +420,119 @@ export function CalendarioDoMes({ pecas, accent }: { pecas: string[]; accent: st
     </div>
   );
 }
+
+/* ── Instagram: post no feed (carrossel) ──────────────────────────────────── */
+
+/**
+ * O tweet card sozinho, flutuando na página, é fraco: parece um asset, não um post. Dentro do feed
+ * do Instagram ele vira o que de fato é — a peça que o seguidor vai ver ao rolar. É essa moldura
+ * que prova o valor do formato, não a imagem solta.
+ *
+ * `midia` é um NODE, não uma URL, porque o tweet card é desenhado em CSS (reprodução do template
+ * Satori) e não existe como arquivo aqui. O mesmo componente serve para qualquer peça.
+ *
+ * SEM CONTADOR de curtida ou comentário: número inventado é prova social fabricada. O chrome fica
+ * fiel, a contagem some, e a landing rotula o aparelho como simulação.
+ */
+export function PostInstagram({
+  midia,
+  autor,
+  handle,
+  legenda,
+  accent,
+  slides = 1,
+  slideAtual = 1,
+}: {
+  midia: React.ReactNode;
+  autor: string;
+  handle: string;
+  legenda: string;
+  accent: string;
+  slides?: number;
+  slideAtual?: number;
+}) {
+  return (
+    <div style={{ height: "100%", background: "#fff", display: "flex", flexDirection: "column", fontFamily: "system-ui, -apple-system, sans-serif", overflow: "hidden" }}>
+      <BarraDeStatus />
+
+      {/* Barra do app */}
+      <div style={{ padding: "4px 14px 10px", display: "flex", alignItems: "center", gap: 12 }}>
+        <span style={{ fontSize: 20, fontWeight: 700, color: "#0B0B0B", letterSpacing: "-.04em", fontFamily: "'Segoe Script', cursive, system-ui", flex: 1 }}>Instagram</span>
+        <CoracaoIcone />
+        <MensagemIcone />
+      </div>
+
+      {/* Cabeçalho do post */}
+      <div style={{ padding: "6px 12px", display: "flex", alignItems: "center", gap: 9 }}>
+        {/* Anel de story em volta do avatar — detalhe que o olho reconhece na hora. */}
+        <span style={{ padding: 2, borderRadius: "50%", background: "linear-gradient(45deg,#F9CE34,#EE2A7B,#6228D7)", flex: "none", display: "grid" }}>
+          <span style={{ width: 30, height: 30, borderRadius: "50%", background: accent, border: "2px solid #fff", display: "grid", placeItems: "center", color: "#fff", fontWeight: 700, fontSize: 13 }}>
+            {autor[0]?.toUpperCase()}
+          </span>
+        </span>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "#0B0B0B", lineHeight: 1.2 }}>{handle}</div>
+          <div style={{ fontSize: 11, color: "#737373", lineHeight: 1.2 }}>Publicado pelo TrendPulse</div>
+        </div>
+        <span style={{ color: "#0B0B0B", fontSize: 15, letterSpacing: 1 }}>···</span>
+      </div>
+
+      {/* Mídia + contador de slide, como no carrossel real */}
+      <div style={{ position: "relative", width: "100%" }}>
+        {midia}
+        {slides > 1 && (
+          <span style={{ position: "absolute", top: 10, right: 10, background: "rgba(0,0,0,.62)", color: "#fff", fontSize: 11, fontWeight: 600, padding: "3px 9px", borderRadius: 999 }}>
+            {slideAtual}/{slides}
+          </span>
+        )}
+      </div>
+
+      {/* Bolinhas do carrossel */}
+      {slides > 1 && (
+        <div style={{ display: "flex", justifyContent: "center", gap: 4, padding: "8px 0 2px" }}>
+          {Array.from({ length: slides }).map((_, k) => (
+            <span key={k} style={{ width: 5, height: 5, borderRadius: "50%", background: k === slideAtual - 1 ? "#0095F6" : "#C7C7C7" }} />
+          ))}
+        </div>
+      )}
+
+      {/* Barra de ações */}
+      <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "8px 13px 4px" }}>
+        <CoracaoIcone /><ComentarIcone /><EnviarIcone />
+        <span style={{ flex: 1 }} />
+        <SalvarIcone />
+      </div>
+
+      {/* Legenda. Sem contagem de curtida: seria número inventado. */}
+      <div style={{ padding: "2px 13px 0", fontSize: 12.5, lineHeight: 1.4, color: "#0B0B0B" }}>
+        <span style={{ fontWeight: 600 }}>{handle}</span>{" "}
+        <span style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}>{legenda}</span>
+      </div>
+      <div style={{ padding: "5px 13px 0", fontSize: 10.5, color: "#737373" }}>há 2 horas</div>
+
+      <div style={{ flex: 1 }} />
+
+      {/* Navegação inferior */}
+      <div style={{ borderTop: "1px solid #DBDBDB", padding: "9px 22px 12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <CasaIcone /><LupaIcone /><ReelsIcone /><LojaIcone />
+        <div style={{ width: 22, height: 22, borderRadius: "50%", background: accent, border: "1.5px solid #0B0B0B" }} />
+      </div>
+    </div>
+  );
+}
+
+const CoracaoIcone = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B0B0B" strokeWidth="1.9" strokeLinejoin="round"><path d="M12 20.5S3.5 15.2 3.5 9.6A4.6 4.6 0 0 1 12 6.9a4.6 4.6 0 0 1 8.5 2.7c0 5.6-8.5 10.9-8.5 10.9Z" /></svg>
+);
+const MensagemIcone = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B0B0B" strokeWidth="1.9" strokeLinejoin="round"><path d="M21.5 2.5 2.5 9.2l7.6 3.1 3.1 7.6 8.3-17.4Z" /><line x1="10.1" y1="12.3" x2="14.5" y2="7.9" /></svg>
+);
+const ComentarIcone = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B0B0B" strokeWidth="1.9" strokeLinejoin="round"><path d="M21 11.6c0 4.4-4 8-9 8a10 10 0 0 1-2.7-.4L3.5 21l1.6-4.6A7.6 7.6 0 0 1 3 11.6c0-4.4 4-8 9-8s9 3.6 9 8Z" /></svg>
+);
+const EnviarIcone = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B0B0B" strokeWidth="1.9" strokeLinejoin="round"><path d="M21.5 2.5 2.5 9.2l7.6 3.1 3.1 7.6 8.3-17.4Z" /><line x1="10.1" y1="12.3" x2="14.5" y2="7.9" /></svg>
+);
+const SalvarIcone = () => (
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#0B0B0B" strokeWidth="1.9" strokeLinejoin="round"><polygon points="18.5 3.5 5.5 3.5 5.5 20.5 12 15.6 18.5 20.5" /></svg>
+);

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Celular, Notebook } from "./Devices";
-import { GradeDePerfil, PostLinkedIn, CalendarioDoMes } from "./Telas";
+import { GradeDePerfil, PostLinkedIn, PostInstagram, CalendarioDoMes } from "./Telas";
 import { TweetCard } from "./TweetCard";
 import { CUSTOS, PACOTES, CREDITOS_DE_BOAS_VINDAS, postsPorPacote, carrosseisPorPacote } from "@/lib/precos";
 
@@ -148,6 +148,21 @@ const TWEETS: Record<string, string[]> = {
   ],
 };
 
+/**
+ * Peças do mosaico "possibilidades". Fixas de propósito (não seguem o perfil escolhido): a seção
+ * existe pra mostrar AMPLITUDE, então tem que aparecer saúde, advocacia, gestão e estilo editorial
+ * ao mesmo tempo. Se seguisse o perfil, mostraria nove variações do mesmo nicho.
+ */
+/** Por ação, não por índice: reordenar CUSTOS não pode mudar o preço anunciado aqui. */
+const CUSTO_TWEET = CUSTOS.find((c) => c.action === "tweet_card")?.credits ?? 0;
+
+const MOSAICO: [string, "gerados" | "nichos"][] = [
+  ["estilo_dark_editorial", "gerados"], ["adv_hora_extra", "nichos"], ["ges_meta", "nichos"],
+  ["estilo_citacao_serif", "gerados"], ["exemplo_sinais_coracao", "gerados"], ["ges_contratar", "nichos"],
+  ["estilo_infografico", "gerados"], ["adv_assedio", "nichos"], ["exemplo_produtividade", "gerados"],
+  ["ges_reuniao", "nichos"], ["exemplo_alimentacao_saudavel", "gerados"], ["adv_acordo", "nichos"],
+];
+
 /** Texto REAL do style_guide de uma marca de verdade — não é exemplo escrito à mão. */
 const O_QUE_A_IA_ENTENDEU = {
   padrao: "Fundo branco predominante com ampla área de respiro.",
@@ -204,9 +219,11 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
   const larguraCel = Math.max(228, Math.min(296, janela - 80));
   // Três tweet cards lado a lado dentro do bloco de 1200px (56 de padding, 18 de gap × 2).
   // Numa coluna só, o card ocupa a largura disponível.
+  // Os três cards dividem a coluna que sobra ao lado do celular do palco:
+  // bloco 1200 − 56 de padding − 286 do celular − 44 de gap − 36 dos dois vãos, dividido por 3.
   const larguraTw = estreito
     ? Math.min(360, janela - 52)
-    : Math.max(250, Math.min(346, (Math.min(1200, janela) - 56 - 36) / 3));
+    : Math.max(196, Math.min(252, (Math.min(1200, janela) - 56 - 286 - 44 - 36) / 3));
   const raiz = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -444,22 +461,95 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
             </figure>
           </div>
 
-          {/* A SÉRIE INTEIRA. O tweet card era o formato mais escondido da página — aparecia como um
-              quadradinho entre outros três, e ainda por cima avulso, quando o produto entrega uma
-              sequência. Aqui ele ganha a largura da seção e mostra o que 6 créditos compram. */}
-          <div className="serie-tw" data-rv data-d="120">
-            <p className="serie-titulo">
-              Um tema vira uma <em>sequência</em>. Estes três saem juntos, por 6 créditos:
+          {/* MOSAICO. O Raul pediu "uma área só pra falar das possibilidades, passando várias
+              imagens bacanas". Os quatro formatos acima dizem o QUE existe; o mosaico mostra o
+              VOLUME e a variedade de cara — é o argumento que nenhum texto ganha. Todas geradas
+              na plataforma, de nichos diferentes de propósito. */}
+          <div className="mosaico" data-rv data-d="120">
+            <p className="mos-titulo">
+              Tudo abaixo saiu da plataforma, em marcas e nichos diferentes:
             </p>
-            <div className="serie-linha">
-              {TWEETS[m.id].map((t, k) => (
-                <TweetCard key={m.id + k} autor={m.autor} handle={m.handle} accent={m.accent}
-                  largura={larguraTw} texto={t} indice={k + 1} total={3} />
+            <div className="mos-grade">
+              {MOSAICO.map((g) => (
+                <img key={g[0]} src={url(g)} alt="Peça gerada no TrendPulse" loading="lazy" />
               ))}
             </div>
+          </div>
+        </div>
+      </section>
+
+      {/* ══ 6. O print de tweet ════════════════════════════════════════════ */}
+      <section className="bl">
+        <div className="bl-in">
+          <p className="olho" data-rv>O print de tweet</p>
+          <h2 data-rv>Aquele print que você salva sem pensar</h2>
+          <p className="sub" data-rv>
+            Frase curta, fundo branco, cara de tweet. Funciona porque não parece anúncio: parece
+            alguém pensando alto. Você já passou por vários esta semana, provavelmente sem reparar
+            que foram montados — e é justo o formato mais chato de fazer na mão.
+          </p>
+
+          {/* O contraste é o argumento. Quem já tentou fazer isso reconhece a coluna da esquerda
+              na hora, e é esse reconhecimento que faz a da direita valer alguma coisa. */}
+          <div className="tw-duas" data-rv data-d="60">
+            <div className="tw-col">
+              <span className="tw-tag ruim">Na mão</span>
+              <ul>
+                <li>Publicar o tweet de verdade só pra tirar o print</li>
+                <li>Recortar, limpar a barra de status, acertar a margem</li>
+                <li>Ou remontar no Canva, um card de cada vez</li>
+                <li>E refazer tudo do zero quando quiser uma sequência</li>
+              </ul>
+            </div>
+            <div className="tw-col">
+              <span className="tw-tag bom">No TrendPulse</span>
+              <ul>
+                <li>Você escreve a frase no chat</li>
+                <li>Sai pronto com o seu nome, o seu @ e o selo</li>
+                <li>Pede três e vira carrossel, numerado 1/3</li>
+                <li>{CUSTO_TWEET} créditos a série inteira</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* NO FEED, não solto. O card flutuando na página lê como asset; dentro do post do
+              Instagram, com bolinha de carrossel e "1/3" no canto, ele lê como o que o seguidor
+              vai ver de verdade. É a moldura que prova o valor do formato. */}
+          <div className="tw-palco" data-rv data-d="80">
+            <div className="tw-fone">
+              <Celular largura={estreito ? larguraCel : 286}>
+                <div key={m.id} className="troca">
+                  <PostInstagram
+                    autor={m.autor} handle={m.handle} accent={m.accent}
+                    legenda={TWEETS[m.id][0].replace(/\*\*/g, "").split("\n")[0]}
+                    slides={3} slideAtual={1}
+                    midia={<TweetCard autor={m.autor} handle={m.handle} accent={m.accent}
+                      largura={estreito ? larguraCel - 20 : 266} texto={TWEETS[m.id][0]}
+                      indice={1} total={3} sombra={false} />}
+                  />
+                </div>
+              </Celular>
+              <span className="simul">Simulação do Instagram · o card é o que a plataforma gera</span>
+            </div>
+
+            <div className="tw-aberto">
+              <p className="serie-titulo">
+                Arrastando, o seguidor vê os três. É uma geração só, para {m.marca}:
+              </p>
+              <div className="serie-linha aberta">
+                {TWEETS[m.id].map((t, k) => (
+                  <TweetCard key={m.id + k} autor={m.autor} handle={m.handle} accent={m.accent}
+                    largura={larguraTw} texto={t} indice={k + 1} total={3} />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="serie-tw" data-rv data-d="100">
             <p className="serie-nota">
-              Texto desenhado por template, não gerado por modelo de imagem — por isso nunca sai com
-              letra torta ou acento errado.
+              O texto é desenhado por template, não gerado por modelo de imagem. É por isso que ele
+              nunca sai com letra torta, acento faltando ou palavra embolada — o defeito clássico de
+              quem tenta fazer card de texto com IA de imagem.
             </p>
           </div>
         </div>
@@ -652,8 +742,35 @@ const CSS = `
 .hl .cr .de{display:block;font-size:9.5px;font-weight:600;color:var(--t3);letter-spacing:.04em;text-transform:uppercase;margin-bottom:-2px}
 .hl .varia{font-size:11px;color:var(--t3);margin-top:7px;line-height:1.4;font-variant-numeric:tabular-nums}
 
+/* ── Mosaico de possibilidades ── */
+.hl .mosaico{margin-top:56px;padding-top:38px;border-top:1px solid var(--linha)}
+.hl .mos-titulo{font-size:15.5px;color:var(--t2);margin:0 0 20px;max-width:64ch}
+.hl .mos-grade{display:grid;grid-template-columns:repeat(6,1fr);gap:10px}
+.hl .mos-grade img{width:100%;aspect-ratio:1;object-fit:cover;border-radius:9px;border:1px solid var(--linha);display:block;transition:transform .45s cubic-bezier(.16,1,.3,1)}
+.hl .mos-grade img:hover{transform:scale(1.05)}
+
+/* ── O print de tweet: na mao x aqui ── */
+.hl .tw-duas{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:8px}
+.hl .tw-col{background:#fff;border:1px solid var(--linha);border-radius:13px;padding:20px 22px}
+.hl .tw-tag{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;padding:4px 10px;border-radius:999px;margin-bottom:13px}
+.hl .tw-tag.ruim{background:#F4E7E5;color:#9B4238}
+.hl .tw-tag.bom{background:#E3F1EA;color:#186B4E}
+.hl .tw-col ul{list-style:none;margin:0;padding:0;display:grid;gap:9px}
+.hl .tw-col li{font-size:14px;line-height:1.45;color:var(--t2);padding-left:18px;position:relative}
+.hl .tw-col li::before{content:"";position:absolute;left:0;top:8px;width:6px;height:6px;border-radius:50%;background:var(--linha)}
+.hl .tw-col:last-child li::before{background:var(--teal)}
+
+/* ── Palco do tweet card: celular com o post real + serie aberta ao lado ── */
+.hl .tw-palco{display:grid;grid-template-columns:auto 1fr;gap:44px;align-items:center;margin-top:44px}
+/* A legenda "Simulação" e mais larga que o celular e engordava esta coluna em 10px, o que
+   empurrava o terceiro card pra linha de baixo. Travando a coluna na largura do aparelho. */
+.hl .tw-fone{display:flex;flex-direction:column;align-items:center;width:286px;max-width:100%}
+.hl .tw-fone .simul{width:100%}
+.hl .tw-aberto{min-width:0}
+.hl .serie-linha.aberta{justify-content:flex-start}
+
 /* ── Serie de tweet cards ── */
-.hl .serie-tw{margin-top:56px;padding-top:38px;border-top:1px solid var(--linha)}
+.hl .serie-tw{margin-top:38px;padding-top:30px;border-top:1px solid var(--linha)}
 .hl .serie-titulo{font-size:15.5px;color:var(--t2);margin:0 0 24px;max-width:64ch;line-height:1.55}
 .hl .serie-titulo em{font-style:normal;color:var(--tinta);font-weight:600}
 /* Largura do card vem por PROP, não por CSS: todas as medidas internas do TweetCard sao derivadas
@@ -709,10 +826,21 @@ const CSS = `
 @media (max-width:1080px){
   .hl .formatos{grid-template-columns:repeat(2,1fr);gap:28px}
   .hl .mf-linha{grid-template-columns:repeat(2,1fr)}
+  .hl .mos-grade{grid-template-columns:repeat(4,1fr)}
+}
+@media (max-width:980px){
+  /* Celular em cima, serie embaixo: lado a lado o card cai abaixo de 200px e o texto some. */
+  .hl .tw-palco{grid-template-columns:1fr;gap:34px;justify-items:center}
+  .hl .serie-linha.aberta{justify-content:center}
+  .hl .tw-aberto{width:100%}
+}
+@media (max-width:780px){
+  .hl .tw-duas{grid-template-columns:1fr}
 }
 @media (max-width:560px){
   .hl .formatos{grid-template-columns:1fr;gap:34px}
   .hl .tw{aspect-ratio:auto}
+  .hl .mos-grade{grid-template-columns:repeat(3,1fr);gap:7px}
 }
 
 @media (max-width:1080px){
