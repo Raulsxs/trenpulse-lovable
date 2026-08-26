@@ -17,7 +17,12 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="TrendPulse" />
     <link rel="manifest" href="/manifest.json" />
-    <link rel="canonical" href="https://trendpulse.com.br/" />
+    <!-- Tudo aqui aponta para www porque o servidor força www: https://trendpulse.com.br/ responde
+         308 para https://www.trendpulse.com.br/. O canonical apontava para a versão SEM www, ou seja,
+         declarava como oficial justamente a URL que redireciona — o Search Console listou a raiz em
+         "Página com redirecionamento" por isso. Ao mexer no domínio, manter canonical, og:url,
+         sitemap.xml e a linha Sitemap: do robots.txt na MESMA variante. -->
+    <link rel="canonical" href="https://www.trendpulse.com.br/" />
 
     <!-- Cartão de compartilhamento.
          O og:image e o twitter:image apontavam para um SCREENSHOT DE PREVIEW DO LOVABLE hospedado
@@ -26,12 +31,12 @@
          redes sociais, o pior lugar possível para essa sobra. O /og.jpg agora é nosso, 1200x630,
          e mostra peças REAIS geradas na plataforma. Fonte editável em public/og-source.html. -->
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://trendpulse.com.br/" />
+    <meta property="og:url" content="https://www.trendpulse.com.br/" />
     <meta property="og:site_name" content="TrendPulse" />
     <meta property="og:locale" content="pt_BR" />
     <meta property="og:title" content="TrendPulse — sua marca postando todo dia">
     <meta property="og:description" content="Você escreve a ideia. A IA entrega o post pronto com a sua cara e publica em 9 redes.">
-    <meta property="og:image" content="https://trendpulse.com.br/og.jpg">
+    <meta property="og:image" content="https://www.trendpulse.com.br/og.jpg">
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta property="og:image:alt" content="TrendPulse: três posts gerados na plataforma ao lado da frase Sua marca postando todo dia." />
@@ -39,7 +44,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="TrendPulse — sua marca postando todo dia">
     <meta name="twitter:description" content="Você escreve a ideia. A IA entrega o post pronto com a sua cara e publica em 9 redes.">
-    <meta name="twitter:image" content="https://trendpulse.com.br/og.jpg">
+    <meta name="twitter:image" content="https://www.trendpulse.com.br/og.jpg">
 
     <!-- Dado estruturado (JSON-LD).
          O site é um SPA: o HTML servido vem vazio e o conteúdo só existe depois que o JavaScript
@@ -57,28 +62,28 @@
       "@graph": [
         {
           "@type": "Organization",
-          "@id": "https://trendpulse.com.br/#organization",
+          "@id": "https://www.trendpulse.com.br/#organization",
           "name": "TrendPulse",
-          "url": "https://trendpulse.com.br/",
-          "logo": "https://trendpulse.com.br/og.jpg"
+          "url": "https://www.trendpulse.com.br/",
+          "logo": "https://www.trendpulse.com.br/og.jpg"
         },
         {
           "@type": "WebSite",
-          "@id": "https://trendpulse.com.br/#website",
-          "url": "https://trendpulse.com.br/",
+          "@id": "https://www.trendpulse.com.br/#website",
+          "url": "https://www.trendpulse.com.br/",
           "name": "TrendPulse",
           "inLanguage": "pt-BR",
-          "publisher": { "@id": "https://trendpulse.com.br/#organization" }
+          "publisher": { "@id": "https://www.trendpulse.com.br/#organization" }
         },
         {
           "@type": "SoftwareApplication",
-          "@id": "https://trendpulse.com.br/#software",
+          "@id": "https://www.trendpulse.com.br/#software",
           "name": "TrendPulse",
-          "url": "https://trendpulse.com.br/",
+          "url": "https://www.trendpulse.com.br/",
           "applicationCategory": "BusinessApplication",
           "operatingSystem": "Web",
           "inLanguage": "pt-BR",
-          "publisher": { "@id": "https://trendpulse.com.br/#organization" },
+          "publisher": { "@id": "https://www.trendpulse.com.br/#organization" },
           "description": "Você escreve a ideia em português normal e a IA entrega post, carrossel ou story pronto com a identidade da sua marca, para publicar em 9 redes sociais.",
           "featureList": [
             "Geração de post com imagem e legenda a partir de uma frase",
