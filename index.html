@@ -40,6 +40,72 @@
     <meta name="twitter:title" content="TrendPulse — sua marca postando todo dia">
     <meta name="twitter:description" content="Você escreve a ideia. A IA entrega o post pronto com a sua cara e publica em 9 redes.">
     <meta name="twitter:image" content="https://trendpulse.com.br/og.jpg">
+
+    <!-- Dado estruturado (JSON-LD).
+         O site é um SPA: o HTML servido vem vazio e o conteúdo só existe depois que o JavaScript
+         roda. O Googlebot executa JS, mas GPTBot, ClaudeBot e PerplexityBot não — para eles esta
+         página é tudo que existe do produto. Este bloco é a descrição da TrendPulse que eles
+         conseguem ler, e é o que decide se a gente aparece citado quando alguém pergunta a uma IA
+         por ferramenta de geração de conteúdo.
+
+         ⚠️ Os preços abaixo espelham PACOTES em src/lib/precos.ts, que por sua vez espelha
+         public.credit_pricing e o PACKS de create-credit-charge. Preço divulgado diferente do
+         praticado é problema de confiança e de CDC — ao mexer nos pacotes, mexer aqui também. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://trendpulse.com.br/#organization",
+          "name": "TrendPulse",
+          "url": "https://trendpulse.com.br/",
+          "logo": "https://trendpulse.com.br/og.jpg"
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://trendpulse.com.br/#website",
+          "url": "https://trendpulse.com.br/",
+          "name": "TrendPulse",
+          "inLanguage": "pt-BR",
+          "publisher": { "@id": "https://trendpulse.com.br/#organization" }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://trendpulse.com.br/#software",
+          "name": "TrendPulse",
+          "url": "https://trendpulse.com.br/",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "Web",
+          "inLanguage": "pt-BR",
+          "publisher": { "@id": "https://trendpulse.com.br/#organization" },
+          "description": "Você escreve a ideia em português normal e a IA entrega post, carrossel ou story pronto com a identidade da sua marca, para publicar em 9 redes sociais.",
+          "featureList": [
+            "Geração de post com imagem e legenda a partir de uma frase",
+            "Carrossel com fio narrativo entre os slides",
+            "Carrossel editorial com texto sobre foto do próprio usuário",
+            "Story vertical 9:16",
+            "Carrossel de tweet card",
+            "Identidade de marca aplicada automaticamente (paleta, fontes, logo, tom de voz)",
+            "Publicação e agendamento em Instagram, LinkedIn, TikTok, X, Facebook, Pinterest, Bluesky, Threads e YouTube",
+            "Legenda adaptada por rede social"
+          ],
+          "offers": {
+            "@type": "AggregateOffer",
+            "priceCurrency": "BRL",
+            "lowPrice": "100.00",
+            "highPrice": "400.00",
+            "offerCount": 3,
+            "offers": [
+              { "@type": "Offer", "name": "Essencial", "price": "100.00", "priceCurrency": "BRL", "description": "1000 créditos" },
+              { "@type": "Offer", "name": "Constante", "price": "200.00", "priceCurrency": "BRL", "description": "2200 créditos, 10% de bônus" },
+              { "@type": "Offer", "name": "Estúdio", "price": "400.00", "priceCurrency": "BRL", "description": "4800 créditos, 20% de bônus" }
+            ]
+          }
+        }
+      ]
+    }
+    </script>
   </head>
 
   <body translate="no" class="notranslate">
