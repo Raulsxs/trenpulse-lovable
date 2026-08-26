@@ -126,6 +126,13 @@ type Tuite = { t: string; midia?: string };
  * texto, e imagen_post.jpg saiu com texto embolado (perdedor de duelo de modelos).
  */
 const FOTO = {
+  // Geradas na propria plataforma (seedream, via generate-slide-images) para esta seção, com
+  // prompt explicito de "sem texto, sem letras, sem logo" — foto de apoio nunca pode competir
+  // com o texto do card, e um erro de letra ali estragaria o argumento de que o texto sai certo.
+  consultorio: "/showcase/fotos/foto_consultorio.jpg",
+  juridico: "/showcase/fotos/foto_juridico.jpg",
+  mentoria: "/showcase/fotos/foto_mentoria.jpg",
+  // Já existiam no repo, limpas e sem texto.
   escritorio: "/showcase/qwen_photo.jpg",
   alimentos: "/showcase/flux_post.jpg",
 };
@@ -146,12 +153,13 @@ const FOTO = {
  */
 const TWEETS: Record<string, Tuite[]> = {
   medico: [
+    { t: "Pressão alta não dói. É exatamente por isso que ela é perigosa. A maioria descobre num exame de rotina — ou num susto.", midia: FOTO.consultorio },
     { t: "Pressão alta não dói. É exatamente por isso que ela é perigosa.\n\nA maioria descobre num exame de rotina, ou num susto que podia ter sido evitado. Se você tem mais de 40 anos, histórico na família ou passa o dia sentado, **meça a cada seis meses** — mesmo se estiver tudo bem." },
     { t: "Três hábitos mexem mais no seu coração que qualquer remédio:\n→ dormir sete horas\n→ cortar o sal escondido\n→ caminhar trinta minutos\n\nNenhum custa dinheiro. Todos custam constância." },
     { t: "O melhor exame é o que você **faz**, não o que você agenda.\n\nMetade dos pedidos que eu entrego não volta. E quase todo diagnóstico tardio que eu vejo começou assim: com um papel guardado na gaveta." },
   ],
   advogada: [
-    { t: "Assinar no calor do momento custa caro. E quase sempre **dá pra reverter**, se você agir dentro do prazo.", midia: FOTO.escritorio },
+    { t: "Assinar no calor do momento custa caro. E quase sempre **dá pra reverter**, se você agir dentro do prazo.", midia: FOTO.juridico },
     { t: "Justa causa exige prova. Se a empresa não tem:\n→ advertência anterior\n→ documento assinado\n→ testemunha\n\nnão é justa causa. É demissão sem justa causa com outro nome, e você tem direito a tudo." },
     { t: "Você tem **2 anos** para reclamar na Justiça do Trabalho, contando da saída. Dentro desse processo, dá pra cobrar os últimos cinco anos de contrato.\n\nNão é o resto da vida. E o prazo corre mesmo enquanto você decide." },
   ],
@@ -161,6 +169,7 @@ const TWEETS: Record<string, Tuite[]> = {
     { t: "Meta sem dono não é meta. É **desejo**.\n\nSe duas pessoas respondem pelo mesmo número, na prática ninguém responde. E no fim do trimestre as duas vão explicar por que a outra não entregou." },
   ],
   coach: [
+    { t: "Disciplina não é acordar às 5h. É escolher o que você quer **mais** em vez do que quer **agora**.", midia: FOTO.mentoria },
     { t: "Disciplina não é acordar às 5h da manhã.\n\nÉ escolher o que você quer **mais** em vez do que você quer **agora**. E é fazer essa escolha de novo amanhã, num dia em que ninguém está olhando e nada depende disso." },
     { t: "Você não está travado. Você está esperando ter certeza.\n\nA certeza vem depois do primeiro passo, nunca antes dele. Quem espera o cenário perfeito passa a carreira inteira se preparando pra uma largada que não acontece." },
     { t: "O que trava carreira quase nunca é falta de talento:\n→ medo de parecer iniciante\n→ esperar o momento certo\n→ pedir permissão pra começar\n\nOs três têm a mesma raiz, e nenhum se resolve estudando mais." },
@@ -193,8 +202,8 @@ const MOSAICO: [string, "gerados" | "nichos"][] = [
 ];
 
 const PAREDE: { id: string; i: number }[] = [
-  { id: "coach", i: 0 }, { id: "gestor", i: 0 }, { id: "advogada", i: 1 },
-  { id: "medico", i: 1 }, { id: "nutri", i: 0 }, { id: "coach", i: 2 },
+  { id: "coach", i: 0 }, { id: "advogada", i: 0 }, { id: "medico", i: 0 },
+  { id: "gestor", i: 1 }, { id: "nutri", i: 0 }, { id: "coach", i: 2 },
 ];
 
 /** Texto REAL do style_guide de uma marca de verdade — não é exemplo escrito à mão. */
