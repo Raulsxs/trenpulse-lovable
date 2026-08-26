@@ -110,7 +110,25 @@ const Marca = () => (
   </span>
 );
 
-type Tuite = { t: string; midia?: [string, "gerados" | "nichos"] };
+type Tuite = { t: string; midia?: string };
+
+/**
+ * FOTOS para o slot de mídia do tweet card.
+ *
+ * POR QUE FOTO E NÃO PEÇA GERADA: a primeira versão punha um POST PRONTO dentro do card, e post
+ * pronto tem headline própria — o card ficava com duas manchetes brigando ("Disciplina não é
+ * acordar às 5h" por cima de "O corpo avisa antes de falhar"). O slot pede imagem de APOIO.
+ *
+ * E é o que o produto faz: no renderer o comentário é explícito — "Imagem enviada pelo usuário
+ * (não gerada)". A mídia do tweet card é a foto que a PESSOA sobe, não uma peça que a IA desenha.
+ *
+ * São só duas porque são as únicas fotos limpas do repo. As outras de /showcase são peças com
+ * texto, e imagen_post.jpg saiu com texto embolado (perdedor de duelo de modelos).
+ */
+const FOTO = {
+  escritorio: "/showcase/qwen_photo.jpg",
+  alimentos: "/showcase/flux_post.jpg",
+};
 
 /**
  * SÉRIES DE TWEET CARD, uma por perfil.
@@ -128,29 +146,29 @@ type Tuite = { t: string; midia?: [string, "gerados" | "nichos"] };
  */
 const TWEETS: Record<string, Tuite[]> = {
   medico: [
-    { t: "Seu paciente chega quando já dói. **Prevenção** não é exame caro: é rotina simples, repetida.", midia: ["exemplo_prevencao", "gerados"] },
-    { t: "Pressão alta não dói. É exatamente por isso que ela é perigosa.\n\nA maioria descobre num exame de rotina, ou num susto. Meça a sua a cada seis meses, **mesmo se estiver tudo bem**." },
-    { t: "Três hábitos mexem mais no seu coração que qualquer remédio:\n→ dormir 7 horas\n→ cortar o sal escondido\n→ caminhar 30 minutos" },
+    { t: "Pressão alta não dói. É exatamente por isso que ela é perigosa.\n\nA maioria descobre num exame de rotina, ou num susto que podia ter sido evitado. Se você tem mais de 40 anos, histórico na família ou passa o dia sentado, **meça a cada seis meses** — mesmo se estiver tudo bem." },
+    { t: "Três hábitos mexem mais no seu coração que qualquer remédio:\n→ dormir sete horas\n→ cortar o sal escondido\n→ caminhar trinta minutos\n\nNenhum custa dinheiro. Todos custam constância." },
+    { t: "O melhor exame é o que você **faz**, não o que você agenda.\n\nMetade dos pedidos que eu entrego não volta. E quase todo diagnóstico tardio que eu vejo começou assim: com um papel guardado na gaveta." },
   ],
   advogada: [
-    { t: "Assinar no calor do momento custa caro. E quase sempre **dá pra reverter**, se você agir no prazo.", midia: ["adv_acordo", "nichos"] },
-    { t: "Justa causa exige prova. Se a empresa não tem:\n→ advertência anterior\n→ documento assinado\n→ testemunha\nnão é justa causa." },
-    { t: "Você tem **2 anos** para reclamar na Justiça do Trabalho. Não é o resto da vida.", midia: ["adv_justa_causa", "nichos"] },
+    { t: "Assinar no calor do momento custa caro. E quase sempre **dá pra reverter**, se você agir dentro do prazo.", midia: FOTO.escritorio },
+    { t: "Justa causa exige prova. Se a empresa não tem:\n→ advertência anterior\n→ documento assinado\n→ testemunha\n\nnão é justa causa. É demissão sem justa causa com outro nome, e você tem direito a tudo." },
+    { t: "Você tem **2 anos** para reclamar na Justiça do Trabalho, contando da saída. Dentro desse processo, dá pra cobrar os últimos cinco anos de contrato.\n\nNão é o resto da vida. E o prazo corre mesmo enquanto você decide." },
   ],
   gestor: [
-    { t: "Quase toda equipe que parece desmotivada está, na verdade, **confusa**.", midia: ["ges_equipe", "nichos"] },
-    { t: "Antes de demitir, confira três coisas:\n→ ela sabe o que é sucesso aqui?\n→ ela tem a ferramenta?\n→ alguém já foi honesto com ela?" },
-    { t: "Meta sem dono não é meta. É **desejo**. Se duas pessoas respondem pelo mesmo número, ninguém responde.", midia: ["ges_meta", "nichos"] },
+    { t: "Quase toda equipe que parece desmotivada está, na verdade, **confusa**.", midia: FOTO.escritorio },
+    { t: "Antes de demitir, confira três coisas:\n→ ela sabe o que é sucesso aqui?\n→ ela tem a ferramenta certa?\n→ alguém já foi honesto com ela?\n\nSe a resposta for não em alguma, o problema não é a pessoa." },
+    { t: "Meta sem dono não é meta. É **desejo**.\n\nSe duas pessoas respondem pelo mesmo número, na prática ninguém responde. E no fim do trimestre as duas vão explicar por que a outra não entregou." },
   ],
   coach: [
-    { t: "Disciplina não é acordar às 5h. É escolher o que você quer **mais** em vez do que quer **agora**.", midia: ["estilo_dark_editorial", "gerados"] },
-    { t: "Você não está travado. Você está esperando ter certeza.\n\nA certeza vem depois do primeiro passo, nunca antes dele. Comece pequeno e comece hoje." },
-    { t: "O que trava carreira quase nunca é falta de talento:\n→ medo de parecer iniciante\n→ esperar o momento certo\n→ pedir permissão pra começar" },
+    { t: "Disciplina não é acordar às 5h da manhã.\n\nÉ escolher o que você quer **mais** em vez do que você quer **agora**. E é fazer essa escolha de novo amanhã, num dia em que ninguém está olhando e nada depende disso." },
+    { t: "Você não está travado. Você está esperando ter certeza.\n\nA certeza vem depois do primeiro passo, nunca antes dele. Quem espera o cenário perfeito passa a carreira inteira se preparando pra uma largada que não acontece." },
+    { t: "O que trava carreira quase nunca é falta de talento:\n→ medo de parecer iniciante\n→ esperar o momento certo\n→ pedir permissão pra começar\n\nOs três têm a mesma raiz, e nenhum se resolve estudando mais." },
   ],
   nutri: [
-    { t: "Comida de verdade não precisa de marketing. Se você não sabe pronunciar o rótulo, o problema **não é a caloria**.", midia: ["exemplo_alimentacao_saudavel", "gerados"] },
-    { t: "Antes de cortar o carboidrato, tente:\n→ proteína no café da manhã\n→ água antes da fome\n→ mais uma hora de sono" },
-    { t: "O que você adia hoje cobra caro depois. Comece pelo **prato**: é o ajuste mais rápido e mais barato.", midia: ["exemplo_inflamacao", "gerados"] },
+    { t: "Comida de verdade não precisa de marketing. Se você não sabe pronunciar o rótulo, o problema **não é a caloria**.", midia: FOTO.alimentos },
+    { t: "Antes de cortar o carboidrato, tente:\n→ proteína no café da manhã\n→ água antes da fome\n→ mais uma hora de sono\n\nNa maioria dos casos isso resolve o que a dieta restritiva não resolveu." },
+    { t: "O que você adia hoje cobra caro depois. Comece pelo **prato**: é o ajuste que dá resultado mais rápido, o mais barato, e o único que você faz três vezes por dia sem precisar de força de vontade extra." },
   ],
 };
 
@@ -175,8 +193,8 @@ const MOSAICO: [string, "gerados" | "nichos"][] = [
 ];
 
 const PAREDE: { id: string; i: number }[] = [
-  { id: "coach", i: 0 }, { id: "advogada", i: 1 }, { id: "medico", i: 0 },
-  { id: "gestor", i: 2 }, { id: "nutri", i: 1 }, { id: "advogada", i: 2 },
+  { id: "coach", i: 0 }, { id: "gestor", i: 0 }, { id: "advogada", i: 1 },
+  { id: "medico", i: 1 }, { id: "nutri", i: 0 }, { id: "coach", i: 2 },
 ];
 
 /** Texto REAL do style_guide de uma marca de verdade — não é exemplo escrito à mão. */
@@ -472,7 +490,7 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
               <div className="tw">
                 <TweetCard autor={m.autor} handle={m.handle} accent={m.accent} largura={252}
                   texto={TWEETS[m.id][0].t}
-                  midia={TWEETS[m.id][0].midia ? url(TWEETS[m.id][0].midia!) : undefined}
+                  midia={TWEETS[m.id][0].midia}
                   indice={1} total={3} />
               </div>
               <figcaption><strong>Tweet card</strong><span>{CUSTO_TWEET} cr a série</span></figcaption>
@@ -541,7 +559,7 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
               return (
                 <TweetCard key={`${id}-${k}-${n}`} autor={perfil.autor} handle={perfil.handle}
                   accent={perfil.accent} largura={larguraTw} texto={tw.t}
-                  midia={tw.midia ? url(tw.midia) : undefined}
+                  midia={tw.midia}
                   indice={k + 1} total={3} />
               );
             })}
@@ -550,7 +568,7 @@ export default function HistoriaLanding({ onSignup, onLogin }: Props) {
           <div className="parede-pe" data-rv data-d="120">
             <p>
               O texto é desenhado por template, não gerado por modelo de imagem: nunca sai com letra
-              torta, acento faltando ou palavra embolada. A peça de dentro, essa sim, é gerada.
+              torta, acento faltando ou palavra embolada. Quando o card leva foto, a foto é a sua.
             </p>
             <div className="parede-cta">
               <span className="pill">{CUSTO_TWEET} créditos a série</span>
