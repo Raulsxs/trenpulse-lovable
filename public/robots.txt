@@ -1,3 +1,5 @@
+# TrendPulse — https://trendpulse.com.br
+
 User-agent: Googlebot
 Allow: /
 
@@ -10,5 +12,30 @@ Allow: /
 User-agent: facebookexternalhit
 Allow: /
 
+# Crawlers de IA — liberados explicitamente para que a TrendPulse possa ser
+# citada em respostas do ChatGPT, Claude, Perplexity e Gemini.
+User-agent: GPTBot
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-Web
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
 User-agent: *
 Allow: /
+
+Sitemap: https://trendpulse.com.br/sitemap.xml

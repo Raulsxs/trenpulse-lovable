@@ -6,33 +6,100 @@
     <!-- Bloqueia auto-tradução do Chrome — ela manipula o DOM externamente e quebra o React
          com erro "insertBefore: O nó anterior ... não é filho deste nó". -->
     <meta name="google" content="notranslate" />
-    <title>TrendPulse</title>
-    <meta name="description" content="Plataforma de geração de conteúdos">
-    <meta name="author" content="TrendPulse" />
+
+    <title>TrendPulse — Gere posts e carrosséis para Instagram com IA</title>
+    <meta name="description" content="Digite o tema e a IA cria o post. Gere carrosséis e stories com a identidade da sua marca, prontos para publicar no Instagram, LinkedIn e TikTok." />
+    <link rel="canonical" href="https://trendpulse.com.br/" />
+
+    <meta name="author" content="Pulse ID" />
     <meta name="theme-color" content="#7c3aed" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="TrendPulse" />
     <link rel="manifest" href="/manifest.json" />
 
-    <!-- TODO: Update og:title to match your application name -->
-    
-    
+    <!-- Card de preview (WhatsApp, LinkedIn, X). Imagem servida do nosso domínio —
+         a URL antiga apontava para um preview temporário da Lovable, que pode sumir. -->
     <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/b39afbc5-43b6-482d-aaf9-ab9d039d1f63/id-preview-afd8250f--78f6c63c-3aa2-46ee-80d4-f73b74e7b257.lovable.app-1771344908917.png">
+    <meta property="og:site_name" content="TrendPulse" />
+    <meta property="og:locale" content="pt_BR" />
+    <meta property="og:url" content="https://trendpulse.com.br/" />
+    <meta property="og:title" content="TrendPulse — Gere posts e carrosséis para Instagram com IA" />
+    <meta property="og:description" content="Digite o tema e a IA cria o post. Gere carrosséis e stories com a identidade da sua marca, prontos para publicar no Instagram, LinkedIn e TikTok." />
+    <meta property="og:image" content="https://trendpulse.com.br/og-image.png" />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@Lovable" />
-    <meta name="twitter:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/b39afbc5-43b6-482d-aaf9-ab9d039d1f63/id-preview-afd8250f--78f6c63c-3aa2-46ee-80d4-f73b74e7b257.lovable.app-1771344908917.png">
-    
-  
-  
-  
-  <meta property="og:title" content="TrendPulse">
-  <meta name="twitter:title" content="TrendPulse">
-  <meta property="og:description" content="Plataforma de geração de conteúdos">
-  <meta name="twitter:description" content="Plataforma de geração de conteúdos">
-</head>
+    <meta name="twitter:title" content="TrendPulse — Gere posts e carrosséis para Instagram com IA" />
+    <meta name="twitter:description" content="Digite o tema e a IA cria o post. Gere carrosséis e stories com a identidade da sua marca, prontos para publicar no Instagram, LinkedIn e TikTok." />
+    <meta name="twitter:image" content="https://trendpulse.com.br/og-image.png" />
+
+    <!-- JSON-LD: descreve o produto em formato de máquina para Google e crawlers de IA
+         (GPTBot, ClaudeBot, PerplexityBot), que não executam JavaScript e só leem este HTML. -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://trendpulse.com.br/#organization",
+          "name": "Pulse ID",
+          "url": "https://trendpulse.com.br/",
+          "logo": "https://trendpulse.com.br/og-image.png"
+        },
+        {
+          "@type": "WebSite",
+          "@id": "https://trendpulse.com.br/#website",
+          "url": "https://trendpulse.com.br/",
+          "name": "TrendPulse",
+          "inLanguage": "pt-BR",
+          "publisher": { "@id": "https://trendpulse.com.br/#organization" }
+        },
+        {
+          "@type": "SoftwareApplication",
+          "@id": "https://trendpulse.com.br/#software",
+          "name": "TrendPulse",
+          "url": "https://trendpulse.com.br/",
+          "applicationCategory": "BusinessApplication",
+          "applicationSubCategory": "Geração de conteúdo para redes sociais com IA",
+          "operatingSystem": "Web",
+          "inLanguage": "pt-BR",
+          "description": "Plataforma brasileira de geração de conteúdo para redes sociais com IA. O usuário descreve o tema em um chat e recebe posts, carrosséis e stories com a identidade visual da sua marca, prontos para publicar no Instagram, LinkedIn, TikTok, X, Facebook, Pinterest, Bluesky, Threads e YouTube.",
+          "publisher": { "@id": "https://trendpulse.com.br/#organization" },
+          "offers": [
+            {
+              "@type": "Offer",
+              "name": "Free",
+              "price": "0",
+              "priceCurrency": "BRL",
+              "description": "5 gerações por mês, 1 marca."
+            },
+            {
+              "@type": "Offer",
+              "name": "Pro",
+              "price": "147.90",
+              "priceCurrency": "BRL",
+              "description": "100 gerações por mês, 5 marcas."
+            },
+            {
+              "@type": "Offer",
+              "name": "Business",
+              "price": "297.00",
+              "priceCurrency": "BRL",
+              "description": "Gerações ilimitadas, 10 marcas."
+            }
+          ],
+          "featureList": [
+            "Geração de posts e carrosséis com IA",
+            "Identidade visual da marca aplicada automaticamente",
+            "Legendas otimizadas por plataforma",
+            "Publicação em 9 redes sociais",
+            "Agendamento de publicações"
+          ]
+        }
+      ]
+    }
+    </script>
+  </head>
 
   <body translate="no" class="notranslate">
     <div id="root"></div>
