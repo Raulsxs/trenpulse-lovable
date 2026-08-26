@@ -26,6 +26,8 @@ download, assinaturas). Só vende coisa que vai por transportadora. Então:
 | Arquivo | O que é |
 |---|---|
 | `roteiros-tiktok.md` | 30 roteiros de vídeo curto, faceless, para o topo do funil |
+| `ideias-tiktok-virais.md` | 15 ideias de vídeo de **alcance** (público dono de empresa), organizadas por mecanismo |
+| `higgsfield-analise.md` | Se IA de vídeo vale o crédito: análise dos 30 roteiros, regra de decisão e os 3 testes antes de assinar |
 | `kit/biblioteca-de-pautas.md` | 200 pautas (10 nichos x 20) + o método dos 5 tipos de conteúdo |
 | `kit/prompts-prontos.md` | 40 prompts + anatomia do pedido + pedidos de ajuste |
 | `kit/calendario-30-dias.md` | 30 dias planejados + a rotina de 1 hora por semana |
