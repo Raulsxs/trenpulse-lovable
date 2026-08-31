@@ -7,6 +7,10 @@ import { toast } from "sonner";
 import { Check, Copy, Loader2, QrCode, CreditCard } from "lucide-react";
 import { cn } from "@/lib/utils";
 import RedeemCouponForm from "./RedeemCouponForm";
+import { PLANOS, BONUS_RECORRENCIA, creditosDoPlano, CUSTOS } from "@/lib/precos";
+
+/** Custo real de um post. Vem da fonte única — estava chumbado em 8 aqui, e post custa 10. */
+const CUSTO_POST = CUSTOS.find((c) => c.action === "post")?.credits ?? 10;
 
 // Espelha os PACKS da edge function create-credit-charge
 const PACKS = [
@@ -33,6 +37,10 @@ export default function BuyCreditsModal({
   onClose: () => void;
   onCredited?: () => void;
 }) {
+  // RECORRENCIA PRIMEIRO: o modal abre na assinatura, nao na compra avulsa. Quem so quer
+  // recarregar uma vez continua a um clique de distancia, mas o caminho padrao e o mensal.
+  const [modo, setModo] = useState<"assinatura" | "avulso">("assinatura");
+  const [plano, setPlano] = useState(PLANOS[0].id);
   const [pack, setPack] = useState("100");
   const [method, setMethod] = useState<"pix" | "card">("pix");
   const [cpf, setCpf] = useState("");
@@ -58,6 +66,7 @@ export default function BuyCreditsModal({
       if (pollRef.current) clearInterval(pollRef.current);
       setTimeout(() => {
         setCharge(null); setPaid(false); setCpf(""); setLoading(false); setMethod("pix");
+        setModo("assinatura"); setPlano(PLANOS[0].id);
         setCardNumber(""); setCardName(""); setCardExpiry(""); setCardCcv(""); setCep(""); setAddrNum(""); setPhone("");
       }, 200);
     }
@@ -101,6 +110,33 @@ export default function BuyCreditsModal({
     }
   }
 
+  async function handleSubscribe() {
+    const digits = cpf.replace(/\D/g, "");
+    if (digits.length !== 11 && digits.length !== 14) { toast.error("Informe um CPF ou CNPJ válido"); return; }
+    const [mm, aa] = cardExpiry.split("/").map((s) => s.trim());
+    if (!cardNumber || !cardName || !mm || !aa || !cardCcv) { toast.error("Preencha os dados do cartão"); return; }
+    if (!cep || !addrNum || !phone) { toast.error("Preencha CEP, número e telefone do titular"); return; }
+    setLoading(true);
+    try {
+      startBalance.current = await readBalance();
+      const { data, error } = await supabase.functions.invoke("create-credit-charge", {
+        body: {
+          plano, cpfCnpj: digits,
+          card: { number: cardNumber, holderName: cardName, expiryMonth: mm, expiryYear: aa.length === 2 ? `20${aa}` : aa, ccv: cardCcv },
+          holder: { postalCode: cep, addressNumber: addrNum, phone },
+        },
+      });
+      if (error || data?.error) throw new Error(data?.error || error?.message || "Falha ao assinar");
+      // A assinatura foi criada; o credito do primeiro ciclo cai pelo webhook, como na avulsa.
+      toast.success("Assinatura criada. Os créditos caem em instantes.");
+      pollUntilCredited();
+    } catch (e: any) {
+      toast.error(e.message || "Não foi possível assinar. Tente outro cartão.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function readBalance(): Promise<number> {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return 0;
@@ -138,6 +174,9 @@ export default function BuyCreditsModal({
   }
 
   const selected = PACKS.find((p) => p.id === pack)!;
+  const planoSel = PLANOS.find((x) => x.id === plano) ?? PLANOS[0];
+  /** Créditos do que está escolhido AGORA — plano (com bônus) ou pacote avulso. */
+  const creditosDaEscolha = modo === "assinatura" ? creditosDoPlano(planoSel) : selected.credits;
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
@@ -180,28 +219,72 @@ export default function BuyCreditsModal({
           </div>
         ) : (
           <div className="space-y-4 py-1">
-            <div className="grid grid-cols-3 gap-2">
-              {PACKS.map((p) => (
+            {/* MODO: assinatura primeiro. Ordem importa — o que aparece antes vira o padrão
+                mental, e o objetivo aqui é recorrência, não recarga avulsa. */}
+            <div className="flex gap-1 rounded-lg bg-muted/40 p-1">
+              {([
+                { id: "assinatura", label: "Mensal", nota: `+${BONUS_RECORRENCIA} créditos` },
+                { id: "avulso", label: "Uma vez", nota: null },
+              ] as const).map((o) => (
                 <button
-                  key={p.id}
-                  onClick={() => setPack(p.id)}
+                  key={o.id}
+                  onClick={() => setModo(o.id)}
                   className={cn(
-                    "rounded-xl border p-3 text-center transition-all",
-                    pack === p.id
-                      ? "border-primary bg-primary/5 ring-1 ring-primary/30"
-                      : "border-border hover:border-primary/40",
+                    "flex-1 rounded-md py-2 text-xs font-semibold transition-colors",
+                    modo === o.id ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
                   )}
                 >
-                  <div className="text-sm font-semibold text-foreground">R${p.value}</div>
-                  <div className="text-[11px] text-muted-foreground">{p.credits} créditos</div>
-                  {p.bonus && <div className="text-[10px] text-emerald-600 font-medium mt-0.5">{p.bonus}</div>}
+                  {o.label}
+                  {o.nota && (
+                    <span className={cn("ml-1.5 text-[10px] font-bold", modo === o.id ? "text-emerald-600" : "text-emerald-600/70")}>
+                      {o.nota}
+                    </span>
+                  )}
                 </button>
               ))}
             </div>
 
-            {/* Tradução crédito → resultado (ancoragem: psicologia do plano-ideal) */}
+            <div className="grid grid-cols-3 gap-2">
+              {modo === "assinatura"
+                ? PLANOS.map((pl) => (
+                    <button
+                      key={pl.id}
+                      onClick={() => setPlano(pl.id)}
+                      className={cn(
+                        "rounded-xl border p-3 text-center transition-all",
+                        plano === pl.id
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "border-border hover:border-primary/40",
+                      )}
+                    >
+                      <div className="text-sm font-semibold text-foreground">R${pl.precoReais}<span className="text-[10px] font-normal text-muted-foreground">/mês</span></div>
+                      <div className="text-[11px] text-muted-foreground">{creditosDoPlano(pl).toLocaleString("pt-BR")} créditos</div>
+                      <div className="text-[10px] text-emerald-600 font-medium mt-0.5">+{BONUS_RECORRENCIA} de bônus</div>
+                    </button>
+                  ))
+                : PACKS.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => setPack(p.id)}
+                      className={cn(
+                        "rounded-xl border p-3 text-center transition-all",
+                        pack === p.id
+                          ? "border-primary bg-primary/5 ring-1 ring-primary/30"
+                          : "border-border hover:border-primary/40",
+                      )}
+                    >
+                      <div className="text-sm font-semibold text-foreground">R${p.value}</div>
+                      <div className="text-[11px] text-muted-foreground">{p.credits} créditos</div>
+                      {p.bonus && <div className="text-[10px] text-emerald-600 font-medium mt-0.5">{p.bonus}</div>}
+                    </button>
+                  ))}
+            </div>
+
+            {/* Tradução crédito → resultado. O divisor vinha chumbado em 8, mas post custa
+                CUSTO_POST (10): a linha prometia 25% mais post do que o saldo paga. */}
             <div className="rounded-lg border border-[hsl(var(--credit))]/25 bg-[hsl(var(--credit-bg))] px-3 py-2 text-center text-xs font-medium text-[hsl(var(--credit))] tabular-nums">
-              {selected.credits.toLocaleString("pt-BR")} créditos ≈ {Math.floor(selected.credits / 8)} posts com imagem · não expiram
+              {creditosDaEscolha.toLocaleString("pt-BR")} créditos ≈ {Math.floor(creditosDaEscolha / CUSTO_POST)} posts com imagem
+              {modo === "assinatura" ? " · todo mês, cancela quando quiser" : " · não expiram"}
             </div>
 
             {/* Cupom aqui é o ponto de MAIOR intenção: quem abriu este modal está sem crédito e
@@ -220,29 +303,39 @@ export default function BuyCreditsModal({
               </button>
             )}
 
-            {/* Abas de método */}
-            <div className="flex gap-1 rounded-lg bg-muted/40 p-1">
-              {(["pix", "card"] as const).map((m) => (
-                <button
-                  key={m}
-                  onClick={() => setMethod(m)}
-                  className={cn(
-                    "flex-1 inline-flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition-colors",
-                    method === m ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {m === "pix" ? <QrCode className="w-3.5 h-3.5" /> : <CreditCard className="w-3.5 h-3.5" />}
-                  {m === "pix" ? "PIX · na hora" : "Cartão"}
-                </button>
-              ))}
-            </div>
+            {/* Abas de método só na compra avulsa. Assinatura é cartão e ponto: assinatura PIX
+                no Asaas gera um QR novo por ciclo pra pagar na mão — chamar isso de "renova
+                sozinho" seria prometer o que o meio de pagamento não faz. */}
+            {modo === "avulso" ? (
+              <div className="flex gap-1 rounded-lg bg-muted/40 p-1">
+                {(["pix", "card"] as const).map((m) => (
+                  <button
+                    key={m}
+                    onClick={() => setMethod(m)}
+                    className={cn(
+                      "flex-1 inline-flex items-center justify-center gap-1.5 rounded-md py-1.5 text-xs font-semibold transition-colors",
+                      method === m ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {m === "pix" ? <QrCode className="w-3.5 h-3.5" /> : <CreditCard className="w-3.5 h-3.5" />}
+                    {m === "pix" ? "PIX · na hora" : "Cartão"}
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-muted-foreground text-center">
+                No cartão, renova todo mês. Cancela quando quiser, no Perfil.
+              </p>
+            )}
 
             <div>
               <label className="text-xs font-medium text-muted-foreground mb-1.5 block">CPF/CNPJ</label>
               <Input value={cpf} onChange={(e) => setCpf(e.target.value)} placeholder="000.000.000-00" inputMode="numeric" />
             </div>
 
-            {method === "pix" ? (
+            {/* Assinatura usa o MESMO formulario de cartao da compra avulsa — so muda o handler
+                e o rotulo. Duplicar os campos aqui seria duas telas pra manter e duas pra errar. */}
+            {modo === "avulso" && method === "pix" ? (
               <Button onClick={handleGenerate} disabled={loading} className="w-full gap-2">
                 {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <QrCode className="w-4 h-4" />}
                 Gerar PIX de R${selected.value}
@@ -260,11 +353,16 @@ export default function BuyCreditsModal({
                   <Input value={addrNum} onChange={(e) => setAddrNum(e.target.value)} placeholder="Nº" inputMode="numeric" />
                   <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Telefone" inputMode="numeric" />
                 </div>
-                <Button onClick={handleCardPay} disabled={loading} className="w-full gap-2">
+                <Button onClick={modo === "assinatura" ? handleSubscribe : handleCardPay} disabled={loading} className="w-full gap-2">
                   {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : <CreditCard className="w-4 h-4" />}
-                  Pagar R${selected.value} no cartão
+                  {modo === "assinatura"
+                    ? `Assinar por R$${planoSel.precoReais}/mês`
+                    : `Pagar R$${selected.value} no cartão`}
                 </Button>
-                <p className="text-[10px] text-muted-foreground text-center">🔒 Processado pelo Asaas. Os créditos caem em até 1 min.</p>
+                <p className="text-[10px] text-muted-foreground text-center">
+                  🔒 Processado pelo Asaas. Os créditos caem em até 1 min.
+                  {modo === "assinatura" && " Sem fidelidade — cancela quando quiser."}
+                </p>
               </div>
             )}
           </div>

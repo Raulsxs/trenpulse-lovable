@@ -100,3 +100,46 @@ export const postsPorPacote = (p: PacoteCreditos): number =>
 /** Idem para carrossel, assumindo o tamanho mais comum. */
 export const carrosseisPorPacote = (p: PacoteCreditos, slides = 5): number =>
   Math.floor(p.creditos / (custo("carousel_slide") * slides));
+
+/* ── Recorrência ──────────────────────────────────────────────────────────── */
+
+export interface PlanoRecorrente {
+  /** Chave em PLANOS de create-credit-charge — é ela que cobra. */
+  id: string;
+  nome: string;
+  precoReais: number;
+  /** Créditos do pacote avulso equivalente. */
+  creditosBase: number;
+  destaque?: boolean;
+}
+
+/**
+ * BÔNUS DE RECORRÊNCIA: créditos a mais, todo mês, por assinar em vez de comprar avulso.
+ * Vale igual em todos os planos de propósito — é um empurrão pra recorrência, não um degrau
+ * de volume (esse já existe nos PACOTES, via +10% e +20%).
+ */
+export const BONUS_RECORRENCIA = 100;
+
+/**
+ * PLANOS RECORRENTES. Mesmos preços dos pacotes avulsos; o que muda é o bônus e o fato de
+ * renovar sozinho.
+ *
+ * ⚠️ SÓ NO CARTÃO. Assinatura PIX no Asaas não cobra sozinha: ela gera um boleto/QR novo a cada
+ * ciclo que a pessoa precisa pagar na mão — ou seja, não é recorrência de verdade do ponto de
+ * vista de quem assina. Por isso a UI oferece recorrência apenas no cartão, e o PIX segue como
+ * compra avulsa.
+ *
+ * ⚠️ ESTES VALORES PRECISAM BATER com PLANOS em supabase/functions/create-credit-charge/index.ts.
+ */
+export const PLANOS: PlanoRecorrente[] = [
+  { id: "mensal-100", nome: "Essencial", precoReais: 100, creditosBase: 1000, destaque: true },
+  { id: "mensal-200", nome: "Constante", precoReais: 200, creditosBase: 2200 },
+  { id: "mensal-400", nome: "Estúdio", precoReais: 400, creditosBase: 4800 },
+];
+
+/** Créditos que caem por mês num plano: base do pacote + bônus de recorrência. */
+export const creditosDoPlano = (p: PlanoRecorrente): number => p.creditosBase + BONUS_RECORRENCIA;
+
+/** Quantos posts por mês o plano paga. */
+export const postsPorPlano = (p: PlanoRecorrente): number =>
+  Math.floor(creditosDoPlano(p) / custo("post"));

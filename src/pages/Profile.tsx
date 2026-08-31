@@ -17,6 +17,10 @@ import ImageEditorModal from "@/components/ui/ImageEditorModal";
 import ProfilePreferences from "@/components/profile/ProfilePreferences";
 import SocialConnections from "@/components/profile/SocialConnections";
 import BuyCreditsModal from "@/components/billing/BuyCreditsModal";
+import { CUSTOS } from "@/lib/precos";
+
+/** Custo real de um post, da fonte única. Estava chumbado em 8 aqui — post custa 10. */
+const CUSTO_POST = CUSTOS.find((c) => c.action === "post")?.credits ?? 10;
 import { useCredits } from "@/hooks/useCredits";
 import { Camera } from "lucide-react";
 
@@ -64,7 +68,35 @@ const Profile = () => {
   const [tab, setTab] = useState("conta");
   const [profile, setProfile] = useState<ProfileRow | null>(null);
   const [buyOpen, setBuyOpen] = useState(false);
+  // Assinatura ativa, se houver. RLS deixa o dono ler a propria linha.
+  const [assinatura, setAssinatura] = useState<{ value_brl: number; credits_per_cycle: number; next_due_date: string | null } | null>(null);
+  const [cancelando, setCancelando] = useState(false);
   const { balance, loading: creditsLoading, refresh: refreshCredits } = useCredits();
+
+  const carregarAssinatura = async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+    const { data } = await (supabase as any).from("credit_subscriptions")
+      .select("value_brl, credits_per_cycle, next_due_date")
+      .eq("user_id", user.id).eq("status", "active").maybeSingle();
+    setAssinatura(data ?? null);
+  };
+  useEffect(() => { carregarAssinatura(); }, []);
+
+  async function cancelarAssinatura() {
+    if (!window.confirm("Cancelar a assinatura? Os créditos que você já recebeu continuam seus; só não haverá cobrança no próximo mês.")) return;
+    setCancelando(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("cancel-subscription", { body: {} });
+      if (error || data?.error) throw new Error(data?.error || error?.message || "Falha ao cancelar");
+      toast.success("Assinatura cancelada. Não haverá nova cobrança.");
+      setAssinatura(null);
+    } catch (e: any) {
+      toast.error(e.message || "Não foi possível cancelar. Fale com o suporte.");
+    } finally {
+      setCancelando(false);
+    }
+  }
   const [editorFile, setEditorFile] = useState<File | null>(null);
   const [editorOpen, setEditorOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -290,11 +322,32 @@ const Profile = () => {
           <span className="text-sm text-muted-foreground">créditos</span>
         </div>
         <p className="text-xs text-muted-foreground -mt-1">
-          ≈ {Math.floor((balance ?? 0) / 8)} posts com imagem · não expiram
+          ≈ {Math.floor((balance ?? 0) / CUSTO_POST)} posts com imagem · não expiram
         </p>
+        {assinatura ? (
+          <div className="rounded-lg border border-emerald-500/25 bg-emerald-500/5 p-3 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-semibold text-emerald-700 dark:text-emerald-400">Assinatura mensal ativa</span>
+              <span className="text-xs text-muted-foreground tabular-nums">R${Number(assinatura.value_brl).toFixed(0)}/mês</span>
+            </div>
+            <p className="text-[11px] text-muted-foreground leading-snug">
+              {assinatura.credits_per_cycle.toLocaleString("pt-BR")} créditos por mês
+              {assinatura.next_due_date && ` · renova em ${new Date(assinatura.next_due_date + "T12:00:00").toLocaleDateString("pt-BR")}`}
+            </p>
+            {/* Cancelar tem que estar AQUI, no mesmo lugar onde a pessoa assinou — e nao num email
+                ou num contato com suporte. Alem de ser o certo, e o que o CDC pede. */}
+            <button
+              onClick={cancelarAssinatura}
+              disabled={cancelando}
+              className="text-[11px] text-muted-foreground hover:text-destructive underline underline-offset-2 disabled:opacity-50"
+            >
+              {cancelando ? "Cancelando…" : "Cancelar assinatura"}
+            </button>
+          </div>
+        ) : null}
         <Button onClick={() => setBuyOpen(true)} className="w-full gap-2">
           <Sparkles className="w-4 h-4" />
-          Recarregar créditos
+          {assinatura ? "Comprar créditos avulsos" : "Recarregar créditos"}
         </Button>
       </CardContent>
     </Card>

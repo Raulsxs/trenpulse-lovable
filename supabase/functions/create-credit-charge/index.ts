@@ -25,6 +25,23 @@ const PACKS: Record<string, { value: number; credits: number }> = {
   "400": { value: 400, credits: 4800 },    // +20% bônus
 };
 
+/**
+ * PLANOS RECORRENTES (assinatura mensal). Mesmos preços dos packs; o que muda é o BÔNUS de
+ * recorrência e o fato de renovar sozinho.
+ *
+ * ⚠️ ESPELHA PLANOS/BONUS_RECORRENCIA em src/lib/precos.ts.
+ *
+ * ⚠️ SÓ CARTÃO. Assinatura PIX no Asaas não cobra sozinha — gera um QR novo a cada ciclo pra
+ * pessoa pagar na mão, o que não é recorrência do ponto de vista de quem assina. Oferecer isso
+ * como "renova sozinho" seria prometer o que o meio de pagamento não entrega.
+ */
+const BONUS_RECORRENCIA = 100;
+const PLANOS: Record<string, { value: number; credits: number }> = {
+  "mensal-100": { value: 100, credits: 1000 + BONUS_RECORRENCIA },
+  "mensal-200": { value: 200, credits: 2200 + BONUS_RECORRENCIA },
+  "mensal-400": { value: 400, credits: 4800 + BONUS_RECORRENCIA },
+};
+
 async function asaas(path: string, method: string, body?: unknown) {
   const key = Deno.env.get("ASAAS_PROD_KEY");
   if (!key) throw new Error("ASAAS_PROD_KEY não configurada");
@@ -53,12 +70,18 @@ Deno.serve(async (req) => {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return json({ error: "Unauthorized" }, 401);
 
-    const { pack, cpfCnpj, name, method, card, holder } = await req.json();
-    const p = PACKS[String(pack)];
+    const { pack, plano, cpfCnpj, name, method, card, holder } = await req.json();
+
+    // Assinatura e recarga avulsa compartilham cliente Asaas e validação de CPF; o que muda é o
+    // endpoint (/subscriptions x /payments) e o prefixo do externalReference.
+    const assinatura = plano ? PLANOS[String(plano)] : null;
+    if (plano && !assinatura) return json({ error: "Plano inválido" }, 400);
+    const p = assinatura || PACKS[String(pack)];
     if (!p) return json({ error: "Pacote inválido" }, 400);
+
     const cpf = (cpfCnpj || "").replace(/\D/g, "");
     if (cpf.length !== 11 && cpf.length !== 14) return json({ error: "CPF/CNPJ inválido" }, 400);
-    const payMethod = method === "card" ? "card" : "pix";
+    const payMethod = assinatura ? "card" : (method === "card" ? "card" : "pix");
 
     // 1. Find-or-create customer Asaas (externalReference = user.id)
     let customerId: string;
@@ -73,6 +96,81 @@ Deno.serve(async (req) => {
         externalReference: user.id,
       });
       customerId = created.id;
+    }
+
+    // ── ASSINATURA MENSAL ────────────────────────────────────────────────────
+    // O Asaas COPIA o externalReference da assinatura pra cada cobranca que ela gera, e cada
+    // cobranca tem id proprio. Entao o asaas-webhook credita todo mes sozinho, sem nenhuma
+    // mudanca de fluxo: ele so precisa reconhecer o prefixo "sub:" alem de "topup:".
+    // A idempotencia continua sendo por credit_ledger(payment_ref) = id da cobranca do ciclo.
+    if (assinatura) {
+      if (!card?.number || !card?.holderName || !card?.expiryMonth || !card?.expiryYear || !card?.ccv) {
+        return json({ error: "Dados do cartão incompletos." }, 400);
+      }
+      if (!holder?.postalCode || !holder?.addressNumber || !holder?.phone) {
+        return json({ error: "Informe CEP, número e telefone do titular." }, 400);
+      }
+
+      // Ja existe assinatura ativa? Barra ANTES de criar no Asaas — criar e depois falhar no
+      // insert deixaria o usuario pagando uma assinatura que o nosso banco nao conhece.
+      const svc = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+      const { data: ativa } = await svc.from("credit_subscriptions")
+        .select("id").eq("user_id", user.id).eq("status", "active").limit(1);
+      if (ativa && ativa.length > 0) {
+        return json({ error: "Você já tem uma assinatura ativa." }, 409);
+      }
+
+      const remoteIp = (req.headers.get("x-forwarded-for") || "").split(",")[0].trim() || "0.0.0.0";
+      const hoje = new Date().toISOString().slice(0, 10);
+      const sub = await asaas("/subscriptions", "POST", {
+        customer: customerId,
+        billingType: "CREDIT_CARD",
+        value: p.value,
+        nextDueDate: hoje,          // primeira cobranca hoje
+        cycle: "MONTHLY",
+        description: `TrendPulse — ${p.credits} créditos por mês (R$${p.value})`,
+        externalReference: `sub:${user.id}:${p.credits}`,
+        creditCard: {
+          holderName: card.holderName,
+          number: (card.number || "").replace(/\s/g, ""),
+          expiryMonth: card.expiryMonth,
+          expiryYear: card.expiryYear,
+          ccv: card.ccv,
+        },
+        creditCardHolderInfo: {
+          name: card.holderName,
+          email: user.email,
+          cpfCnpj: cpf,
+          postalCode: (holder.postalCode || "").replace(/\D/g, ""),
+          addressNumber: String(holder.addressNumber),
+          phone: (holder.phone || "").replace(/\D/g, ""),
+        },
+        remoteIp,
+      });
+
+      // Espelha o estado. Se este insert falhar, a assinatura EXISTE no Asaas e o usuario sera
+      // cobrado — por isso o erro e logado alto: e caso de intervencao manual, nao de silencio.
+      const { error: insErr } = await svc.from("credit_subscriptions").insert({
+        user_id: user.id,
+        asaas_subscription_id: sub.id,
+        plan_id: String(plano),
+        value_brl: p.value,
+        credits_per_cycle: p.credits,
+        status: "active",
+        next_due_date: sub.nextDueDate || hoje,
+      });
+      if (insErr) {
+        console.error(`[create-credit-charge] ASSINATURA ORFA no Asaas: ${sub.id} user=${user.id} — ${insErr.message}`);
+      }
+
+      return json({
+        subscriptionId: sub.id,
+        credits: p.credits,
+        value: p.value,
+        method: "card",
+        recorrente: true,
+        nextDueDate: sub.nextDueDate || hoje,
+      });
     }
 
     const dueDate = new Date(Date.now() + 2 * 86400000).toISOString().slice(0, 10); // +2 dias
