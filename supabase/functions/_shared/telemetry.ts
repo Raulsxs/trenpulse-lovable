@@ -38,9 +38,16 @@ async function svc(): Promise<SupabaseLike | null> {
   const url = Deno.env.get("SUPABASE_URL");
   const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !key) return null;
-  // Especificador em variável + @vite-ignore: sem isso o Vite tenta resolver `npm:` em tempo de
-  // build (ele analisa até import dinâmico) e derruba o teste unitário do openrouter, que roda em Node.
-  const spec = "npm:@supabase/supabase-js@2";
+  // Especificador em variável + @vite-ignore: sem isso o Vite tenta resolver em tempo de build
+  // (ele analisa até import dinâmico) e derruba o teste unitário do openrouter, que roda em Node.
+  //
+  // URL, NÃO `npm:`. Com "npm:@supabase/supabase-js@2" o runtime deployado falhava em TODA escrita:
+  //   [telemetry] falhou (ignorado): Could not find constraint '@supabase/supabase-js@2'
+  //     in the list of packages.
+  // O deploy resolve dependências estaticamente, e um especificador `npm:` que só existe dentro de
+  // uma variável não é visto — o pacote não entra no bundle. Import por URL o Deno resolve em
+  // runtime, sem depender do bundler. É o mesmo especificador que as outras funções já usam.
+  const spec = "https://esm.sh/@supabase/supabase-js@2";
   const { createClient } = await import(/* @vite-ignore */ spec);
   client = createClient(url, key) as unknown as SupabaseLike;
   return client;
