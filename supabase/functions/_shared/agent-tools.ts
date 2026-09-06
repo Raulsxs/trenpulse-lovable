@@ -104,11 +104,12 @@ export const AGENT_TOOLS = [
   },
   {
     name: "gerar_story",
-    description: "Cria um Story 9:16 vertical sobre um tema. Chame quando o usuário pede story.",
+    description: "Cria um Story 9:16 vertical sobre um tema. Chame quando o usuário pede story. Se ele pedir story DO POST/CARROSSEL que você acabou de gerar ('faz um story desse post', 'story do post acima'), passe TAMBÉM o contentId da geração anterior — sem ele o story sai genérico, porque o tema vira a frase do pedido em vez do assunto real.",
     input_schema: {
       type: "object",
       properties: {
-        tema: { type: "string" },
+        tema: { type: "string", description: "O ASSUNTO do story (NÃO uma instrução e NÃO uma referência). Errado: 'do post acima', 'faz um story disso'. Certo: 'sinais de síndrome cardiometabólica em jovens'. Se o usuário se referir a um post anterior, escreva aqui o assunto DAQUELE post." },
+        contentId: { type: "string", description: "ID da geração de origem quando o story vem de um post/carrossel já criado (aparece como content_id=... nos resultados anteriores). Use o mais recente. OPCIONAL: se o usuário se referiu ao post anterior mas você não tem o id, OMITA — a ferramenta pega a última geração automaticamente." },
         plataforma: { type: "string", enum: ["instagram", "linkedin", "facebook", "tiktok"], description: "Preencha quando o usuário nomear a rede. Omitir = instagram." },
         brandId: { type: "string" },
       },
@@ -403,7 +404,50 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
     }
     case "gerar_story": {
       const refs = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
-      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "story", platform: input.plataforma, brandId, model, imageUrls: refs.length ? refs : undefined, replicateRef: refs.length ? true : undefined }), "Story");
+
+      // BUG QUE ISTO CORRIGE (Maikon, 2026-09-01): "pode criar um storie agora do post acima" fazia
+      // o story sair com "CONFIRA O POST COMPLETO NOS DESTAQUES / Não perca essa oportunidade
+      // especial" — texto genérico que não tinha nada a ver com o post de cardiologia.
+      //
+      // Por quê: o `tema` ia cru pro ai-chat, que sem artigo passa o texto por um brief (o "A2") pra
+      // virar manchete. O brief recebia a FRASE DO PEDIDO, não um assunto — e um modelo obrigado a
+      // produzir manchete a partir de "do post acima" inventa chamada de marketing.
+      //
+      // Agora a referência é resolvida ANTES: pega a peça de origem e monta um tema de verdade com o
+      // título e a legenda dela. Só entra quando o tema É uma referência — tema real passa direto.
+      let temaStory = String(input.tema || "").trim();
+      const soReferencia = temaStory.length < 60 &&
+        /(post|carrossel|conte[úu]do|imagem|pe[çc]a)\s+(acima|anterior|de cima|que (voc[êe]|vc) (fez|gerou|criou))/i.test(temaStory)
+        || /^(desse|deste|dess[ae] post|do post|disso|do mesmo|igual ao de cima)/i.test(temaStory);
+
+      if (input.contentId || soReferencia) {
+        const SELS = "id, title, caption, slides, created_at";
+        let origem: any = null;
+        if (input.contentId) {
+          const { data } = await ctx.userClient.from("generated_contents").select(SELS).eq("id", input.contentId).maybeSingle();
+          origem = data || null;
+        }
+        if (!origem) {
+          // RLS garante que só enxerga o próprio conteúdo.
+          const { data: recentes } = await ctx.userClient.from("generated_contents").select(SELS)
+            .order("created_at", { ascending: false }).limit(5);
+          origem = (recentes || []).find((r: any) => r?.title || r?.caption) || null;
+        }
+        if (origem) {
+          // Legenda cortada: o brief só precisa do assunto, e legenda inteira com hashtag empurra o
+          // modelo a copiar hashtag pra dentro da arte.
+          const legenda = String(origem.caption || "").split(/#/)[0].trim().slice(0, 400);
+          const partes = [origem.title, legenda].filter(Boolean);
+          if (partes.length) {
+            temaStory = partes.join(". ");
+            console.log(`[agent-tools] gerar_story: referência resolvida -> conteúdo ${origem.id}`);
+          }
+        } else if (soReferencia) {
+          return { ok: false, content: "Não achei o post anterior pra transformar em story. Me diz o assunto do story que eu faço." };
+        }
+      }
+
+      return genResult(await callAiChat(ctx, { message: temaStory, intent_hint: "GENERATE", format: "story", platform: input.plataforma, brandId, model, imageUrls: refs.length ? refs : undefined, replicateRef: refs.length ? true : undefined }), "Story");
     }
     case "gerar_tweet_card": {
       // Fotos anexadas viram MÍDIA dentro dos cards (não gera imagem). O LLM não conhece as URLs.
