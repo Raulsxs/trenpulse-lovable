@@ -36,3 +36,7 @@ verify_jwt = false
 # a função se auto-protege (getUser p/ user JWT, comparação com a service key p/ interno).
 [functions.process-generation-jobs]
 verify_jwt = false
+
+# MCP: a autenticacao e o PAT (Authorization: Bearer tp_pat_...), nao JWT do Supabase.
+[functions.mcp]
+verify_jwt = false

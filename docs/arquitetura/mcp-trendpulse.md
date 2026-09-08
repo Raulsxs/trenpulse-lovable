@@ -4,8 +4,8 @@
 mandar a arte que o agente acabou de criar pro calendário, agendar, listar marcas e contas, checar
 saldo — sem que a pessoa saia pra outra aba.
 
-**Estado:** Fase 1 no ar (tokens). Transporte revisto para remoto em 2026-09-07.
-**Nada é conectável ainda** — não existe servidor MCP até a Fase 6.
+**Estado:** servidor MCP NO AR e conectável (2026-09-08). Fases 1 e 6 entregues.
+Instalação em `docs/mcp-instalacao.md`. Falta a tela de tokens (2) e o `agendar_arte` (4).
 **Origem:** reunião Raul × Dr. Maikon, 2026-09-06.
 
 ---
@@ -157,9 +157,11 @@ alternativo de cobrança aqui viraria buraco de margem.
    `agendar_arte` recusa quando já há conteúdo no mesmo horário exato.
 3. **Imagem grande estourando a edge function.** A geração já bateu no teto de memória antes (o bug
    do `logo-overlay`). Mitigação: limite de tamanho explícito no upload e erro claro, não timeout.
-4. **Maikon tem 0 contas sociais conectadas hoje** (verificado). O MCP vai agendar num vazio se ele
-   não conectar antes. Mitigação: `listar_contas` retorna aviso explícito quando vier vazio, e a
-   config entregue pra ele vem junto com o passo de conectar.
+4. ~~Maikon tem 0 contas sociais conectadas~~ — **ERRADO, corrigido em 2026-09-08.** Eu tinha
+   consultado a tabela `social_connections`, mas quem manda é a API do Post for Me (o CLAUDE.md diz
+   isso explicitamente e eu passei por cima). Pelo MCP: **9 contas conectadas** — LinkedIn (Douglas,
+   Maikon, DrEscala, AGES), Instagram (agessaude, hearttsurgery, maikonmadeira) e X. Não há risco de
+   agendar no vazio.
 5. **Fuso horário.** Ele opera em SC, Goiânia, BH e Rio. Agendar em UTC sem dizer isso gera post às
    3h da manhã. Mitigação: a API aceita e devolve horário com fuso explícito.
 6. **npm scope `@trendpulse`** pode não estar registrado. Verificar antes da Fase 3.
@@ -177,7 +179,7 @@ alternativo de cobrança aqui viraria buraco de margem.
       cria `generated_contents` agendado. É ela que resolve o problema do Maikon.
 - [ ] **5. Curadoria do catálogo.** Das 24 tools, decidir quais o MCP expõe. Expor todas seria
       ruído pro agente; `publicar_agora` fica fora por decisão de produto.
-- [ ] **6. Servidor MCP remoto.** Edge function `mcp` falando streamable HTTP, expondo o catálogo de
+- [x] **6. Servidor MCP remoto.** Edge function `mcp` falando streamable HTTP, expondo o catálogo de
       `agent-tools.ts`, autenticada por PAT. Config de duas linhas para Claude e Codex.
 - [ ] **7. Fluxo de aprovação.** "Aprovar a semana" na UI do calendário — o pedido explícito do Maikon.
 - [ ] **8. Teste de ponta a ponta com o Maikon**, numa marca real, agendando uma semana.
