@@ -4,7 +4,8 @@
 mandar a arte que o agente acabou de criar pro calendário, agendar, listar marcas e contas, checar
 saldo — sem que a pessoa saia pra outra aba.
 
-**Estado:** proposta. Nada implementado além da Fase 1.
+**Estado:** Fase 1 no ar (tokens). Transporte revisto para remoto em 2026-09-07.
+**Nada é conectável ainda** — não existe servidor MCP até a Fase 6.
 **Origem:** reunião Raul × Dr. Maikon, 2026-09-06.
 
 ---
@@ -71,37 +72,58 @@ mesma API.
   pede `read` + `schedule` + `generate`; `publish` (disparo imediato) fica de fora por padrão,
   porque publicar sem revisão é o oposto do que ele pediu.
 
-### 3.3 Transporte: stdio via `npx`, na v1
+### 3.3 Transporte: REMOTO (streamable HTTP), não stdio
 
-Duas opções reais:
+**Esta decisão foi revista.** A primeira versão deste doc escolheu stdio via `npx`, com o Maikon em
+mente. Quando o objetivo passou a ser *qualquer cliente conectar*, stdio deixou de servir: exige
+Node na máquina e edição de arquivo de config. Nenhum médico faz isso, e um produto self-serve não
+pode depender de o Raul colar JSON pra cada cliente.
 
-| | stdio (`npx @trendpulse/mcp`) | remoto (HTTP streamable) |
-|---|---|---|
-| Claude Desktop | sim | sim |
-| Codex CLI | sim | parcial |
-| Instalação | precisa de Node na máquina | nenhuma |
-| Config | um bloco JSON | uma URL + token |
+Verificado na doc oficial: o **Codex CLI suporta streamable HTTP** com `[mcp_servers.<nome>]` +
+`url`, e autentica por OAuth (`codex mcp login`) **ou** bearer token estático. O Claude aceita
+conector remoto do mesmo jeito. Ou seja, o remoto atende os dois clientes que importam.
 
-**v1 = stdio.** Funciona igual nos dois clientes que o Maikon usa, e o custo de config (um bloco
-JSON que o Raul cola pra ele) é menor que o risco de o remoto não fechar no Codex. O remoto entra
-depois, reusando a mesma API — e aí sim vira o caminho pra usuário self-serve.
+- **v1: bearer token (o PAT da §3.2).** O cliente gera o token no Perfil e cola uma vez. Duas linhas
+  de config, sem instalar nada.
+- **v2: OAuth.** Aí vira o "Conectar" de um clique, que é o que fecha o self-serve de verdade.
 
-### 3.4 As ferramentas (o que o agente enxerga)
+O servidor MCP é uma **edge function Deno**, como todo o resto do backend: sem infra nova, sem
+pipeline de deploy novo, com os mesmos secrets e o mesmo banco. Um serviço Node separado seria mais
+uma coisa pra manter no ar sem ganho nenhum.
 
-A que resolve o problema do Maikon vem primeiro:
+### 3.4 O MCP NÃO é uma API paralela — ele expõe as tools que já existem
 
-1. **`agendar_arte`** — recebe imagem (base64 ou URL), legenda, data/hora, marca e redes. Sobe pro
-   bucket, cria `generated_contents` com `status='scheduled'`, devolve o id e o link do calendário.
-   É esta que transforma "16 artes no Claude" em "16 posts agendados".
-2. **`listar_marcas`** — o agente precisa saber em qual das dez empresas está mexendo.
-3. **`listar_contas`** — quais redes estão conectadas em cada marca.
-4. **`ver_agenda`** — o que já está agendado num intervalo. Sem isto o agente agenda em cima do que
-   já existe.
-5. **`gerar_conteudo`** — gera pela plataforma (cobra crédito, respeita a marca). Para quem quer a
-   identidade visual da marca em vez da arte crua do modelo.
-6. **`consultar_saldo`** — para o agente parar antes de tentar gerar sem crédito.
+O erro fácil aqui seria escrever um `mcp-api` que reimplementa agendar, gerar e listar. Isso cria um
+segundo caminho de código que diverge do app na primeira mudança, e dobra a superfície de bug em
+cima de cobrança e publicação.
 
-`publicar_agora` fica FORA da v1, por decisão de produto: o pedido explícito foi aprovar antes.
+`supabase/functions/_shared/agent-tools.ts` **já tem 24 tools** com descrições escritas pra LLM
+("Chame quando o usuário pede…"), já usadas pelo agente interno. É o catálogo de capacidades do
+produto. O MCP expõe o MESMO catálogo:
+
+```
+_shared/agent-tools.ts  ← fonte única: schema + executor
+        ├── ai-agent    (chat do app)
+        └── mcp         (Claude / Codex)
+```
+
+Tool nova nasce nos dois lugares de uma vez. Correção de bug vale pros dois. É isso que responde
+"melhorar a arquitetura da Trend": não é acrescentar camada, é parar de ter duas.
+
+**A ponte PAT → RLS (verificada, não suposta).** O `ToolCtx` exige `userAuthHeader` com JWT de
+usuário, porque as tools dependem de RLS pra isolamento. Um PAT não é JWT. Testado em produção o
+caminho oficial:
+
+1. `POST /auth/v1/admin/generate_link` (service_role) → `hashed_token`
+2. `POST /auth/v1/verify` (anon) → `access_token` real do usuário
+3. Cliente com esse JWT → **RLS ativa**
+
+Confirmado com a conta do Maikon: 5 marcas visíveis, todas dela, nenhuma de outro usuário. O JWT
+vale 3600s e é cacheável por token, então o custo é uma troca por hora, não por chamada.
+
+A alternativa — service_role + filtrar `user_id` na mão em cada tool — foi **descartada**: troca
+isolamento garantido pelo banco por disciplina de código, em 24 tools que mexem em crédito e
+publicação. Um esquecimento ali vaza conteúdo entre clientes.
 
 ### 3.5 Cobrança
 
@@ -147,10 +169,14 @@ alternativo de cobrança aqui viraria buraco de margem.
 - [x] **1. PAT — schema e verificação.** Tabela `api_tokens`, geração com `gen_random_bytes`, helper
       `requirePat()` com escopos, RLS fechada.
 - [ ] **2. PAT — UI.** Tela no Perfil: criar (token aparece uma vez), listar, revogar, ver último uso.
-- [ ] **3. `mcp-api` — leitura.** `listar_marcas`, `listar_contas`, `ver_agenda`, `consultar_saldo`.
-- [ ] **4. `mcp-api` — escrita.** `agendar_arte` (upload + `generated_contents` + `scheduled_at`).
-- [ ] **5. `mcp-api` — geração.** `gerar_conteudo`, reusando ai-chat e cobrando por `spend_credits`.
-- [ ] **6. Servidor MCP stdio.** Pacote `npx`, as seis tools, README com o bloco de config.
+- [ ] **3. Ponte PAT → sessão.** Helper que troca PAT por JWT de usuário (generate_link + verify),
+      com cache por TTL. Caminho já validado em produção.
+- [ ] **4. `agendar_arte`.** A tool que falta no catálogo: recebe imagem pronta, sobe pro bucket,
+      cria `generated_contents` agendado. É ela que resolve o problema do Maikon.
+- [ ] **5. Curadoria do catálogo.** Das 24 tools, decidir quais o MCP expõe. Expor todas seria
+      ruído pro agente; `publicar_agora` fica fora por decisão de produto.
+- [ ] **6. Servidor MCP remoto.** Edge function `mcp` falando streamable HTTP, expondo o catálogo de
+      `agent-tools.ts`, autenticada por PAT. Config de duas linhas para Claude e Codex.
 - [ ] **7. Fluxo de aprovação.** "Aprovar a semana" na UI do calendário — o pedido explícito do Maikon.
 - [ ] **8. Teste de ponta a ponta com o Maikon**, numa marca real, agendando uma semana.
 
