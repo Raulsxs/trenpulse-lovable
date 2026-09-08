@@ -136,8 +136,10 @@ alternativo de cobrança aqui viraria buraco de margem.
 ## 4. Fora de escopo (v1)
 
 - **Publicação imediata** (`publicar_agora`) — o usuário pediu aprovação antes; entra só se ele pedir.
-- **Transporte remoto/HTTP** — depois da v1 stdio, reusando a mesma API.
-- **OAuth** — PAT resolve; OAuth só faz sentido quando houver terceiros de verdade.
+- **OAuth** — a v1 conecta por bearer token (PAT). OAuth é o que transforma "cole este token" em
+  "clique em Conectar", e entra na v2. Sem ele o self-serve ainda tem um passo manual.
+- **stdio / pacote npm** — descartado como transporte principal (§3.3). Só volta se aparecer cliente
+  que precise rodar offline.
 - **CRM, tarefas, financeiro, gestão de cirurgias** — tudo isso apareceu na mesma reunião, mas é
   outro produto (o CRM do Maikon), não o TrendPulse. Não misturar.
 - **Criação de marca pelo MCP** — o wizard de marca é multi-etapa e visual; expor pelo MCP na v1
