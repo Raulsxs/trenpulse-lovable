@@ -111,18 +111,23 @@ O agente escolhe a ferramenta sozinho; você fala normal:
 - *"o que já está agendado pra semana que vem?"*
 - *"agenda esse conteúdo pra terça às 9h"*
 - *"monta um calendário de 3 posts por semana até o fim do mês"*
+- *"joga essa arte que eu fiz aqui no TrendPulse pra terça 9h, na marca Heart Surgery"*
+- *"agenda essas 16 imagens na Jornada, segunda/quarta/sexta"*
 
 **Geração cobra crédito** (10 por post, 10 por slide de carrossel, 6 por série de tweet card). Peça o
 saldo antes de mandar gerar em lote.
+
+**Mandar arte pronta NÃO cobra crédito.** Se você já criou a imagem no Claude ou no Codex, o
+TrendPulse só guarda e agenda — não gerou nada, não cobra nada.
 
 ---
 
 ## Limites de hoje, ditos com clareza
 
 - **Não existe tela pra você gerar o próprio token** ainda — depende do Raul (Fase 2).
-- **Não dá pra mandar uma imagem pronta** do Claude direto pro calendário. É a ferramenta
-  `agendar_arte`, ainda não construída (Fase 4). Hoje o agente gera pela plataforma; ele ainda não
-  recebe arte feita fora.
+- **O fluxo de aprovação da semana ainda não existe.** O que o `agendar_arte` cria já entra como
+  agendado e publica sozinho na hora marcada — dá pra revisar e remover no calendário até lá, mas
+  não há uma tela de "aprovar a semana" (Fase 7).
 - **Não dá pra criar marca pelo MCP** — o wizard é visual e multi-etapa. Liste e use as existentes.
 - **`publish` não vem por padrão.** O agente agenda; a publicação sai pelo agendador na hora marcada.
 

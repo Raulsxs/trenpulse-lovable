@@ -4,8 +4,8 @@
 mandar a arte que o agente acabou de criar pro calendário, agendar, listar marcas e contas, checar
 saldo — sem que a pessoa saia pra outra aba.
 
-**Estado:** servidor MCP NO AR e conectável (2026-09-08). Fases 1 e 6 entregues.
-Instalação em `docs/mcp-instalacao.md`. Falta a tela de tokens (2) e o `agendar_arte` (4).
+**Estado:** o caso da reunião FECHA (2026-09-09). Fases 1, 4 e 6 entregues + instalador.
+Instalação em `docs/mcp-instalacao.md`. Falta a tela de tokens (2) e o fluxo de aprovação (7).
 **Origem:** reunião Raul × Dr. Maikon, 2026-09-06.
 
 ---
@@ -175,8 +175,9 @@ alternativo de cobrança aqui viraria buraco de margem.
 - [ ] **2. PAT — UI.** Tela no Perfil: criar (token aparece uma vez), listar, revogar, ver último uso.
 - [ ] **3. Ponte PAT → sessão.** Helper que troca PAT por JWT de usuário (generate_link + verify),
       com cache por TTL. Caminho já validado em produção.
-- [ ] **4. `agendar_arte`.** A tool que falta no catálogo: recebe imagem pronta, sobe pro bucket,
-      cria `generated_contents` agendado. É ela que resolve o problema do Maikon.
+- [x] **4. `agendar_arte`.** Recebe imagem pronta (URL ou base64), sobe pro bucket e cria
+      `generated_contents` agendado. Não cobra crédito: nada foi gerado. Travas: data no passado,
+      colisão de horário exato, teto de 8 MB, marca inexistente (lista as que existem).
 - [ ] **5. Curadoria do catálogo.** Das 24 tools, decidir quais o MCP expõe. Expor todas seria
       ruído pro agente; `publicar_agora` fica fora por decisão de produto.
 - [x] **6. Servidor MCP remoto.** Edge function `mcp` falando streamable HTTP, expondo o catálogo de

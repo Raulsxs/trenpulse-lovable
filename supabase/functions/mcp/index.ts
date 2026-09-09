@@ -60,6 +60,7 @@ const CATALOGO: Record<string, { escopo: string }> = {
   gerar_tweet_card: { escopo: "generate" },
   link_para_post: { escopo: "generate" },
   adaptar_para_rede: { escopo: "generate" },
+  agendar_arte: { escopo: "schedule" },
   agendar_conteudo: { escopo: "schedule" },
   planejar_calendario: { escopo: "schedule" },
 };

@@ -312,6 +312,22 @@ export const AGENT_TOOLS = [
     },
   },
   {
+    name: "agendar_arte",
+    description: "Coloca no calendario do TrendPulse uma IMAGEM QUE VOCE JA TEM PRONTA - arte criada fora da plataforma, foto, print. Chame quando o usuario diz 'joga essa arte no TrendPulse', 'agenda essas imagens', 'sobe isso pro calendario'. NAO gera imagem e NAO cobra credito: so guarda a que voce passar e agenda. Para CRIAR arte nova com a identidade da marca, use gerar_post. Uma chamada por imagem; para varias, chame varias vezes.",
+    input_schema: {
+      type: "object",
+      properties: {
+        imagem: { type: "string", description: "URL http(s) da imagem, OU o conteudo em base64 (com ou sem o prefixo data:image/...;base64,)." },
+        legenda: { type: "string", description: "Legenda do post, pronta para publicar. Inclua hashtags aqui se quiser." },
+        data_hora_iso: { type: "string", description: "Quando publicar, ISO 8601 COM FUSO - ex.: 2026-09-15T09:00:00-03:00. O fuso importa: sem ele o horario vira UTC e o post sai 3h fora. Omitir salva como rascunho, sem agendar." },
+        marca: { type: "string", description: "Nome ou id da marca dona do post. Omitir usa a marca padrao. Quando o usuario tem varias empresas, SEMPRE preencha." },
+        plataformas: { type: "array", items: { type: "string" }, description: "Ex.: ['instagram','linkedin']. Omitir = a plataforma padrao da conta." },
+        titulo: { type: "string", description: "Titulo curto para achar no calendario. Omitir usa o comeco da legenda." },
+      },
+      required: ["imagem", "legenda"],
+    },
+  },
+  {
     name: "agendar_conteudo",
     description: "AGENDA um conteúdo já gerado para publicar numa data/hora. AÇÃO QUE PUBLICA NO FUTURO — sempre será confirmada pelo usuário antes de efetivar. Chame com o content_id e a data/hora.",
     input_schema: {
@@ -936,6 +952,129 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
     }
 
     // ── Gated (só chegam aqui DEPOIS de confirmadas pelo usuário) ──
+    case "agendar_arte": {
+      // A ferramenta que fecha o caso "criei 16 artes no Claude, joga tudo no calendario".
+      // NAO cobra credito: nada foi gerado aqui, so guardado e agendado. Cobrar seria vender
+      // armazenamento como se fosse geracao.
+      const bruta = String(input.imagem || "").trim();
+      if (!bruta) return { ok: false, content: "Faltou a imagem." };
+
+      // 1. Imagem vira bytes
+      let bytes: Uint8Array;
+      let mime = "image/jpeg";
+      try {
+        if (/^https?:\/\//i.test(bruta)) {
+          const r = await fetch(bruta);
+          if (!r.ok) return { ok: false, content: `Nao consegui baixar a imagem (HTTP ${r.status}). Confira se a URL e publica.` };
+          mime = r.headers.get("content-type")?.split(";")[0] || mime;
+          bytes = new Uint8Array(await r.arrayBuffer());
+        } else {
+          const m = /^data:([^;]+);base64,(.*)$/s.exec(bruta);
+          const b64 = (m ? m[2] : bruta).replace(/\s/g, "");
+          if (m) mime = m[1];
+          const bin = atob(b64);
+          bytes = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        }
+      } catch (e: any) {
+        return { ok: false, content: `Nao consegui ler a imagem: ${e?.message}. Mande uma URL publica ou base64 valido.` };
+      }
+
+      if (!mime.startsWith("image/")) return { ok: false, content: `Isso nao e uma imagem (${mime}).` };
+      // Teto explicito: a geracao ja estourou memoria de isolate antes. Erro claro vence timeout.
+      const MAX_BYTES = 8 * 1024 * 1024;
+      if (bytes.length > MAX_BYTES) {
+        return { ok: false, content: `Imagem grande demais (${(bytes.length / 1048576).toFixed(1)} MB). O limite e 8 MB - reduza antes de mandar.` };
+      }
+
+      // 2. Quando
+      let quando: string | null = null;
+      if (input.data_hora_iso) {
+        const d = new Date(input.data_hora_iso);
+        if (isNaN(d.getTime())) return { ok: false, content: `Data invalida: "${input.data_hora_iso}". Use ISO 8601 com fuso, ex.: 2026-09-15T09:00:00-03:00.` };
+        if (d.getTime() < Date.now()) {
+          return { ok: false, content: `Essa data ja passou (${d.toLocaleString("pt-BR")}). Agende no futuro.` };
+        }
+        quando = d.toISOString();
+
+        // Dois posts no MESMO instante quase sempre e o agente repetindo a chamada, nao intencao.
+        const { data: colisao } = await ctx.userClient.from("generated_contents")
+          .select("id, title").eq("scheduled_at", quando).eq("status", "scheduled").limit(1);
+        if (colisao && colisao.length > 0) {
+          return { ok: false, content: `Ja existe conteudo agendado exatamente para esse horario ("${colisao[0].title}"). Escolha outro horario.` };
+        }
+      }
+
+      // 3. Marca (por id ou por nome)
+      let brandIdArte: string | null = null;
+      if (input.marca) {
+        const alvo = String(input.marca).trim();
+        const { data: marcas } = await ctx.userClient.from("brands").select("id, name");
+        const lista = marcas || [];
+        const achou = lista.find((b: any) => b.id === alvo)
+          || lista.find((b: any) => (b.name || "").toLowerCase() === alvo.toLowerCase())
+          || lista.find((b: any) => (b.name || "").toLowerCase().includes(alvo.toLowerCase()));
+        if (!achou) {
+          const nomes = lista.map((b: any) => b.name).filter(Boolean).join(", ");
+          return { ok: false, content: `Nao achei a marca "${alvo}". Suas marcas: ${nomes || "(nenhuma)"}.` };
+        }
+        brandIdArte = achou.id;
+      } else {
+        brandIdArte = ctx.defaultBrandId ?? null;
+      }
+
+      // 4. Sobe pro bucket
+      const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
+      const caminho = `mcp/${ctx.userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const { error: upErr } = await ctx.userClient.storage
+        .from("content-images").upload(caminho, bytes, { contentType: mime, upsert: false });
+      if (upErr) return { ok: false, content: `Falha ao guardar a imagem: ${upErr.message}` };
+      const { data: pub } = ctx.userClient.storage.from("content-images").getPublicUrl(caminho);
+      const urlPublica = pub?.publicUrl;
+      if (!urlPublica) return { ok: false, content: "Imagem subiu mas nao consegui a URL publica." };
+
+      // 5. Cria o conteudo
+      const legendaArte = String(input.legenda || "").trim();
+      const plataformasArte: string[] = Array.isArray(input.plataformas) ? input.plataformas.filter(Boolean) : [];
+      const tituloArte = String(input.titulo || "").trim()
+        || legendaArte.split("\n")[0].slice(0, 70)
+        || "Arte enviada pelo agente";
+
+      const linha: Record<string, unknown> = {
+        user_id: ctx.userId,
+        title: tituloArte,
+        caption: legendaArte,
+        image_urls: [urlPublica],
+        content_type: "post",
+        status: quando ? "scheduled" : "draft",
+        scheduled_at: quando,
+        brand_id: brandIdArte,
+      };
+      if (plataformasArte.length) {
+        linha.platform = plataformasArte[0];
+        // O scheduler publica EXATAMENTE nas contas de scheduled_accounts; sem accountIds ele cai
+        // no legado e usa so `platform`. Guardamos as plataformas pedidas pra nao perder a intencao.
+        linha.scheduled_accounts = { platforms: plataformasArte, accountIds: [] };
+      }
+
+      const { data: criado, error: insErr } = await ctx.userClient
+        .from("generated_contents").insert(linha).select("id").single();
+      if (insErr) {
+        // Imagem orfa no bucket e lixo barato; conteudo sem imagem seria pior.
+        try { await ctx.userClient.storage.from("content-images").remove([caminho]); } catch (_e) { /* ignora */ }
+        return { ok: false, content: `Falha ao criar o conteudo: ${insErr.message}` };
+      }
+
+      const onde = plataformasArte.length ? ` em ${plataformasArte.join(" e ")}` : "";
+      return {
+        ok: true,
+        content: quando
+          ? `Agendado para ${new Date(quando).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}${onde} (horario de Brasilia). Publica sozinho nessa hora - da pra revisar ou remover no calendario ate la. content_id=${criado.id}`
+          : `Salvo como rascunho${onde}, sem data. Agende depois com agendar_conteudo. content_id=${criado.id}`,
+        action_result: { contentId: criado.id, imageUrl: urlPublica, scheduledAt: quando },
+      };
+    }
+
     case "agendar_conteudo": {
       const { error } = await ctx.userClient
         .from("generated_contents")
