@@ -111,11 +111,15 @@ O agente escolhe a ferramenta sozinho; você fala normal:
 - *"o que já está agendado pra semana que vem?"*
 - *"agenda esse conteúdo pra terça às 9h"*
 - *"monta um calendário de 3 posts por semana até o fim do mês"*
-- *"joga essa arte que eu fiz aqui no TrendPulse pra terça 9h, na marca Heart Surgery"*
+- *"joga essa arte que eu fiz aqui no TrendPulse pra terça 9h, no @hearttsurgery"*
 - *"agenda essas 16 imagens na Jornada, segunda/quarta/sexta"*
 
 **Geração cobra crédito** (10 por post, 10 por slide de carrossel, 6 por série de tweet card). Peça o
 saldo antes de mandar gerar em lote.
+
+**Se você tem mais de um perfil na mesma rede, diga qual.** Ex.: *"agenda no @hearttsurgery"*, não só
+*"agenda no Instagram"*. Se você não disser, o agente é obrigado a perguntar antes de agendar — ele
+não escolhe sozinho, justamente pra um post não sair no perfil errado.
 
 **Mandar arte pronta NÃO cobra crédito.** Se você já criou a imagem no Claude ou no Codex, o
 TrendPulse só guarda e agenda — não gerou nada, não cobra nada.

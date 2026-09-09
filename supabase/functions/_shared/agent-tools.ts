@@ -322,6 +322,7 @@ export const AGENT_TOOLS = [
         data_hora_iso: { type: "string", description: "Quando publicar, ISO 8601 COM FUSO - ex.: 2026-09-15T09:00:00-03:00. O fuso importa: sem ele o horario vira UTC e o post sai 3h fora. Omitir salva como rascunho, sem agendar." },
         marca: { type: "string", description: "Nome ou id da marca dona do post. Omitir usa a marca padrao. Quando o usuario tem varias empresas, SEMPRE preencha." },
         plataformas: { type: "array", items: { type: "string" }, description: "Ex.: ['instagram','linkedin']. Omitir = a plataforma padrao da conta." },
+        contas: { type: "array", items: { type: "string" }, description: "IDs das contas de destino, vindos de listar_conexoes (campo conta=...). OBRIGATORIO quando o usuario tem mais de uma conta na mesma rede — sem isso o post pode sair no perfil errado. Se ele nao disse em qual perfil, PERGUNTE antes de agendar." },
         titulo: { type: "string", description: "Titulo curto para achar no calendario. Omitir usa o comeco da legenda." },
       },
       required: ["imagem", "legenda"],
@@ -909,8 +910,22 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
         body: JSON.stringify({ action: "list" }),
       });
       const d = await res.json().catch(() => ({}));
-      const conns = (d?.connections || []).map((c: any) => `${c.platform} (${c.account_name || c.status})`).join(", ");
-      return { ok: true, content: conns ? `Conectado: ${conns}` : "Nenhuma rede conectada. O usuário precisa conectar em Perfil → Conexões antes de publicar." };
+      // O ID VAI JUNTO de propósito. Sem ele o agente ve "instagram (agessaude)" e nao tem como
+      // ESCOLHER essa conta: o publicador, recebendo so a plataforma, faz
+      // `connections.find(c => c.platform === tp)` e pega a PRIMEIRA da lista. Com tres Instagram,
+      // um post de cardiologia cai no perfil errado.
+      const lista = (d?.connections || []).filter((c: any) => c.pfm_account_id);
+      if (lista.length === 0) {
+        return { ok: true, content: "Nenhuma rede conectada. O usuário precisa conectar em Perfil → Conexões antes de publicar." };
+      }
+      const linhas = lista.map((c: any) => `- ${c.platform}: ${c.account_name || "(sem nome)"} → conta=${c.pfm_account_id}`).join("\n");
+      const porPlataforma: Record<string, number> = {};
+      for (const c of lista) porPlataforma[c.platform] = (porPlataforma[c.platform] || 0) + 1;
+      const duplicadas = Object.entries(porPlataforma).filter(([, n]) => n > 1).map(([p]) => p);
+      const aviso = duplicadas.length
+        ? `\n\nATENÇÃO: há mais de uma conta em ${duplicadas.join(" e ")}. Ao agendar, passe SEMPRE o campo \`contas\` com o id certo — e, se o usuário não disse qual perfil, PERGUNTE antes de agendar.`
+        : "";
+      return { ok: true, content: `Contas conectadas:\n${linhas}${aviso}` };
     }
     case "consultar_saldo": {
       const { data } = await ctx.userClient.from("user_credits").select("balance").maybeSingle();
@@ -1040,6 +1055,50 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         || legendaArte.split("\n")[0].slice(0, 70)
         || "Arte enviada pelo agente";
 
+      // ── CONTA DE DESTINO ──
+      // O publicador, sem accountIds, resolve por `connections.find(c => c.platform === tp)` — ou
+      // seja, a PRIMEIRA conta daquela rede. Quem tem tres Instagram (o caso real) publicaria num
+      // perfil sorteado. Entao: se ha ambiguidade e o agente nao escolheu, RECUSAMOS e devolvemos a
+      // lista, pra ele perguntar ao usuario em vez de chutar.
+      let contasAlvo: string[] = Array.isArray(input.contas) ? input.contas.filter(Boolean).map(String) : [];
+      if (plataformasArte.length || contasAlvo.length) {
+        const resConx = await fetch(`${ctx.supabaseUrl}/functions/v1/connect-social`, {
+          method: "POST", headers: { Authorization: ctx.userAuthHeader, apikey: ctx.anonKey, "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "list" }),
+        });
+        const dConx = await resConx.json().catch(() => ({}));
+        const conectadas = (dConx?.connections || []).filter((c: any) => c.pfm_account_id);
+
+        if (contasAlvo.length) {
+          const validas = new Set(conectadas.map((c: any) => c.pfm_account_id));
+          const invalidas = contasAlvo.filter((id) => !validas.has(id));
+          if (invalidas.length) {
+            const opcoes = conectadas.map((c: any) => `${c.platform}: ${c.account_name} → ${c.pfm_account_id}`).join("; ");
+            return { ok: false, content: `Conta desconhecida: ${invalidas.join(", ")}. Disponíveis — ${opcoes}` };
+          }
+        } else {
+          // Sem escolha explícita: só seguimos se cada rede pedida tiver UMA conta só.
+          const ambiguas: string[] = [];
+          for (const plat of plataformasArte) {
+            const daRede = conectadas.filter((c: any) => c.platform === plat);
+            if (daRede.length === 0) {
+              return { ok: false, content: `Você não tem conta de ${plat} conectada. Conecte em Perfil → Conexões, ou escolha outra rede.` };
+            }
+            if (daRede.length > 1) ambiguas.push(plat);
+            else contasAlvo.push(daRede[0].pfm_account_id);
+          }
+          if (ambiguas.length) {
+            const opcoes = conectadas
+              .filter((c: any) => ambiguas.includes(c.platform))
+              .map((c: any) => `${c.platform}: ${c.account_name} → conta=${c.pfm_account_id}`).join("; ");
+            return {
+              ok: false,
+              content: `Você tem mais de uma conta em ${ambiguas.join(" e ")} — PERGUNTE ao usuário em qual perfil publicar e chame de novo passando \`contas\`. Opções: ${opcoes}`,
+            };
+          }
+        }
+      }
+
       const linha: Record<string, unknown> = {
         user_id: ctx.userId,
         title: tituloArte,
@@ -1050,11 +1109,12 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         scheduled_at: quando,
         brand_id: brandIdArte,
       };
-      if (plataformasArte.length) {
-        linha.platform = plataformasArte[0];
-        // O scheduler publica EXATAMENTE nas contas de scheduled_accounts; sem accountIds ele cai
-        // no legado e usa so `platform`. Guardamos as plataformas pedidas pra nao perder a intencao.
-        linha.scheduled_accounts = { platforms: plataformasArte, accountIds: [] };
+      if (plataformasArte.length || contasAlvo.length) {
+        if (plataformasArte.length) linha.platform = plataformasArte[0];
+        // accountIds PREENCHIDO: o scheduler publica exatamente nessas contas. Deixar vazio faria o
+        // publicador cair no legado e escolher a primeira conta da rede — o bug que este bloco existe
+        // pra evitar.
+        linha.scheduled_accounts = { platforms: plataformasArte, accountIds: contasAlvo };
       }
 
       const { data: criado, error: insErr } = await ctx.userClient
