@@ -28,7 +28,26 @@ Ferramenta fora do escopo **nem aparece** para o agente.
 
 ---
 
-## 2. Claude Code
+## 2. Jeito fácil: o instalador
+
+Peça o arquivo ao Raul e **dê um clique duplo**. Ele conecta o TrendPulse ao Claude Desktop, ao
+Claude Code e ao Codex — o que estiver na máquina — e testa o token antes de escrever qualquer
+coisa.
+
+| Sistema | Arquivo | Como abrir |
+|---|---|---|
+| Mac | `instalar-trendpulse-mcp.command` | clique duplo |
+| Windows | `instalar-trendpulse-mcp.ps1` | clique direito → *Executar com o PowerShell* |
+
+Ele cola o token pra você, faz backup das configs e **preserva os outros servidores MCP** que você
+já usa. Rodar de novo troca o token sem duplicar nada.
+
+> No Mac, na primeira vez o sistema pode dizer que o arquivo é de "desenvolvedor não identificado".
+> Clique direito → **Abrir** → **Abrir** de novo, e ele roda.
+
+Se preferir fazer na mão, os blocos estão abaixo.
+
+## 3. Claude Code (manual)
 
 ```bash
 claude mcp add --transport http trendpulse https://qdmhqxpazffmaxleyzxs.supabase.co/functions/v1/mcp --header "Authorization: Bearer tp_pat_SEU_TOKEN_AQUI"
@@ -36,7 +55,7 @@ claude mcp add --transport http trendpulse https://qdmhqxpazffmaxleyzxs.supabase
 
 Confira com `/mcp` dentro do Claude: `trendpulse` deve aparecer como conectado.
 
-## 3. Claude Desktop
+## 4. Claude Desktop (manual)
 
 Em **Settings → Developer → Edit Config**, dentro de `mcpServers`:
 
@@ -54,7 +73,7 @@ Em **Settings → Developer → Edit Config**, dentro de `mcpServers`:
 
 Reinicie o app depois de salvar.
 
-## 4. Codex CLI
+## 5. Codex CLI (manual)
 
 Em `~/.codex/config.toml`:
 
@@ -72,7 +91,7 @@ export TRENDPULSE_TOKEN=tp_pat_SEU_TOKEN_AQUI
 
 ---
 
-## 5. Conferindo que funcionou
+## 6. Conferindo que funcionou
 
 Peça ao agente, em linguagem normal:
 
