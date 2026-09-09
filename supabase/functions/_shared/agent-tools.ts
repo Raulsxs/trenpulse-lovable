@@ -335,8 +335,9 @@ export const AGENT_TOOLS = [
       type: "object",
       properties: {
         contentId: { type: "string" },
-        data_hora_iso: { type: "string", description: "ISO 8601, ex.: 2026-06-23T09:00:00-03:00." },
-        plataformas: { type: "array", items: { type: "string" }, description: "Ex.: ['instagram','linkedin']. Omitir = todas conectadas." },
+        data_hora_iso: { type: "string", description: "ISO 8601 COM FUSO, ex.: 2026-06-23T09:00:00-03:00. Sem o fuso o horario vira UTC e o post sai 3h fora." },
+        plataformas: { type: "array", items: { type: "string" }, description: "Ex.: ['instagram','linkedin']. Omitir = a plataforma de criacao do conteudo." },
+        contas: { type: "array", items: { type: "string" }, description: "IDs das contas de destino, vindos de listar_conexoes (campo conta=...). OBRIGATORIO quando o usuario tem mais de uma conta na mesma rede — sem isso o post pode sair no perfil errado. Se ele nao disse qual perfil, PERGUNTE antes de agendar." },
       },
       required: ["contentId", "data_hora_iso"],
     },
@@ -390,6 +391,65 @@ function genResult(data: any, kind: string): ToolResult {
     };
   }
   return { ok: false, content: data?.reply || `Não consegui gerar o ${kind}. Peça para o usuário reformular.` };
+}
+
+/**
+ * Resolve em QUAIS CONTAS publicar, a partir da plataforma e/ou de ids escolhidos.
+ *
+ * POR QUE ISTO EXISTE: o publish-postforme, sem `accountIds`, resolve por
+ * `connections.find(c => c.platform === tp)` — a PRIMEIRA conta daquela rede. Quem tem tres
+ * Instagram (caso real) publicaria num perfil sorteado pela ordem da lista. Um post de cardiologia
+ * saindo no perfil da consultoria e estrago de reputacao, nao bug cosmetico.
+ *
+ * Regra: rede com UMA conta resolve sozinha; com mais de uma, RECUSA e devolve a lista pra o agente
+ * perguntar. Recusar e mais confiavel que torcer pro modelo lembrar de perguntar.
+ *
+ * Compartilhado por agendar_arte e agendar_conteudo — duas copias divergiriam na primeira mudanca.
+ */
+export async function resolverContas(
+  ctx: ToolCtx,
+  plataformas: string[],
+  contasPedidas: string[],
+): Promise<{ ok: true; accountIds: string[] } | { ok: false; erro: string }> {
+  if (!plataformas.length && !contasPedidas.length) return { ok: true, accountIds: [] };
+
+  const res = await fetch(`${ctx.supabaseUrl}/functions/v1/connect-social`, {
+    method: "POST",
+    headers: { Authorization: ctx.userAuthHeader, apikey: ctx.anonKey, "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "list" }),
+  });
+  const d = await res.json().catch(() => ({}));
+  const conectadas = (d?.connections || []).filter((c: any) => c.pfm_account_id);
+  const descreve = (arr: any[]) =>
+    arr.map((c: any) => `${c.platform}: ${c.account_name || "(sem nome)"} → conta=${c.pfm_account_id}`).join("; ");
+
+  if (contasPedidas.length) {
+    const validas = new Set(conectadas.map((c: any) => c.pfm_account_id));
+    const invalidas = contasPedidas.filter((id) => !validas.has(id));
+    if (invalidas.length) {
+      return { ok: false, erro: `Conta desconhecida: ${invalidas.join(", ")}. Disponíveis — ${descreve(conectadas)}` };
+    }
+    return { ok: true, accountIds: contasPedidas };
+  }
+
+  const escolhidas: string[] = [];
+  const ambiguas: string[] = [];
+  for (const plat of plataformas) {
+    const daRede = conectadas.filter((c: any) => c.platform === plat);
+    if (daRede.length === 0) {
+      return { ok: false, erro: `Você não tem conta de ${plat} conectada. Conecte em Perfil → Conexões, ou escolha outra rede.` };
+    }
+    if (daRede.length > 1) ambiguas.push(plat);
+    else escolhidas.push(daRede[0].pfm_account_id);
+  }
+  if (ambiguas.length) {
+    const opcoes = descreve(conectadas.filter((c: any) => ambiguas.includes(c.platform)));
+    return {
+      ok: false,
+      erro: `Você tem mais de uma conta em ${ambiguas.join(" e ")} — PERGUNTE ao usuário em qual perfil publicar e chame de novo passando \`contas\`. Opções: ${opcoes}`,
+    };
+  }
+  return { ok: true, accountIds: escolhidas };
 }
 
 export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Promise<ToolResult> {
@@ -1056,48 +1116,10 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         || "Arte enviada pelo agente";
 
       // ── CONTA DE DESTINO ──
-      // O publicador, sem accountIds, resolve por `connections.find(c => c.platform === tp)` — ou
-      // seja, a PRIMEIRA conta daquela rede. Quem tem tres Instagram (o caso real) publicaria num
-      // perfil sorteado. Entao: se ha ambiguidade e o agente nao escolheu, RECUSAMOS e devolvemos a
-      // lista, pra ele perguntar ao usuario em vez de chutar.
-      let contasAlvo: string[] = Array.isArray(input.contas) ? input.contas.filter(Boolean).map(String) : [];
-      if (plataformasArte.length || contasAlvo.length) {
-        const resConx = await fetch(`${ctx.supabaseUrl}/functions/v1/connect-social`, {
-          method: "POST", headers: { Authorization: ctx.userAuthHeader, apikey: ctx.anonKey, "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "list" }),
-        });
-        const dConx = await resConx.json().catch(() => ({}));
-        const conectadas = (dConx?.connections || []).filter((c: any) => c.pfm_account_id);
-
-        if (contasAlvo.length) {
-          const validas = new Set(conectadas.map((c: any) => c.pfm_account_id));
-          const invalidas = contasAlvo.filter((id) => !validas.has(id));
-          if (invalidas.length) {
-            const opcoes = conectadas.map((c: any) => `${c.platform}: ${c.account_name} → ${c.pfm_account_id}`).join("; ");
-            return { ok: false, content: `Conta desconhecida: ${invalidas.join(", ")}. Disponíveis — ${opcoes}` };
-          }
-        } else {
-          // Sem escolha explícita: só seguimos se cada rede pedida tiver UMA conta só.
-          const ambiguas: string[] = [];
-          for (const plat of plataformasArte) {
-            const daRede = conectadas.filter((c: any) => c.platform === plat);
-            if (daRede.length === 0) {
-              return { ok: false, content: `Você não tem conta de ${plat} conectada. Conecte em Perfil → Conexões, ou escolha outra rede.` };
-            }
-            if (daRede.length > 1) ambiguas.push(plat);
-            else contasAlvo.push(daRede[0].pfm_account_id);
-          }
-          if (ambiguas.length) {
-            const opcoes = conectadas
-              .filter((c: any) => ambiguas.includes(c.platform))
-              .map((c: any) => `${c.platform}: ${c.account_name} → conta=${c.pfm_account_id}`).join("; ");
-            return {
-              ok: false,
-              content: `Você tem mais de uma conta em ${ambiguas.join(" e ")} — PERGUNTE ao usuário em qual perfil publicar e chame de novo passando \`contas\`. Opções: ${opcoes}`,
-            };
-          }
-        }
-      }
+      // Sem isto o publicador escolheria a primeira conta da rede. Ver resolverContas().
+      const resContas = await resolverContas(ctx, plataformasArte, Array.isArray(input.contas) ? input.contas.filter(Boolean).map(String) : []);
+      if (!resContas.ok) return { ok: false, content: resContas.erro };
+      const contasAlvo = resContas.accountIds;
 
       const linha: Record<string, unknown> = {
         user_id: ctx.userId,
@@ -1136,12 +1158,36 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
     }
 
     case "agendar_conteudo": {
-      const { error } = await ctx.userClient
-        .from("generated_contents")
-        .update({ scheduled_at: input.data_hora_iso, status: "scheduled" })
-        .eq("id", input.contentId);
+      const dAgd = new Date(input.data_hora_iso);
+      if (isNaN(dAgd.getTime())) {
+        return { ok: false, content: `Data invalida: "${input.data_hora_iso}". Use ISO 8601 com fuso, ex.: 2026-06-23T09:00:00-03:00.` };
+      }
+      if (dAgd.getTime() < Date.now()) {
+        return { ok: false, content: `Essa data ja passou (${dAgd.toLocaleString("pt-BR")}). Agende no futuro.` };
+      }
+
+      const platsAgd: string[] = Array.isArray(input.plataformas) ? input.plataformas.filter(Boolean) : [];
+      const contasAgd = Array.isArray(input.contas) ? input.contas.filter(Boolean).map(String) : [];
+      const rc = await resolverContas(ctx, platsAgd, contasAgd);
+      if (!rc.ok) return { ok: false, content: rc.erro };
+
+      const patch: Record<string, unknown> = {
+        scheduled_at: dAgd.toISOString(),
+        status: "scheduled",
+        // Zera a contagem: reagendar depois de uma falha tem que poder tentar de novo, senao o
+        // conteudo fica preso no filtro `publish_attempts < 3` do scheduler.
+        publish_attempts: 0,
+        publish_error: null,
+      };
+      // Mesmo formato que o Calendar do app grava, pra os dois caminhos serem indistinguiveis.
+      if (rc.accountIds.length) {
+        patch.scheduled_accounts = { platforms: platsAgd, accountIds: rc.accountIds };
+        if (platsAgd.length) patch.platform = platsAgd[0];
+      }
+
+      const { error } = await ctx.userClient.from("generated_contents").update(patch).eq("id", input.contentId);
       if (error) return { ok: false, content: `Falha ao agendar: ${error.message}` };
-      return { ok: true, content: `Agendado para ${new Date(input.data_hora_iso).toLocaleString("pt-BR")}.` };
+      return { ok: true, content: `Agendado para ${dAgd.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} (horario de Brasilia).` };
     }
     case "publicar": {
       // INVARIANTE de código (não só dica ao LLM): só publica se houver rede conectada.
