@@ -3,6 +3,35 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAI } from "../_shared/ai-gateway.ts";
 import { requireAuth } from "../_shared/require-auth.ts";
 import { orImage } from "../_shared/openrouter.ts";
+import { track } from "../_shared/telemetry.ts";
+
+/**
+ * Preço por imagem de cada provedor que NÃO devolve custo na resposta.
+ *
+ * POR QUE ISTO EXISTE: a geração de imagem tem quatro caminhos e só um — o OpenRouter — reporta
+ * `usage.cost`. Os outros três passavam sem registrar nada, e o modo background-only, que é o PADRÃO,
+ * é justamente um deles. O resultado media 30 dias com 450 linhas de texto contra 14 de imagem, num
+ * período de mais de 300 conteúdos: dava para somar o custo de texto e não dava para saber nada do
+ * custo de imagem.
+ *
+ * São ESTIMATIVAS de tabela, marcadas como tal em `metadata.custo_estimado`. Uma estimativa rotulada
+ * vale mais que um buraco: dá para ver o MIX (qual caminho está de fato servindo as gerações), que é
+ * a pergunta que não tinha resposta nenhuma.
+ *
+ * Conferir contra a fatura do provedor ao mexer. Última conferência: 2026-09-12.
+ */
+const CUSTO_IMAGEM_USD: Record<string, number> = {
+  "replicate/gpt-image-2": 0.0625,
+  "replicate/nano-banana-pro": 0.15,
+  "replicate/seedream": 0.03,
+  "inference-sh/gemini-3-1-flash-image": 0.076,
+  "inference-sh/gemini-2-5-flash-image": 0.039,
+  // Proxy: o Lovable cobra em créditos de plano, não em USD por chamada. Usamos o preço do mesmo
+  // modelo no OpenRouter (medido: US$ 0,1384) para o número não ficar em branco.
+  "lovable-gateway/gemini-3-pro": 0.1384,
+  // Key do próprio usuário: quem paga o Google é ELE, não a TrendPulse. Zero de propósito.
+  "google-direct/user-key": 0,
+};
 // SÓ O TIPO é estático — `import type` é apagado na compilação e não custa nada em runtime.
 // O overlayLogo entra por import DINÂMICO lá embaixo, no único ponto onde é usado. Ver o porquê
 // no comentário da chamada.
@@ -639,6 +668,10 @@ Do NOT create a graphic design with large text. Create a PHOTOGRAPHIC SCENE abou
     // ai_full_design uses inference.sh — hybrid: gpt-image-2 (medium) for 1:1/4:5,
     // Nano Banana Pro (gemini-3-pro-image) for 9:16 stories. Background uses Lovable Gateway.
     let base64Image: string | null = null;
+    // Qual caminho de fato produziu a peça. Um evento de telemetria SÓ, no fim, em vez de quatro
+    // espalhados — quatro cópias divergem no primeiro tier novo. O OpenRouter fica de fora porque
+    // o orImage já grava o custo REAL dele; duplicar aqui contaria a mesma geração duas vezes.
+    let origemImagem: string | null = null;
 
     if (!isBgOnly || illustrationMode) {
       // ── Compute aspect ratio + prompt text (shared by Google-direct and inference.sh) ──
@@ -731,6 +764,7 @@ ${brandColorHint}
             telemetry: { userId: requestUserId ?? auth?.userId ?? null, contentId: contentId ?? null, action: contentStyle || "image" },
           });
           base64Image = r.dataUrl;
+          origemImagem = "openrouter";  // já contabilizado dentro do orImage
           console.log(`[generate-slide-images] Tier-0 OpenRouter OK: model=${r.model}, custo=$${r.usage?.cost}, aspect=${aspectRatio}, refs=${refImages.length}`);
         } catch (e: any) {
           console.warn(`[generate-slide-images] OpenRouter falhou (${String(e?.message).slice(0, 140)}) — caindo p/ Replicate`);
@@ -750,6 +784,7 @@ ${brandColorHint}
               let binary = "";
               for (let i = 0; i < imgBytes.length; i++) binary += String.fromCharCode(imgBytes[i]);
               base64Image = `data:image/png;base64,${btoa(binary)}`;
+              origemImagem = `replicate/${resolvedModelRep}`;
               console.log(`[generate-slide-images] Replicate OK: ${imgBytes.length} bytes (model=${resolvedModelRep})`);
             }
           } catch (e: any) { console.warn(`[generate-slide-images] Replicate download failed: ${e?.message}`); }
@@ -818,6 +853,7 @@ ${brandColorHint}
                     binary += String.fromCharCode(imgBytes[i]);
                   }
                   base64Image = `data:image/png;base64,${btoa(binary)}`;
+                  origemImagem = `inference-sh/${infBody.app || "?"}`;
                   console.log(`[generate-slide-images] inference.sh image downloaded: ${imgBytes.length} bytes`);
                 } else {
                   console.warn(`[generate-slide-images] inference.sh image download failed: ${imgRes.status}`);
@@ -868,6 +904,7 @@ ${brandColorHint}
       if (!base64Image && userGeminiKey) {
         console.log(`[generate-slide-images] Trying per-user Google AI direct as fallback (${mode}, aspect=${aspectRatio}, refs=${refImages.length})`);
         base64Image = await tryGoogleAIDirect(userGeminiKey, promptText, refImages, aspectRatio);
+        if (base64Image) origemImagem = "google-direct/user-key";
         if (base64Image) {
           console.log(`[generate-slide-images] Per-user Google AI direct succeeded for user ${resolvedUserId}`);
         } else {
@@ -880,6 +917,7 @@ ${brandColorHint}
     let fallbackImageResult: string | null = null;
     if (!base64Image) {
       fallbackImageResult = await generateImage(contentParts);
+      if (fallbackImageResult) origemImagem = "lovable-gateway/gemini-3-pro";
     }
 
     if (!base64Image && !fallbackImageResult) {
@@ -944,6 +982,30 @@ ${brandColorHint}
       imageUrl = await uploadBase64ToStorage(supabaseAdmin, finalImage!, contentId || "draft", slideIndex || 0);
     }
     console.log(`[generate-slide-images] ✅ Slide ${(slideIndex || 0) + 1} background uploaded`);
+
+    // Telemetria dos caminhos que não reportam custo. O OpenRouter sai fora: o orImage já gravou a
+    // linha dele, com o custo REAL vindo do provedor.
+    if (origemImagem && origemImagem !== "openrouter") {
+      const [provedor] = origemImagem.split("/");
+      const estimado = CUSTO_IMAGEM_USD[origemImagem];
+      track({
+        kind: "image", provider: provedor, model: origemImagem,
+        userId: requestUserId ?? auth?.userId ?? null,
+        contentId: contentId ?? null,
+        action: contentStyle || "image",
+        durationMs: Date.now() - t0,
+        costUsd: estimado ?? null,
+        status: "ok",
+        metadata: {
+          custo_estimado: true,
+          formato: contentFormat ?? null,
+          plataforma: platform ?? null,
+          background_only: isBgOnly,
+          // Sem preço na tabela: aparece como buraco explícito em vez de virar custo zero silencioso.
+          preco_desconhecido: estimado === undefined,
+        },
+      });
+    }
 
     return new Response(JSON.stringify({
       success: true,

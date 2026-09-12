@@ -40,7 +40,15 @@ import { orChat, AGENT_MODEL_CHAIN, modeloEfetivo } from "../_shared/openrouter.
  * Se o OpenRouter inteiro falhar, cai no `fetchAI` legado como último recurso (melhor uma legenda
  * gerada por um caminho lento que nenhuma legenda).
  */
-async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
+/**
+ * @param tel Rótulo de telemetria. Opcional de propósito: os 18 pontos de chamada continuam
+ *   compilando sem tocar em nenhum, e cada um ganha rótulo quando alguém precisar do dado dele.
+ *   Sem rótulo a linha nasce como "ai_gateway" — genérica, mas não órfã.
+ */
+async function aiGatewayFetch(
+  body: Record<string, unknown>,
+  tel?: { userId?: string | null; action?: string },
+): Promise<Response> {
   const msgs = Array.isArray((body as any).messages) ? (body as any).messages : [];
   const userMsgs = msgs
     .filter((m: any) => m && m.role !== "system" && typeof m.content === "string")
@@ -59,6 +67,7 @@ async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> 
         messages: userMsgs,
         modelChain: AGENT_MODEL_CHAIN,
         maxTokens: Number((body as any).max_tokens) || 2048,
+        telemetry: { userId: tel?.userId ?? null, action: tel?.action ?? "ai_gateway" },
       });
       const text = r.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
       if (text.trim()) return ok(text);
@@ -687,7 +696,7 @@ Mensagem: "${message}"`;
       const classifyResp = await aiGatewayFetch({
         model: "google/gemini-2.5-flash-lite",
         messages: [{ role: "user", content: classifyPrompt }],
-      });
+      }, { userId, action: "classificar_intencao" });
 
       if (classifyResp.ok) {
         const classifyData = await classifyResp.json();
@@ -1197,7 +1206,7 @@ JSON: { "title": "...", "caption": "...", "hashtags": ["#..."] }`;
           const captionResp = await aiGatewayFetch({
             model: "openrouter/minimax-m-25",
             messages: [{ role: "user", content: captionPrompt }],
-          });
+          }, { userId, action: "legenda" });
 
           if (captionResp.ok) {
             const captionData = await captionResp.json();
@@ -1260,7 +1269,7 @@ Responda APENAS em JSON:
           const variantResp = await aiGatewayFetch({
             model: "openrouter/minimax-m-25",
             messages: [{ role: "user", content: variantPrompt }],
-          });
+          }, { userId, action: "variantes_por_rede" });
 
           if (variantResp.ok) {
             const variantData = await variantResp.json();
@@ -1703,7 +1712,7 @@ Responda APENAS em JSON: { "caption": "...", "hashtags": ["#..."] }`;
             const captionResp = await aiGatewayFetch({
               model: "openrouter/minimax-m-25",
               messages: [{ role: "user", content: captionPrompt }],
-            });
+            }, { userId, action: "legenda_carrossel" });
 
             if (captionResp.ok) {
               const captionData = await captionResp.json();
@@ -1772,7 +1781,7 @@ Responda APENAS em JSON:
           const variantResp = await aiGatewayFetch({
             model: "openrouter/minimax-m-25",
             messages: [{ role: "user", content: variantPrompt }],
-          });
+          }, { userId, action: "variantes_carrossel" });
           if (variantResp.ok) {
             const variantData = await variantResp.json();
             const raw = variantData.choices?.[0]?.message?.content || "";
