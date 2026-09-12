@@ -9,8 +9,8 @@ identidade da sua marca, consultar o calendário e agendar posts sem você sair 
 
 ## 1. Pegue seu token
 
-> ⚠️ **A tela de tokens ainda não existe** (é a Fase 2 da arquitetura). Por enquanto o Raul gera e
-> te envia. Quando a tela entrar, será em **Perfil → Acesso de agentes**.
+Entre em **[Perfil → Agentes](https://trendpulse.com.br/profile?tab=agentes)**, dê um nome ao acesso
+("Claude no meu notebook" serve), escolha o que ele pode fazer e clique em **Criar token**.
 
 O token começa com `tp_pat_` e aparece **uma única vez**. Guarde num gerenciador de senhas — o
 TrendPulse só armazena o hash e não consegue mostrar de novo.
@@ -27,6 +27,9 @@ Ele carrega **escopos**, que limitam o que o agente pode fazer:
 Ferramenta fora do escopo **nem aparece** para o agente.
 
 ---
+
+A própria tela já monta o comando de instalação com o seu token dentro — é só copiar e colar no
+terminal. Se preferir clicar em vez de colar, use o instalador abaixo.
 
 ## 2. Jeito fácil: o instalador
 
@@ -128,7 +131,6 @@ TrendPulse só guarda e agenda — não gerou nada, não cobra nada.
 
 ## Limites de hoje, ditos com clareza
 
-- **Não existe tela pra você gerar o próprio token** ainda — depende do Raul (Fase 2).
 - **O fluxo de aprovação da semana ainda não existe.** O que o `agendar_arte` cria já entra como
   agendado e publica sozinho na hora marcada — dá pra revisar e remover no calendário até lá, mas
   não há uma tela de "aprovar a semana" (Fase 7).
@@ -146,5 +148,10 @@ TrendPulse só guarda e agenda — não gerou nada, não cobra nada.
 
 ## Revogar
 
-Perdeu o controle do token (vazou, máquina compartilhada, saiu da equipe)? Peça a revogação: o
-token para de funcionar na chamada seguinte, sem afetar os outros nem sua conta.
+Perdeu o controle do token (vazou, máquina compartilhada, saiu da equipe)? Em
+**[Perfil → Agentes](https://trendpulse.com.br/profile?tab=agentes)**, clique em **Revogar**. O token
+para de funcionar na chamada seguinte, sem afetar os outros nem sua conta, e nada do que já foi
+gerado ou agendado se perde.
+
+A mesma tela mostra **quando cada token foi usado pela última vez** — é assim que você descobre um
+token esquecido numa máquina que não usa mais.

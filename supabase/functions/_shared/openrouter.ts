@@ -101,6 +101,79 @@ async function tfetch(url: string, init: RequestInit, ms: number): Promise<Respo
   finally { clearTimeout(t); }
 }
 
+/**
+ * Marca PONTOS DE CACHE no corpo da requisição, para modelos que cobram leitura de cache mais barato
+ * que entrada nova. Hoje só a Anthropic expõe isso pelo OpenRouter (US$ 1,00/M de entrada contra
+ * US$ 0,10/M de cache) — nos outros o campo é ignorado, então nem mandamos.
+ *
+ * POR QUE ISTO EXISTE: o agente reenviava o prompt INTEIRO a cada volta do loop de ferramentas. Medido
+ * em produção: US$ 0,0306 por chamada, com p90 de US$ 0,1075 — a US$ 1,00/M isso é ~100 mil tokens de
+ * entrada numa volta só. O loop vai até 8 rodadas, e cada rodada repaga o histórico inteiro das
+ * anteriores. Texto virou 95% do custo do produto (US$ 12,64 de US$ 13,28 medidos em 30 dias).
+ *
+ * ORDEM DO PREFIXO na Anthropic: ferramentas → system → mensagens. Um breakpoint no SYSTEM cacheia
+ * tudo que vem antes dele, ou seja, os 25 schemas de ferramenta (~4.900 tokens) vão junto de graça.
+ * É por isso que o breakpoint fica no system e não em outro lugar.
+ *
+ * O segundo breakpoint é ROLANTE, na última mensagem: na rodada N ele cacheia o que a rodada N+1 vai
+ * reler. Sem ele, o histórico (que é a parte que cresce) continuaria sendo pago inteiro toda volta.
+ *
+ * Limite da Anthropic: 4 breakpoints por requisição. Usamos 2.
+ */
+export function comCache(body: any, model: string): any {
+  if (!/^anthropic\//.test(model)) return body;
+  const msgs: any[] = (body.messages || []).map((m: any) => ({ ...m }));
+
+  const marca = (m: any): any => {
+    // Bloco de cache precisa ser content-parts, não string. `role:"tool"` fica FORA: o OpenRouter
+    // traduz essa role para tool_result da Anthropic, e parts ali não é formato garantido.
+    if (m.role === "tool") return m;
+    if (typeof m.content === "string") {
+      if (!m.content) return m;
+      return { ...m, content: [{ type: "text", text: m.content, cache_control: { type: "ephemeral" } }] };
+    }
+    if (Array.isArray(m.content) && m.content.length) {
+      const partes = m.content.map((p: any) => ({ ...p }));
+      partes[partes.length - 1] = { ...partes[partes.length - 1], cache_control: { type: "ephemeral" } };
+      return { ...m, content: partes };
+    }
+    return m;
+  };
+
+  // Breakpoint 1 — system (leva as ferramentas junto). Abaixo de ~1.000 tokens a Anthropic não
+  // cacheia e o breakpoint é desperdiçado, então nem marcamos.
+  const iSys = msgs.findIndex((m) => m.role === "system");
+  if (iSys >= 0 && typeof msgs[iSys].content === "string" && msgs[iSys].content.length > 4000) {
+    msgs[iSys] = marca(msgs[iSys]);
+  }
+
+  // Breakpoint 2 — rolante, na última mensagem que aceita marcação.
+  for (let i = msgs.length - 1; i > iSys; i--) {
+    if (msgs[i].role === "tool") continue;
+    const marcada = marca(msgs[i]);
+    if (marcada !== msgs[i]) { msgs[i] = marcada; break; }
+  }
+
+  return { ...body, messages: msgs };
+}
+
+/**
+ * O CONSUMIDOR sumiu — não é o provedor que falhou.
+ *
+ * O ai-agent devolve SSE por um ReadableStream. Quando o usuário fecha a aba, o controller fecha, e o
+ * `onText` seguinte estoura "The stream controller cannot close or enqueue". Esse erro subia pelo
+ * streamOne e caía no catch da chain, que então tentava Gemini (mesmo erro) e Qwen (mesmo erro) — e
+ * depois o agentTurn ainda caía no backstop do Replicate. Quatro modelos pagos para uma aba fechada.
+ *
+ * Foram 37 falhas em 464 chamadas (8%) na janela medida, TODAS com esta mensagem, distribuídas
+ * exatamente como a chain prevê: Haiku 15, Gemini 12, Qwen 10.
+ *
+ * Reconhecer isso como erro DEFINITIVO é o que corta o desperdício: sem consumidor, não há para quem
+ * entregar a resposta, então tentar de novo é queimar dinheiro por definição.
+ */
+export const consumidorSumiu = (msg: string): boolean =>
+  /stream controller cannot close or enqueue|readable ?stream.*(closed|locked)|invalid state.*controller/i.test(msg);
+
 export interface OrChatResult {
   content: AnthropicBlock[];
   stop_reason: string;
@@ -121,6 +194,10 @@ export async function orChat(opts: {
   maxTokens?: number;
   stream?: boolean;
   onText?: (delta: string) => void;
+  // Contexto só de telemetria: não afeta a geração. Sem isto as linhas nascem ÓRFÃS — dá para somar
+  // o custo total, não para dizer de quem foi nem em que etapa. As 450 linhas de texto da primeira
+  // medição estavam todas assim, enquanto as de imagem (que o orImage já preenchia) não estavam.
+  telemetry?: { userId?: string | null; contentId?: string | null; action?: string | null };
 }): Promise<OrChatResult> {
   const key = Deno.env.get("OPENROUTER_API_KEY");
   if (!key) throw new Error("OPENROUTER_API_KEY ausente");
@@ -140,18 +217,35 @@ export async function orChat(opts: {
     const tStart = Date.now();
     // Telemetria por MODELO da chain: se o Haiku falha e o Gemini salva, os dois eventos aparecem.
     // É assim que se enxerga um provedor degradado antes do usuário reclamar.
+    const tl = opts.telemetry;
     const log = (status: "ok" | "error", extra: Record<string, unknown>) =>
-      track({ kind: "text", provider: "openrouter", model, durationMs: Date.now() - tStart, status, ...extra } as any);
+      track({
+        kind: "text", provider: "openrouter", model,
+        userId: tl?.userId ?? null, contentId: tl?.contentId ?? null, action: tl?.action ?? null,
+        durationMs: Date.now() - tStart, status, ...extra,
+      } as any);
+
+    /**
+     * Contagem de tokens, separando o que foi LIDO DO CACHE do que foi cobrado como entrada nova.
+     * É a única forma de saber se o `comCache` está de fato pegando: custo baixo pode ser prompt
+     * pequeno, mas `cache_lido` alto só acontece se o cache funcionou.
+     */
+    const tokens = (u: any) => u ? {
+      entrada: u.prompt_tokens ?? null,
+      saida: u.completion_tokens ?? null,
+      cache_lido: u.prompt_tokens_details?.cached_tokens ?? 0,
+      cache_escrito: u.cache_creation_input_tokens ?? u.prompt_tokens_details?.cache_creation_tokens ?? 0,
+    } : null;
     try {
       if (opts.stream) {
-        const r = await streamOne(model, baseBody, headers, opts.onText);
-        log("ok", { costUsd: r.usage?.cost ?? null });
+        const r = await streamOne(model, comCache(baseBody, model), headers, opts.onText);
+        log("ok", { costUsd: r.usage?.cost ?? null, metadata: tokens(r.usage) });
         return r;
       }
       // Não-streaming: fetch PURO (sem AbortController). No edge do Supabase, ler res.json() de uma
       // Response cujo fetch levou signal de AbortController dispara "stream controller cannot close or
       // enqueue". Lemos o corpo como texto e parseamos. O wall-clock do edge já limita o tempo.
-      const res = await fetch(OR_URL, { method: "POST", headers, body: JSON.stringify({ ...baseBody, model }) });
+      const res = await fetch(OR_URL, { method: "POST", headers, body: JSON.stringify(comCache({ ...baseBody, model }, model)) });
       const raw = await res.text();
       if (!res.ok) {
         lastErr = new Error(`OpenRouter ${model} HTTP ${res.status}: ${raw.slice(0, 200)}`);
@@ -161,12 +255,19 @@ export async function orChat(opts: {
       }
       const data = JSON.parse(raw);
       const { content, stop_reason } = fromOpenAIResponse(data.choices?.[0]);
-      log("ok", { costUsd: data.usage?.cost ?? null });
+      log("ok", { costUsd: data.usage?.cost ?? null, metadata: tokens(data.usage) });
       return { content, stop_reason, model, usage: data.usage || null };
     } catch (e: any) {
       lastErr = e;
-      console.warn(`[openrouter] ${model} exceção: ${e?.message} — próximo da chain`);
       const msg = String(e?.message || e);
+      // Consumidor sumiu: erro DEFINITIVO. Andar a chain aqui queima Gemini e Qwen — e depois o
+      // backstop do Replicate no agentTurn — para entregar a ninguém. Ver consumidorSumiu().
+      if (consumidorSumiu(msg)) {
+        console.warn(`[openrouter] ${model}: consumidor desconectou — aborta a chain (não é falha de provedor)`);
+        log("error", { error: "consumidor desconectou", statusCode: 499 });
+        throw e;
+      }
+      console.warn(`[openrouter] ${model} exceção: ${e?.message} — próximo da chain`);
       log("error", { error: msg, statusCode: statusFromError(msg) });
     }
   }
@@ -249,6 +350,32 @@ export const OR_IMAGE_MODELS: Record<string, string> = {
 // Default seguro p/ pt-BR (texto perfeito). Velocidade ~68s é aceitável (Replicate gpt-image-2 era similar).
 export const OR_IMAGE_DEFAULT = "openai/gpt-image-2";
 
+/** Proporções que o OpenRouter aceita. Qualquer outra coisa vira 1:1. */
+export const normalizaAspecto = (ar: string): string =>
+  ["1:1", "4:5", "9:16", "2:3", "3:2", "3:4", "4:3", "16:9"].includes(ar) ? ar : "1:1";
+
+/**
+ * Qual modelo VAI RODAR de fato, dado o que o usuário pediu e a proporção.
+ *
+ * O gpt-image-2 só entrega 1:1, 3:2 e 2:3 — em 4:5 e 9:16 ele deforma a peça. Por isso, nesses
+ * formatos, a geração é re-roteada para o Nano Banana Pro, que tem a proporção nativa.
+ *
+ * POR QUE ISTO É EXPORTADO, e não só um `if` dentro do orImage: quem COBRA precisa da mesma resposta
+ * que quem GERA. Enquanto a regra vivia escondida na geração, o usuário escolhia "GPT-Image 2",
+ * pagava `img_gpt` (10 créditos = R$ 1,00) e a peça saía no Nano Banana Pro, que custa US$ 0,1384 —
+ * R$ 0,75 de imagem mais R$ 0,40 de texto. Prejuízo de R$ 0,15 por story, e story é 38% do que se
+ * gera aqui.
+ *
+ * A alternativa — cobrar depois, pelo que rodou — foi descartada: o usuário veria 10 créditos na
+ * tela e 25 no extrato. Resolver ANTES deixa o preço certo e visível antes de gerar.
+ */
+export function modeloEfetivo(appModel: string | undefined | null, aspectRatio: string): string | undefined {
+  if (!appModel) return undefined;
+  const ar = normalizaAspecto(aspectRatio);
+  if (appModel === "gpt-image-2" && (ar === "4:5" || ar === "9:16")) return "nano-banana";
+  return appModel;
+}
+
 export interface OrImageResult { dataUrl: string; usage: any; model: string }
 
 /** Gera uma imagem via OpenRouter. Retorna data URL (base64) + usage.cost. Se a busca de uma
@@ -263,15 +390,11 @@ export async function orImage(opts: {
   const key = Deno.env.get("OPENROUTER_API_KEY");
   if (!key) throw new Error("OPENROUTER_API_KEY ausente");
   const headers = { Authorization: `Bearer ${key}`, "Content-Type": "application/json", "HTTP-Referer": "https://trendpulse.com.br", "X-Title": "TrendPulse" };
-  const ar = ["1:1", "4:5", "9:16", "2:3", "3:2", "3:4", "4:3", "16:9"].includes(opts.aspectRatio) ? opts.aspectRatio : "1:1";
-  // Guard de aspect (espelha resolveImageModel do generate-slide-images): o gpt-image-2 só suporta
-  // 1:1/3:2/2:3 → em 4:5/9:16 ele degradaria a proporção. Nesses formatos VERTICAIS re-roteia pra
-  // Nano Banana Pro (nativo), MESMO se o usuário selecionou gpt — pra não estragar a proporção. Em
-  // 1:1 (post/carrossel) o seletor é honrado (gpt fica gpt).
-  let appModel = opts.model;
-  if (appModel === "gpt-image-2" && (ar === "4:5" || ar === "9:16")) {
-    appModel = "nano-banana";
-    console.warn(`[openrouter] gpt-image-2 degrada ${ar} — re-roteando pra nano-banana (proporção nativa)`);
+  const ar = normalizaAspecto(opts.aspectRatio);
+  // A regra do re-roteamento mora em modeloEfetivo(), compartilhada com quem cobra. Ver lá o porquê.
+  const appModel = modeloEfetivo(opts.model, ar);
+  if (appModel !== opts.model) {
+    console.warn(`[openrouter] ${opts.model} degrada ${ar} — re-roteando pra ${appModel} (proporção nativa)`);
   }
   const model = (appModel && OR_IMAGE_MODELS[appModel]) || appModel || OR_IMAGE_DEFAULT;
   const refs = (opts.refImages || []).filter((u) => typeof u === "string" && u.startsWith("http"));

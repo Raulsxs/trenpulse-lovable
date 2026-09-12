@@ -8,7 +8,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { AGENT_TOOLS, GATED_TOOLS, CONFIRM_CREDIT_THRESHOLD, estimateToolCost, dispatchTool, type ToolCtx } from "../_shared/agent-tools.ts";
 import { replicateAgentTurn } from "../_shared/agent-fallback.ts";
-import { orChat, AGENT_MODEL_CHAIN } from "../_shared/openrouter.ts";
+import { orChat, AGENT_MODEL_CHAIN, consumidorSumiu } from "../_shared/openrouter.ts";
 import { buildBrandBrief } from "../_shared/brand-context.ts";
 
 const corsHeaders = {
@@ -109,6 +109,7 @@ async function maybeDistillMemory(svc: any, userId: string): Promise<void> {
       messages: [{ role: "user", content: `Histórico (U=usuário, A=assistente):\n${transcript}` }],
       modelChain: ["google/gemini-2.5-flash-lite", "anthropic/claude-haiku-4.5"],
       maxTokens: 400,
+      telemetry: { userId, action: "destilar_memoria" },
     });
     const summary = r.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("").trim().slice(0, 1500);
     await svc.from("agent_user_memory").upsert({
@@ -120,8 +121,53 @@ async function maybeDistillMemory(svc: any, userId: string): Promise<void> {
   }
 }
 
-function sse(controller: ReadableStreamDefaultController, enc: TextEncoder, event: Record<string, unknown>) {
-  controller.enqueue(enc.encode(`data: ${JSON.stringify(event)}\n\n`));
+/**
+ * Canal SSE que sabe quando o outro lado foi embora.
+ *
+ * POR QUE ISTO EXISTE (e por que um `enqueue` solto não serve): quando o usuário fecha a aba, o
+ * ReadableStream é cancelado e o controller passa a recusar escrita. O `enqueue` seguinte estoura
+ * "The stream controller cannot close or enqueue" — e como essa escrita acontece DENTRO do onText,
+ * que roda dentro do orChat, a exceção era lida como falha de modelo: a chain tentava Gemini, depois
+ * Qwen, e o agentTurn ainda caía no backstop do Replicate. Quatro modelos pagos para uma aba fechada.
+ *
+ * Medido: 37 de 464 chamadas (8%) na janela de 30 dias, TODAS com essa mensagem, distribuídas como a
+ * chain prevê — Haiku 15, Gemini 12, Qwen 10.
+ *
+ * Duas regras aqui: escrever nunca lança (só marca o canal como morto), e `vivo` é consultável para
+ * o loop parar de gerar. Continuar depois que o cliente sumiu gasta crédito do usuário por conteúdo
+ * que ninguém vai ver.
+ */
+interface Canal {
+  readonly vivo: boolean;
+  envia(event: Record<string, unknown>): boolean;
+  encerra(): void;
+  desiste(): void;
+}
+
+function criarCanal(controller: ReadableStreamDefaultController, enc: TextEncoder): Canal {
+  let vivo = true;
+  return {
+    get vivo() { return vivo; },
+    envia(event) {
+      if (!vivo) return false;
+      try {
+        controller.enqueue(enc.encode(`data: ${JSON.stringify(event)}\n\n`));
+        return true;
+      } catch {
+        // Cliente foi embora. Silencioso de propósito: isto não é erro do sistema, e propagar aqui
+        // é justamente o que fazia a chain inteira ser percorrida à toa.
+        vivo = false;
+        return false;
+      }
+    },
+    encerra() {
+      if (!vivo) return;
+      vivo = false;
+      try { controller.close(); } catch { /* já fechado pelo cancelamento do cliente */ }
+    },
+    /** Chamado pelo `cancel()` do stream: o cliente desconectou antes de a gente perceber. */
+    desiste() { vivo = false; },
+  };
 }
 
 // UM turno do agente (T02): PRIMÁRIO = OpenRouter (tool-calling NATIVO + fallback entre modelos
@@ -131,17 +177,21 @@ function sse(controller: ReadableStreamDefaultController, enc: TextEncoder, even
 // A key da Anthropic direta saiu do caminho quente — o OpenRouter cobra à parte (conserta o apagão de
 // crédito) e ainda dá resiliência multi-provedor. `usage` traz o custo USD real (insumo do T03).
 async function agentTurn(
-  system: string, messages: any[], onText?: (t: string) => void,
+  system: string, messages: any[], onText?: (t: string) => void, userId?: string | null,
 ): Promise<{ content: any[]; stop_reason: string; via: string; usage?: any }> {
   try {
     const r = await orChat({
       system, messages, tools: AGENT_TOOLS as any,
       modelChain: AGENT_MODEL_CHAIN, maxTokens: 2048,
       stream: !!onText, onText,
+      telemetry: { userId: userId ?? null, action: "agent_turn" },
     });
     console.log(`[ai-agent] turno via openrouter:${r.model} (custo $${r.usage?.cost ?? "?"})`);
     return { content: r.content, stop_reason: r.stop_reason, via: `openrouter:${r.model}`, usage: r.usage };
   } catch (e: any) {
+    // Consumidor sumiu não é indisponibilidade: o backstop do Replicate geraria um turno inteiro,
+    // pago, para uma aba que já fechou. Era o quarto modelo da cascata. Propaga e deixa o loop parar.
+    if (consumidorSumiu(String(e?.message || e))) throw e;
     console.warn(`[ai-agent] OpenRouter indisponível (${String(e?.message).slice(0, 100)}) — backstop Replicate manual`);
     const fb = await replicateAgentTurn(system, messages, AGENT_TOOLS);
     if (onText && fb.stop_reason !== "tool_use") {
@@ -275,7 +325,7 @@ Deno.serve(async (req) => {
       let resultText = "";
       let needsReview: any = null;
       for (let round = 0; round < 8; round++) {
-        const final = await agentTurn(system, messages);
+        const final = await agentTurn(system, messages, undefined, user.id);
         messages.push({ role: "assistant", content: final.content });
         {
           const asstText = final.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("\n").trim();
@@ -309,8 +359,11 @@ Deno.serve(async (req) => {
     }
   }
 
+  // `canal` é preenchido no start e lido no cancel — por isso vive fora dos dois.
+  let canal: Canal;
   const stream = new ReadableStream({
     async start(controller) {
+      canal = criarCanal(controller, enc);
       try {
         // Auditoria: registra o turno do usuário (menos no resume de confirmação, que não traz msg nova).
         if (!body.confirm?.tool_use_id && incomingUserText) {
@@ -321,21 +374,24 @@ Deno.serve(async (req) => {
           const c = body.confirm;
           let resultText: string, ar: any = undefined;
           if (c.approved) {
-            sse(controller, enc, { type: "tool_start", name: c.name });
+            canal.envia({ type: "tool_start", name: c.name });
             const r = await dispatchTool(ctx, c.name, c.input);
             resultText = r.content; ar = r.action_result;
-            sse(controller, enc, { type: "tool_done", name: c.name, ok: r.ok });
+            canal.envia({ type: "tool_done", name: c.name, ok: r.ok });
           } else {
             resultText = "O usuário CANCELOU esta ação. Não tente de novo; pergunte se ele quer outra coisa.";
-            sse(controller, enc, { type: "tool_done", name: c.name, ok: false, cancelled: true });
+            canal.envia({ type: "tool_done", name: c.name, ok: false, cancelled: true });
           }
-          if (ar) sse(controller, enc, { type: "action_result", action_result: ar });
+          if (ar) canal.envia({ type: "action_result", action_result: ar });
           messages.push({ role: "user", content: [{ type: "tool_result", tool_use_id: c.tool_use_id, content: resultText }] });
         }
 
         // Loop manual de tool-use (cap de 8 rodadas). agentTurn tenta Anthropic e cai pro Replicate.
         for (let round = 0; round < 8; round++) {
-          const final = await agentTurn(system, messages, (delta) => sse(controller, enc, { type: "text", delta }));
+          // Sem consumidor não há motivo para continuar: cada rodada gasta modelo, e as ferramentas
+          // gastam CRÉDITO DO USUÁRIO. Gerar para uma aba fechada é cobrar por nada.
+          if (!canal.vivo) { console.log(`[ai-agent] canal morto na rodada ${round} — para aqui`); return; }
+          const final = await agentTurn(system, messages, (delta) => canal.envia({ type: "text", delta }), user.id);
           messages.push({ role: "assistant", content: final.content });
 
           // Auditoria: texto da resposta + ferramentas chamadas neste round.
@@ -347,8 +403,8 @@ Deno.serve(async (req) => {
 
           const toolUses = final.content.filter((b: any) => b.type === "tool_use");
           if (final.stop_reason !== "tool_use" || toolUses.length === 0) {
-            sse(controller, enc, { type: "done", messages });
-            controller.close();
+            canal.envia({ type: "done", messages });
+            canal.encerra();
             return;
           }
 
@@ -357,32 +413,40 @@ Deno.serve(async (req) => {
             const cost = estimateToolCost(tu.name, tu.input);
             if (GATED_TOOLS.has(tu.name) || cost > CONFIRM_CREDIT_THRESHOLD) {
               // Pausa: pede confirmação (ação irreversível OU custo alto). O cliente reenvia messages + confirm.
-              sse(controller, enc, {
+              canal.envia({
                 type: "confirm_request",
                 tool_use_id: tu.id, name: tu.name, input: tu.input, cost,
                 assistant_content: final.content,
                 messages,
               });
-              sse(controller, enc, { type: "paused" });
-              controller.close();
+              canal.envia({ type: "paused" });
+              canal.encerra();
               return;
             }
-            sse(controller, enc, { type: "tool_start", name: tu.name });
+            if (!canal.vivo) { console.log("[ai-agent] canal morto antes da ferramenta — não executa"); return; }
+            canal.envia({ type: "tool_start", name: tu.name });
             let r;
             try { r = await dispatchTool(ctx, tu.name, tu.input); }
             catch (e: any) { r = { ok: false, content: `Erro na ferramenta: ${e?.message || e}` }; }
-            if (r.action_result) sse(controller, enc, { type: "action_result", action_result: r.action_result });
-            sse(controller, enc, { type: "tool_done", name: tu.name, ok: r.ok });
+            if (r.action_result) canal.envia({ type: "action_result", action_result: r.action_result });
+            canal.envia({ type: "tool_done", name: tu.name, ok: r.ok });
             toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: r.content, is_error: !r.ok });
           }
           messages.push({ role: "user", content: toolResults });
         }
-        sse(controller, enc, { type: "done", note: "limite de rodadas", messages });
-        controller.close();
+        canal.envia({ type: "done", note: "limite de rodadas", messages });
+        canal.encerra();
       } catch (e: any) {
-        sse(controller, enc, { type: "error", error: e?.message || String(e) });
-        controller.close();
+        // canal.envia/encerra engolem o caso de já estar fechado, então este catch não pode
+        // estourar por sua vez — que era o segundo bug: o erro dentro do catch impedia o close.
+        canal.envia({ type: "error", error: e?.message || String(e) });
+        canal.encerra();
       }
+    },
+    /** O navegador desconectou. Marca o canal como morto para o loop parar na próxima checagem. */
+    cancel() {
+      canal?.desiste();
+      console.log("[ai-agent] cliente desconectou — encerrando o turno");
     },
   });
 

@@ -4,7 +4,7 @@ import { fetchAI } from "../_shared/ai-gateway.ts";
 import { buildBrandContext, brandTextLimits } from "../_shared/brand-context.ts";
 import { parseLlmJson } from "../_shared/llm-json.ts";
 import { clampSlides, normalizeHashtags, enforceTweetLimit, truncateToChars } from "../_shared/content-validators.ts";
-import { orChat, AGENT_MODEL_CHAIN } from "../_shared/openrouter.ts";
+import { orChat, AGENT_MODEL_CHAIN, modeloEfetivo } from "../_shared/openrouter.ts";
 
 // ══════════════════════════════════════════════════════════════════════════════
 // TrendPulse AI Chat — Simplified (~1500 lines)
@@ -40,7 +40,15 @@ import { orChat, AGENT_MODEL_CHAIN } from "../_shared/openrouter.ts";
  * Se o OpenRouter inteiro falhar, cai no `fetchAI` legado como último recurso (melhor uma legenda
  * gerada por um caminho lento que nenhuma legenda).
  */
-async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
+/**
+ * @param tel Rótulo de telemetria. Opcional de propósito: os 18 pontos de chamada continuam
+ *   compilando sem tocar em nenhum, e cada um ganha rótulo quando alguém precisar do dado dele.
+ *   Sem rótulo a linha nasce como "ai_gateway" — genérica, mas não órfã.
+ */
+async function aiGatewayFetch(
+  body: Record<string, unknown>,
+  tel?: { userId?: string | null; action?: string },
+): Promise<Response> {
   const msgs = Array.isArray((body as any).messages) ? (body as any).messages : [];
   const userMsgs = msgs
     .filter((m: any) => m && m.role !== "system" && typeof m.content === "string")
@@ -59,6 +67,7 @@ async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> 
         messages: userMsgs,
         modelChain: AGENT_MODEL_CHAIN,
         maxTokens: Number((body as any).max_tokens) || 2048,
+        telemetry: { userId: tel?.userId ?? null, action: tel?.action ?? "ai_gateway" },
       });
       const text = r.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
       if (text.trim()) return ok(text);
@@ -478,6 +487,22 @@ serve(async (req) => {
     };
     const modelCostAction: string | null = requestModel && MODEL_COST_ACTION[requestModel] ? MODEL_COST_ACTION[requestModel] : null;
 
+    /**
+     * Ação de cobrança do FORMATO pedido — que nem sempre é a do modelo pedido.
+     *
+     * Em 9:16 (story) e 4:5 (document) o gpt-image-2 deforma a peça, então a geração é re-roteada
+     * para o Nano Banana Pro. Cobrar `img_gpt` ali seria vender por 10 créditos (R$ 1,00) uma imagem
+     * que custa US$ 0,1384 — com o texto junto, R$ 1,15. Prejuízo em 38% do que se gera.
+     *
+     * `modeloEfetivo` é a MESMA função que o orImage usa para escolher o modelo, então preço e
+     * geração não têm como divergir. Usar isto, e não `modelCostAction`, em tudo que gera imagem.
+     */
+    const custoDoFormato = (fmt: string): string | null => {
+      const ar = fmt === "story" ? "9:16" : fmt === "document" ? "4:5" : "1:1";
+      const efetivo = modeloEfetivo(requestModel, ar);
+      return (efetivo && MODEL_COST_ACTION[efetivo]) || null;
+    };
+
     const lovableApiKey = Deno.env.get("LOVABLE_API_KEY") || Deno.env.get("INFERENCE_SH_API_KEY") || Deno.env.get("GOOGLE_AI_API_KEY");
     if (!lovableApiKey) throw new Error("No AI API key configured (INFERENCE_SH_API_KEY, GOOGLE_AI_API_KEY, or LOVABLE_API_KEY)");
     if (!message) throw new Error("message is required");
@@ -671,7 +696,7 @@ Mensagem: "${message}"`;
       const classifyResp = await aiGatewayFetch({
         model: "google/gemini-2.5-flash-lite",
         messages: [{ role: "user", content: classifyPrompt }],
-      });
+      }, { userId, action: "classificar_intencao" });
 
       if (classifyResp.ok) {
         const classifyData = await classifyResp.json();
@@ -815,7 +840,7 @@ Mensagem: "${message}"`;
         console.log(`[ai-chat] GENERATE: platform=${platform}, format=${format}, contentStyle=${contentStyle || "news"}, headline="${slideHeadline}"`);
 
         {
-          const denyMsg = await insufficientCredits(svc, userId, modelCostAction || (format === "story" ? "story" : "post"));
+          const denyMsg = await insufficientCredits(svc, userId, custoDoFormato(format) || (format === "story" ? "story" : "post"));
           if (denyMsg) { replyOverride = denyMsg; break; }
         }
 
@@ -1181,7 +1206,7 @@ JSON: { "title": "...", "caption": "...", "hashtags": ["#..."] }`;
           const captionResp = await aiGatewayFetch({
             model: "openrouter/minimax-m-25",
             messages: [{ role: "user", content: captionPrompt }],
-          });
+          }, { userId, action: "legenda" });
 
           if (captionResp.ok) {
             const captionData = await captionResp.json();
@@ -1244,7 +1269,7 @@ Responda APENAS em JSON:
           const variantResp = await aiGatewayFetch({
             model: "openrouter/minimax-m-25",
             messages: [{ role: "user", content: variantPrompt }],
-          });
+          }, { userId, action: "variantes_por_rede" });
 
           if (variantResp.ok) {
             const variantData = await variantResp.json();
@@ -1291,7 +1316,7 @@ Responda APENAS em JSON:
             .update({ image_urls: [imageUrl] })
             .eq("id", savedContentId);
           // Débito de créditos (só se gerou imagem)
-          await chargeCredits(svc, userId, modelCostAction || (format === "story" ? "story" : "post"), 1, savedContentId);
+          await chargeCredits(svc, userId, custoDoFormato(format) || (format === "story" ? "story" : "post"), 1, savedContentId);
         }
 
         // 11. Set reply
@@ -1330,7 +1355,7 @@ Responda APENAS em JSON:
         console.log(`[ai-chat] GENERATE_CAROUSEL: platform=${platform}, format=${format}, effectiveSlideFormat=${effectiveSlideFormat}, isStoryCarousel=${isStoryCarousel}, slides=${slideCount}`);
 
         {
-          const denyMsg = await insufficientCredits(svc, userId, modelCostAction || "carousel_slide", slideCount);
+          const denyMsg = await insufficientCredits(svc, userId, custoDoFormato(format) || "carousel_slide", slideCount);
           if (denyMsg) { replyOverride = denyMsg; break; }
         }
 
@@ -1473,6 +1498,7 @@ Responda em JSON:
             messages: [{ role: "user", content: structurePrompt + extraInstruction }],
             modelChain: ["anthropic/claude-haiku-4.5", "google/gemini-2.5-flash"],
             maxTokens: 2048,
+            telemetry: { userId, action: "estrutura_carrossel" },
           });
           const raw = r.content.filter((b: any) => b.type === "text").map((b: any) => b.text).join("");
           const jsonStr = extractJsonObject(raw);
@@ -1686,7 +1712,7 @@ Responda APENAS em JSON: { "caption": "...", "hashtags": ["#..."] }`;
             const captionResp = await aiGatewayFetch({
               model: "openrouter/minimax-m-25",
               messages: [{ role: "user", content: captionPrompt }],
-            });
+            }, { userId, action: "legenda_carrossel" });
 
             if (captionResp.ok) {
               const captionData = await captionResp.json();
@@ -1755,7 +1781,7 @@ Responda APENAS em JSON:
           const variantResp = await aiGatewayFetch({
             model: "openrouter/minimax-m-25",
             messages: [{ role: "user", content: variantPrompt }],
-          });
+          }, { userId, action: "variantes_carrossel" });
           if (variantResp.ok) {
             const variantData = await variantResp.json();
             const raw = variantData.choices?.[0]?.message?.content || "";
@@ -1798,7 +1824,7 @@ Responda APENAS em JSON:
             .update({ image_urls: imageUrls_arr })
             .eq("id", savedContentId);
           // Débito: 1 ação por slide gerado
-          await chargeCredits(svc, userId, modelCostAction || "carousel_slide", imageUrls_arr.length, savedContentId);
+          await chargeCredits(svc, userId, custoDoFormato(format) || "carousel_slide", imageUrls_arr.length, savedContentId);
         }
 
         // 10. Set reply

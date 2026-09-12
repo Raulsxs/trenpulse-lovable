@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import ImageEditorModal from "@/components/ui/ImageEditorModal";
 import ProfilePreferences from "@/components/profile/ProfilePreferences";
 import SocialConnections from "@/components/profile/SocialConnections";
+import AgentAccess from "@/components/profile/AgentAccess";
 import BuyCreditsModal from "@/components/billing/BuyCreditsModal";
 import { CUSTOS } from "@/lib/precos";
 
@@ -140,9 +141,12 @@ const Profile = () => {
       searchParams.delete("pfm_error");
       setSearchParams(searchParams, { replace: true });
     }
-    // deep-link opcional: ?tab=plano | conexoes | conta
+    // deep-link opcional: ?tab=plano | conexoes | conta | agentes
     const t = searchParams.get("tab");
-    if (t === "plano" || t === "conexoes" || t === "conta") setTab(t);
+    // Lista fechada de propósito: `tab` vem da URL, e abrir para qualquer string deixaria o Tabs
+    // num valor sem painel (tela em branco). "agentes" entra aqui porque é o destino do link que a
+    // documentação de instalação do MCP manda — /profile?tab=agentes.
+    if (t === "plano" || t === "conexoes" || t === "conta" || t === "agentes") setTab(t);
   }, [searchParams, setSearchParams]);
 
   const fetchProfile = async () => {
@@ -394,6 +398,7 @@ const Profile = () => {
           <TabsTrigger value="conta">Conta</TabsTrigger>
           <TabsTrigger value="conexoes">Conexões</TabsTrigger>
           <TabsTrigger value="plano">Plano &amp; Créditos</TabsTrigger>
+          <TabsTrigger value="agentes">Agentes</TabsTrigger>
         </TabsList>
 
         {/* ───────── Aba Conta ───────── */}
@@ -539,6 +544,13 @@ const Profile = () => {
         {/* ───────── Aba Conexões ───────── */}
         <TabsContent value="conexoes" className="mt-0">
           <SocialConnections />
+        </TabsContent>
+
+        {/* ───────── Aba Agentes ─────────
+            Onde a pessoa gera o token que liga o Claude/Codex à conta dela. Vive no Perfil, junto de
+            Conexões, porque é a mesma pergunta: "o que tem acesso à minha conta e como eu tiro". */}
+        <TabsContent value="agentes" className="mt-0">
+          <AgentAccess />
         </TabsContent>
 
         {/* ───────── Aba Plano & Créditos ───────── */}

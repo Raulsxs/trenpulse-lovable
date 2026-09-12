@@ -4,8 +4,9 @@
 mandar a arte que o agente acabou de criar pro calendário, agendar, listar marcas e contas, checar
 saldo — sem que a pessoa saia pra outra aba.
 
-**Estado:** o caso da reunião FECHA (2026-09-09). Fases 1, 4 e 6 entregues + instalador.
-Instalação em `docs/mcp-instalacao.md`. Falta a tela de tokens (2) e o fluxo de aprovação (7).
+**Estado:** self-serve FECHADO (2026-09-12). Fases 1, 2, 4 e 6 entregues + instalador — um cliente
+já gera o próprio token e conecta sem ninguém no meio. Instalação em `docs/mcp-instalacao.md`.
+Falta o fluxo de aprovação (7) e o OAuth de um clique.
 **Origem:** reunião Raul × Dr. Maikon, 2026-09-06.
 
 ---
@@ -138,6 +139,12 @@ alternativo de cobrança aqui viraria buraco de margem.
 - **Publicação imediata** (`publicar_agora`) — o usuário pediu aprovação antes; entra só se ele pedir.
 - **OAuth** — a v1 conecta por bearer token (PAT). OAuth é o que transforma "cole este token" em
   "clique em Conectar", e entra na v2. Sem ele o self-serve ainda tem um passo manual.
+
+  Verificado em 2026-09-12: o fluxo nativo de *Adicionar conector* do Claude **exige registro
+  dinâmico de cliente OAuth contra a origem do servidor**, sem alternativa por header estático — ou
+  seja, colar token nunca vira "um link" por mais que se melhore a tela. As três peças que faltam
+  são 401 com `WWW-Authenticate`, Protected Resource Metadata (RFC 9728) e Dynamic Client
+  Registration (RFC 7591). O Supabase Auth já é o authorization server.
 - **stdio / pacote npm** — descartado como transporte principal (§3.3). Só volta se aparecer cliente
   que precise rodar offline.
 - **CRM, tarefas, financeiro, gestão de cirurgias** — tudo isso apareceu na mesma reunião, mas é
@@ -172,14 +179,19 @@ alternativo de cobrança aqui viraria buraco de margem.
 
 - [x] **1. PAT — schema e verificação.** Tabela `api_tokens`, geração com `gen_random_bytes`, helper
       `requirePat()` com escopos, RLS fechada.
-- [ ] **2. PAT — UI.** Tela no Perfil: criar (token aparece uma vez), listar, revogar, ver último uso.
-- [ ] **3. Ponte PAT → sessão.** Helper que troca PAT por JWT de usuário (generate_link + verify),
-      com cache por TTL. Caminho já validado em produção.
+- [x] **2. PAT — UI.** `Perfil → Agentes` (`/profile?tab=agentes`): criar com o token aparecendo uma
+      única vez junto do comando de instalação já preenchido, listar com escopos e último uso,
+      revogar com confirmação. VERIFICADO de ponta a ponta: token criado na tela respondeu
+      `consultar_saldo` com o saldo real, e depois de revogado a chamada seguinte foi recusada.
+- [x] **3. Ponte PAT → sessão.** `jwtDoUsuario()` na edge function `mcp`: generate_link + verify,
+      cacheado por 55 min. Comprovado pela RLS: um token novo leu o saldo do dono e nada de outro
+      usuário.
 - [x] **4. `agendar_arte`.** Recebe imagem pronta (URL ou base64), sobe pro bucket e cria
       `generated_contents` agendado. Não cobra crédito: nada foi gerado. Travas: data no passado,
       colisão de horário exato, teto de 8 MB, marca inexistente (lista as que existem).
-- [ ] **5. Curadoria do catálogo.** Das 24 tools, decidir quais o MCP expõe. Expor todas seria
-      ruído pro agente; `publicar_agora` fica fora por decisão de produto.
+- [x] **5. Curadoria do catálogo.** 13 das 25 tools expostas, filtradas por escopo do token —
+      `tools/list` confirmado em produção. `publicar_agora` fica fora por decisão de produto: o
+      usuário pediu para aprovar antes.
 - [x] **6. Servidor MCP remoto.** Edge function `mcp` falando streamable HTTP, expondo o catálogo de
       `agent-tools.ts`, autenticada por PAT. Config de duas linhas para Claude e Codex.
 - [ ] **7. Fluxo de aprovação.** "Aprovar a semana" na UI do calendário — o pedido explícito do Maikon.
@@ -189,7 +201,8 @@ alternativo de cobrança aqui viraria buraco de margem.
 
 ## 7. Critério de pronto
 
-- O Maikon cola um bloco de config no Claude Desktop e no Codex e as seis tools aparecem.
+- O cliente entra em Perfil → Agentes, cria o próprio token e cola o comando que a tela já monta —
+  sem ninguém no meio. FEITO e verificado.
 - Ele manda "agenda essas 16 artes na Jornada, segunda/quarta/sexta até janeiro" e elas aparecem no
   calendário da Trend, na marca certa, no fuso certo.
 - Token revogado na UI para de funcionar na chamada seguinte.
