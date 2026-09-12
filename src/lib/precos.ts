@@ -42,17 +42,23 @@ export interface CustoFormato {
  *     Imagen 4 Fast 4 · Reve 4 · Ideogram 5 · Seedream 5 · Flux 6 · Qwen 6 · Recraft 6
  *     GPT-Image 2 10 · Nano Banana Pro 25
  *
- * Anunciar "Story 25" sem dizer isso é anunciar o TETO como se fosse o preço: o mesmo story sai por
- * 10 no GPT-Image 2. É a mesma classe de problema do preço divulgado ≠ praticado — por isso o campo
- * `variaPorModelo` existe, e as telas públicas são obrigadas a mostrar a faixa, não só o padrão.
+ * Em 1:1 a escolha é real e o preço varia — por isso `variaPorModelo` existe, e as telas públicas
+ * mostram a faixa, não só o padrão.
+ *
+ * ⚠️ VERTICAL (story 9:16, document 4:5) NÃO tem faixa. O gpt-image-2 deforma essas proporções, e
+ * `modeloEfetivo()` (em _shared/openrouter.ts) re-roteia pro Nano Banana Pro. Quem cobra usa a MESMA
+ * função de quem gera, então lá o preço é sempre 25. Anunciar "10 no GPT-Image 2" para story era
+ * vender um tier que o sistema não consegue entregar — e custava R$ 0,15 de prejuízo por peça.
  */
 export const CUSTOS: CustoFormato[] = [
   { action: "post", label: "Post com imagem", credits: 10, detalhe: "Imagem + legenda pronta pra publicar",
     variaPorModelo: { min: 4, nota: "4 no Imagen 4 Fast · 10 no GPT-Image 2 · 25 no Nano Banana Pro" } },
   { action: "carousel_slide", label: "Carrossel", credits: 10, detalhe: "Por slide, com fio narrativo entre eles" },
   { action: "editorial_slide", label: "Carrossel editorial", credits: 5, detalhe: "Por slide, texto sobre foto" },
-  { action: "story", label: "Story 9:16", credits: 25, detalhe: "Vertical, formato de tela cheia",
-    variaPorModelo: { min: 10, nota: "10 no GPT-Image 2 · 25 no Nano Banana Pro, o premium pra 9:16" } },
+  // 9:16 NÃO tem tier barato, e anunciar que tem era propaganda de algo que não existe: o gpt-image-2
+  // deforma vertical, então `modeloEfetivo` o re-roteia pro Nano Banana Pro. A pessoa escolhia
+  // "GPT-Image 2 = 10 créditos" e recebia — e agora paga — Nano Banana. Preço único é o honesto aqui.
+  { action: "story", label: "Story 9:16", credits: 25, detalhe: "Vertical, formato de tela cheia. Sempre no Nano Banana Pro — é o único que entrega 9:16 sem deformar" },
   { action: "tweet_card", label: "Carrossel de tweet card", credits: 6, detalhe: "Print de tweet, em série" },
   { action: "free_image", label: "Imagem livre", credits: 10, detalhe: "Geração crua, sem estrutura de post",
     variaPorModelo: { min: 4, nota: "4 no Imagen 4 Fast · 25 no Nano Banana Pro" } },
