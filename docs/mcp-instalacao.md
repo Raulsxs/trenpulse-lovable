@@ -116,6 +116,10 @@ O agente escolhe a ferramenta sozinho; você fala normal:
 - *"monta um calendário de 3 posts por semana até o fim do mês"*
 - *"joga essa arte que eu fiz aqui no TrendPulse pra terça 9h, no @hearttsurgery"*
 - *"agenda essas 16 imagens na Jornada, segunda/quarta/sexta"*
+- *"pega a arte que está em Downloads/arte-segunda.png e agenda pra segunda 9h no @hearttsurgery"*
+- *"o que eu tenho agendado de hoje até sexta?"*
+- *"tira do calendário o post de quinta"* — a peça fica salva, só sai da agenda
+- *"passa o post de quinta pra sexta às 18h"*
 
 **Geração responde na hora, a peça fica pronta em 1 a 2 minutos.** Quando você pede um post, o agente
 recebe um número de acompanhamento e confere sozinho até ficar pronto. Se ele disser "está gerando",
@@ -128,6 +132,11 @@ saldo antes de mandar gerar em lote.
 **Se você tem mais de um perfil na mesma rede, diga qual.** Ex.: *"agenda no @hearttsurgery"*, não só
 *"agenda no Instagram"*. Se você não disser, o agente é obrigado a perguntar antes de agendar — ele
 não escolhe sozinho, justamente pra um post não sair no perfil errado.
+
+**Arte que está no seu computador vai direto pro calendário** — no Claude Code e no Codex. O agente
+pede um link de envio, sobe o arquivo pelo terminal e agenda; a imagem não passa pela conversa. No
+**Claude Desktop** isso só funciona se a imagem já estiver num link público, porque ali o agente não
+tem terminal para subir o arquivo.
 
 **Mandar arte pronta NÃO cobra crédito.** Se você já criou a imagem no Claude ou no Codex, o
 TrendPulse só guarda e agenda — não gerou nada, não cobra nada.

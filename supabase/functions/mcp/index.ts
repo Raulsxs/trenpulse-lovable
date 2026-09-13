@@ -32,6 +32,7 @@ import { AGENT_TOOLS, dispatchTool, type ToolCtx } from "../_shared/agent-tools.
 import { jwtDoUsuario } from "../_shared/sessao-usuario.ts";
 import {
   FERRAMENTAS_LENTAS, TOOL_ACOMPANHAR, colunasDoJob, ehUuid, promptDoJob, textoDoJob, tituloDoJob, toolsVisiveis,
+  TOOL_PREPARAR_ENVIO, caminhoEnvio, extensaoImagem, mimeDaExtensao,
 } from "../_shared/mcp-core.ts";
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -72,6 +73,7 @@ const CATALOGO: Record<string, { escopo: string }> = {
   adaptar_para_rede: { escopo: "generate" },
   agendar_arte: { escopo: "schedule" },
   agendar_conteudo: { escopo: "schedule" },
+  desagendar_conteudo: { escopo: "schedule" },
   planejar_calendario: { escopo: "schedule" },
 };
 
@@ -171,6 +173,45 @@ Deno.serve(async (req) => {
         .eq("id", args.job_id).eq("user_id", auth.userId).maybeSingle();
       const t = textoDoJob(data);
       return resultado(t.texto, t.ok);
+    }
+
+    // ── preparar_envio_imagem: só existe no MCP ──
+    // A arte do computador do usuário chega por URL de upload ASSINADA, não por base64 (que não cabe:
+    // uma arte de 537 KB vira ~183 mil tokens). Ver TOOL_PREPARAR_ENVIO em mcp-core.ts.
+    if (nome === TOOL_PREPARAR_ENVIO.name) {
+      if (!auth.scopes.includes("schedule")) {
+        return rpcErro(id, -32001, `Este token não tem o escopo "schedule", exigido por ${nome}.`);
+      }
+      const ext = extensaoImagem(String(args.nome_arquivo || ""));
+      if (!ext) return resultado("Formato não aceito. Mande um arquivo .png, .jpg, .jpeg ou .webp.", false);
+      const caminho = caminhoEnvio(auth.userId, ext);
+      // Service role só para ASSINAR: a URL resultante vale para este caminho e mais nenhum, e expira.
+      const sig = await fetch(`${SUPABASE_URL}/storage/v1/object/upload/sign/content-images/${caminho}`, {
+        method: "POST",
+        headers: { apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}`, "Content-Type": "application/json" },
+        body: "{}",
+      });
+      const assinado = await sig.json().catch(() => null);
+      if (!sig.ok || !assinado?.url) {
+        return resultado(`Não consegui preparar o envio: ${assinado?.message || `HTTP ${sig.status}`}.`, false);
+      }
+      const urlUpload = `${SUPABASE_URL}/storage/v1${assinado.url}`;
+      const urlPublica = `${SUPABASE_URL}/storage/v1/object/public/content-images/${caminho}`;
+      const mime = mimeDaExtensao(ext);
+      return resultado(
+        [
+          "1) Suba o arquivo — troque CAMINHO_DO_ARQUIVO pelo caminho real. O link vale só para este arquivo e expira em 2 horas.",
+          "   macOS / Linux / Git Bash:",
+          `   curl -sS -X PUT -H "Content-Type: ${mime}" --data-binary "@CAMINHO_DO_ARQUIVO" "${urlUpload}"`,
+          "   Windows PowerShell (use curl.exe, não curl — no PowerShell curl é outro comando):",
+          `   curl.exe -sS -X PUT -H "Content-Type: ${mime}" --data-binary "@CAMINHO_DO_ARQUIVO" "${urlUpload}"`,
+          '   Sucesso responde com {"Key":"content-images/..."}.',
+          "2) Depois chame agendar_arte com:",
+          `   imagem = ${urlPublica}`,
+          "Sem terminal (ex.: Claude Desktop sem ferramenta de arquivo) este caminho não funciona: a imagem precisa estar numa URL pública.",
+        ].join("\n"),
+        true,
+      );
     }
 
     const entrada = CATALOGO[nome];

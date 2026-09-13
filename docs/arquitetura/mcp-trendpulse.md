@@ -237,6 +237,18 @@ Efeito colateral bom: geração pedida pelo Claude/Codex aparece no painel de fi
 - [ ] **8. Teste de ponta a ponta com o Maikon**, numa marca real, agendando uma semana.
 - [x] **9. Estabilidade.** Geração assíncrona pela fila + sessão reutilizada (§3.6). 20 testes em
       `src/test/mcp-core.test.ts`; verificado de ponta a ponta em produção.
+- [x] **10. Calendário de verdade pelo agente (2026-09-13).** Três buracos achados testando o caso
+      central — "arte criada no Claude/Codex vai pro calendário":
+      1. `agendar_arte` só funcionava com URL pública. Base64 não cabe: uma arte de 537 KB vira ~183 mil
+         tokens. → `preparar_envio_imagem` (só MCP) emite URL de upload assinada, de uso único, dentro
+         de `mcp/<userId>/`; o agente sobe com curl e agenda pela URL pública. Exige terminal (Claude
+         Code, Codex); no Desktop continua só URL pública.
+      2. `listar_agenda` não devolvia o `content_id` (impossível reagendar o que se listou) e mostrava
+         hora em UTC (3 h fora). → id, horário de Brasília e período `de`/`ate`.
+      3. Não havia como tirar do calendário. → `desagendar_conteudo`, espelho exato do "Remover
+         agendamento" do Calendar.tsx.
+      Verificado em produção com arquivo real: upload pelo comando devolvido, reuso do link recusado,
+      agendar, listar, desagendar, reagendar.
 
 ---
 

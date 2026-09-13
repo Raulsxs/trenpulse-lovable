@@ -13,6 +13,7 @@ import { describe, it, expect } from "vitest";
 import {
   FERRAMENTAS_LENTAS, TOOL_ACOMPANHAR, promptDoJob, colunasDoJob, tituloDoJob,
   sessaoAindaValida, textoDoJob, toolsVisiveis,
+  TOOL_PREPARAR_ENVIO, extensaoImagem, mimeDaExtensao, caminhoEnvio,
 } from "../../supabase/functions/_shared/mcp-core";
 
 const CATALOGO = {
@@ -142,5 +143,39 @@ describe("textoDoJob", () => {
   });
   it("job inexistente não vaza se é de outra conta — só diz que não achou", () => {
     expect(textoDoJob(null).texto).toMatch(/só é visível para a conta que criou/);
+  });
+});
+
+describe("preparar_envio_imagem — arte do computador para o calendário", () => {
+  const USER = "1294d060-6783-4f7a-9df4-3c5f567eded4";
+
+  it("aparece para quem pode agendar, e só para quem pode agendar", () => {
+    expect(toolsVisiveis(TOOLS, CATALOGO, ["schedule"]).map((t) => t.name)).toContain("preparar_envio_imagem");
+    expect(toolsVisiveis(TOOLS, CATALOGO, ["read", "generate"]).map((t) => t.name)).not.toContain("preparar_envio_imagem");
+  });
+
+  it("a descrição manda NÃO usar base64 — era o caminho que não cabia numa chamada", () => {
+    expect(TOOL_PREPARAR_ENVIO.description).toMatch(/base64/);
+    expect(TOOL_PREPARAR_ENVIO.description).toMatch(/agendar_arte/);
+  });
+
+  it("aceita só imagens, normalizando jpeg para jpg", () => {
+    expect(extensaoImagem("arte.PNG")).toBe("png");
+    expect(extensaoImagem("foto.jpeg")).toBe("jpg");
+    expect(extensaoImagem("capa.webp")).toBe("webp");
+    expect(extensaoImagem("roteiro.pdf")).toBeNull();
+    expect(extensaoImagem("sem-extensao")).toBeNull();
+    expect(extensaoImagem("script.png.exe")).toBeNull();
+    expect(mimeDaExtensao("jpg")).toBe("image/jpeg");
+  });
+
+  it("o caminho é do servidor, dentro da pasta do usuário, e o agente não injeta nada nele", () => {
+    const c = caminhoEnvio(USER, "png", 1789339311000, "ab/../../x");
+    expect(c).toBe(`mcp/${USER}/envio-1789339311000-abx.png`);
+    expect(c).not.toContain("..");
+  });
+
+  it("recusa userId que não é uuid — um caminho montado com lixo escaparia da pasta", () => {
+    expect(() => caminhoEnvio("../outro", "png")).toThrow();
   });
 });

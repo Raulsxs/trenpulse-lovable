@@ -45,6 +45,68 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const ehUuid = (s: unknown): s is string => typeof s === "string" && UUID.test(s);
 
 /**
+ * Ferramenta só do MCP: prepara o envio de uma imagem que está NO COMPUTADOR de quem usa o agente.
+ *
+ * POR QUE EXISTE: `agendar_arte` aceita URL ou base64, e base64 não funciona na prática. Medido em
+ * 2026-09-13: uma arte real de 537 KB vira 734 mil caracteres de base64, ~183 mil tokens que o agente
+ * teria de ESCREVER dentro de uma chamada de ferramenta. Não cabe. Então o caso central — "criei a
+ * arte no Claude/Codex, joga no calendário" — só funcionava se a arte já estivesse numa URL pública.
+ *
+ * Com isto: o servidor emite uma URL de upload ASSINADA (vale para um único caminho, dentro da pasta
+ * do usuário, e expira), o agente sobe o arquivo com curl pelo terminal dele e passa a URL pública ao
+ * agendar_arte. O arquivo nunca passa pelo contexto do modelo.
+ *
+ * Limite honesto: exige terminal. Claude Code e Codex têm; o Claude Desktop sem ferramenta de arquivo
+ * não — lá a imagem precisa estar numa URL pública.
+ */
+export const TOOL_PREPARAR_ENVIO = {
+  name: "preparar_envio_imagem",
+  description:
+    "Prepara o envio de uma imagem que está NO COMPUTADOR (arte criada no Claude, no Codex, num editor) " +
+    "para depois agendá-la. Devolve um comando curl que sobe o arquivo e a URL pública que ele vai ter. " +
+    "Fluxo: 1) chame esta ferramenta com o nome do arquivo; 2) rode o comando no terminal, trocando " +
+    "CAMINHO_DO_ARQUIVO pelo caminho real; 3) chame agendar_arte com imagem = a URL pública devolvida. " +
+    "Use isto em vez de base64 — uma arte real tem centenas de milhares de caracteres e não cabe numa " +
+    "chamada. Se a imagem já está numa URL pública, pule esta ferramenta. Uma chamada por arquivo.",
+  inputSchema: {
+    type: "object",
+    properties: {
+      nome_arquivo: {
+        type: "string",
+        description: "Nome do arquivo com extensão, ex.: arte-segunda.png. Aceita png, jpg, jpeg e webp.",
+      },
+    },
+    required: ["nome_arquivo"],
+  },
+};
+
+/** Extensão aceita a partir do nome do arquivo. Qualquer outra coisa é recusada. */
+export function extensaoImagem(nome: string): "png" | "jpg" | "webp" | null {
+  const m = /\.([a-z0-9]+)\s*$/i.exec(String(nome || ""));
+  if (!m) return null;
+  const e = m[1].toLowerCase();
+  if (e === "png") return "png";
+  if (e === "jpg" || e === "jpeg") return "jpg";
+  if (e === "webp") return "webp";
+  return null;
+}
+
+export const mimeDaExtensao = (ext: "png" | "jpg" | "webp"): string =>
+  ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+
+/**
+ * Caminho do upload. Gerado pelo SERVIDOR, sempre dentro de `mcp/<userId>/`: quem escolhe onde o
+ * arquivo cai não é o agente — senão uma URL assinada poderia sobrescrever arquivo de outra conta.
+ */
+export function caminhoEnvio(
+  userId: string, ext: "png" | "jpg" | "webp", agora = Date.now(), sufixo = Math.random().toString(36).slice(2, 10),
+): string {
+  if (!ehUuid(userId)) throw new Error("userId inválido");
+  const limpo = String(sufixo).replace(/[^a-z0-9]/gi, "").slice(0, 16) || "x";
+  return `mcp/${userId}/envio-${agora}-${limpo}.${ext}`;
+}
+
+/**
  * Monta o pedido que o worker da fila entrega ao agente headless.
  *
  * O worker roda o MESMO agente do app, que decide qual ferramenta chamar. Quem pediu aqui já é um
@@ -143,5 +205,7 @@ export function toolsVisiveis(
     }));
   // Quem pode gerar precisa poder acompanhar; senão receberia um job_id sem ter como usá-lo.
   if (scopes.includes("generate")) lista.push(TOOL_ACOMPANHAR);
+  // Quem pode agendar precisa conseguir mandar a arte do próprio computador — é o caso central.
+  if (scopes.includes("schedule")) lista.push(TOOL_PREPARAR_ENVIO);
   return lista;
 }

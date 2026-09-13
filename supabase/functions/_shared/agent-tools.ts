@@ -290,8 +290,14 @@ export const AGENT_TOOLS = [
   },
   {
     name: "listar_agenda",
-    description: "Lista os conteúdos agendados do usuário (calendário). Chame quando ele pergunta o que está agendado ou antes de agendar algo novo.",
-    input_schema: { type: "object", properties: {} },
+    description: "Lista o calendário: o que está agendado num período, com dia, hora de Brasília, rede e o content_id de cada peça. Chame quando o usuário pergunta o que está agendado, antes de agendar algo novo (para não colidir), e antes de reagendar ou desagendar — o content_id vem daqui. Sem datas, mostra os próximos 30 dias.",
+    input_schema: {
+      type: "object",
+      properties: {
+        de: { type: "string", description: "Início do período, ISO 8601 com fuso. Omitir = agora." },
+        ate: { type: "string", description: "Fim do período, ISO 8601 com fuso. Omitir = 30 dias depois do início." },
+      },
+    },
   },
   {
     name: "listar_conexoes",
@@ -317,7 +323,7 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: "object",
       properties: {
-        imagem: { type: "string", description: "URL http(s) da imagem, OU o conteudo em base64 (com ou sem o prefixo data:image/...;base64,)." },
+        imagem: { type: "string", description: "URL http(s) PUBLICA da imagem. Arte que esta no computador: chame ANTES preparar_envio_imagem, rode o comando de upload e passe aqui a URL publica que ela devolve. Base64 so para imagens minusculas - uma arte real vira centenas de milhares de caracteres e nao cabe numa chamada." },
         legenda: { type: "string", description: "Legenda do post, pronta para publicar. Inclua hashtags aqui se quiser." },
         data_hora_iso: { type: "string", description: "Quando publicar, ISO 8601 COM FUSO - ex.: 2026-09-15T09:00:00-03:00. O fuso importa: sem ele o horario vira UTC e o post sai 3h fora. Omitir salva como rascunho, sem agendar." },
         marca: { type: "string", description: "Nome ou id da marca dona do post. Omitir usa a marca padrao. Quando o usuario tem varias empresas, SEMPRE preencha." },
@@ -340,6 +346,15 @@ export const AGENT_TOOLS = [
         contas: { type: "array", items: { type: "string" }, description: "IDs das contas de destino, vindos de listar_conexoes (campo conta=...). OBRIGATORIO quando o usuario tem mais de uma conta na mesma rede — sem isso o post pode sair no perfil errado. Se ele nao disse qual perfil, PERGUNTE antes de agendar." },
       },
       required: ["contentId", "data_hora_iso"],
+    },
+  },
+  {
+    name: "desagendar_conteudo",
+    description: "TIRA do calendário um conteúdo agendado, SEM apagar a peça: ela volta para aprovada e pode ser reagendada depois com agendar_conteudo. Chame quando o usuário pede para cancelar um agendamento, remover do calendário ou segurar um post sem nova data. Para MUDAR a data, use agendar_conteudo direto (ele já reagenda). O content_id vem de listar_agenda. Não funciona em conteúdo já publicado.",
+    input_schema: {
+      type: "object",
+      properties: { contentId: { type: "string", description: "content_id da peça, vindo de listar_agenda." } },
+      required: ["contentId"],
     },
   },
   {
@@ -955,14 +970,59 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
     }
 
     case "listar_agenda": {
+      // TRÊS DEFEITOS que isto corrige, todos achados operando o calendário pelo MCP (2026-09-13):
+      //  1. Não devolvia o content_id — o agente via a peça e não tinha como reagendá-la nem tirá-la.
+      //  2. toLocaleString SEM timeZone: a edge roda em UTC, então "09:17" aparecia como "12:17". Quem
+      //     confere a semana pelo agente via todos os horários 3 h fora e "corrigia" o que estava certo.
+      //  3. Sem período: listava os 20 primeiros agendamentos de sempre, inclusive os já passados.
+      const deData = input?.de ? new Date(input.de) : new Date();
+      const ateData = input?.ate ? new Date(input.ate) : new Date(deData.getTime() + 30 * 86400000);
+      if (isNaN(deData.getTime()) || isNaN(ateData.getTime())) {
+        return { ok: false, content: "Datas inválidas. Use ISO 8601 com fuso, ex.: 2026-09-15T00:00:00-03:00." };
+      }
       const { data } = await ctx.userClient
         .from("generated_contents")
         .select("id, title, content_type, scheduled_at, platform, status")
         .not("scheduled_at", "is", null)
+        .gte("scheduled_at", deData.toISOString())
+        .lte("scheduled_at", ateData.toISOString())
         .order("scheduled_at", { ascending: true })
-        .limit(20);
-      const items = (data || []).map((c: any) => `• ${new Date(c.scheduled_at).toLocaleString("pt-BR")} — ${c.title || c.content_type} (${c.platform || "?"}, ${c.status})`).join("\n");
-      return { ok: true, content: items ? `Agenda:\n${items}` : "Nenhum conteúdo agendado." };
+        .limit(60);
+      const noFuso = (d: Date, o: Intl.DateTimeFormatOptions) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", ...o });
+      const dia = (d: Date) => noFuso(d, { day: "2-digit", month: "2-digit", year: "numeric" });
+      const items = (data || []).map((c: any) => {
+        const quando = noFuso(new Date(c.scheduled_at), { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+        return `• ${quando} — ${c.title || c.content_type} (${c.platform || "?"}, ${c.status}) → content_id=${c.id}`;
+      }).join("\n");
+      return {
+        ok: true,
+        content: items
+          ? `Agenda de ${dia(deData)} a ${dia(ateData)} (horário de Brasília):\n${items}`
+          : `Nada agendado entre ${dia(deData)} e ${dia(ateData)}.`,
+      };
+    }
+    case "desagendar_conteudo": {
+      // Espelha EXATAMENTE o "Remover agendamento" do Calendar.tsx (handleRemoveSchedule): a peça volta
+      // para approved e zera as tentativas. Dois caminhos que tiram do calendário de jeitos diferentes
+      // deixariam o scheduler vendo estados que a UI nunca produz.
+      if (!input?.contentId) return { ok: false, content: "Faltou o content_id. Pegue em listar_agenda." };
+      const { data: peca } = await ctx.userClient
+        .from("generated_contents")
+        .select("id, title, status, scheduled_at, published_at")
+        .eq("id", input.contentId)
+        .maybeSingle();
+      if (!peca) return { ok: false, content: "Conteúdo não encontrado. Confira o content_id em listar_agenda." };
+      if (peca.published_at || peca.status === "published") {
+        return { ok: false, content: `"${peca.title}" já foi publicado — não dá para desagendar. Para tirar do ar, apague o post direto na rede.` };
+      }
+      if (!peca.scheduled_at) return { ok: true, content: `"${peca.title}" já não estava no calendário.` };
+      const { error } = await ctx.userClient
+        .from("generated_contents")
+        .update({ scheduled_at: null, status: "approved", publish_attempts: 0, publish_error: null })
+        .eq("id", peca.id);
+      if (error) return { ok: false, content: `Falha ao desagendar: ${error.message}` };
+      const era = new Date(peca.scheduled_at).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+      return { ok: true, content: `"${peca.title}" saiu do calendário (estava para ${era}, horário de Brasília). A peça continua salva; para voltar a agendar, use agendar_conteudo com content_id=${peca.id}.` };
     }
     case "listar_conexoes": {
       const res = await fetch(`${ctx.supabaseUrl}/functions/v1/connect-social`, {
