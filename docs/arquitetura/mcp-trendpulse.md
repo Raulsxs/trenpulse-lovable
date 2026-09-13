@@ -4,8 +4,8 @@
 mandar a arte que o agente acabou de criar pro calendário, agendar, listar marcas e contas, checar
 saldo — sem que a pessoa saia pra outra aba.
 
-**Estado:** self-serve FECHADO (2026-09-12). Fases 1, 2, 4 e 6 entregues + instalador — um cliente
-já gera o próprio token e conecta sem ninguém no meio. Instalação em `docs/mcp-instalacao.md`.
+**Estado:** self-serve FECHADO (2026-09-12) e ESTABILIZADO (2026-09-13). Fases 1, 2, 4 e 6 entregues +
+instalador; geração assíncrona e sessão reutilizada (§3.6). Instalação em `docs/mcp-instalacao.md`.
 Falta o fluxo de aprovação (7) e o OAuth de um clique.
 **Origem:** reunião Raul × Dr. Maikon, 2026-09-06.
 
@@ -119,8 +119,7 @@ caminho oficial:
 2. `POST /auth/v1/verify` (anon) → `access_token` real do usuário
 3. Cliente com esse JWT → **RLS ativa**
 
-Confirmado com a conta do Maikon: 5 marcas visíveis, todas dela, nenhuma de outro usuário. O JWT
-vale 3600s e é cacheável por token, então o custo é uma troca por hora, não por chamada.
+Confirmado com a conta do Maikon: 5 marcas visíveis, todas dela, nenhuma de outro usuário. ~~O JWT vale 3600s e é cacheável por token, então o custo é uma troca por hora, não por chamada.~~ **ERRADO, medido em 2026-09-13:** o cache ficava na memória do isolate e cada chamada cai num isolate diferente — 8 logins abertos em 15 s. Corrigido em §3.6.
 
 A alternativa — service_role + filtrar `user_id` na mão em cada tool — foi **descartada**: troca
 isolamento garantido pelo banco por disciplina de código, em 24 tools que mexem em crédito e
@@ -133,6 +132,40 @@ publicação. Um esquecimento ali vaza conteúdo entre clientes.
 alternativo de cobrança aqui viraria buraco de margem.
 
 ---
+
+### 3.6 Estabilização (2026-09-13)
+
+A pergunta "o MCP foi feito de forma instável?" teve resposta **sim, em dois pontos**, ambos medidos
+em produção antes de mexer:
+
+**Geração síncrona estourava o timeout do cliente.** Um `gerar_post` levava 75,8 s. O Codex corta
+chamada de ferramenta em 60 s por padrão (`tool_timeout_sec`) e o Claude Desktop tem corte de ~60 s.
+A peça era gerada e COBRADA, o agente via timeout e tentava de novo — cobrando outra vez.
+
+→ As ferramentas que geram imagem (`FERRAMENTAS_LENTAS` em `_shared/mcp-core.ts`) viraram job na
+fila `generation_jobs` que o app já usava, com o worker `process-generation-jobs` (1 job por usuário,
+reaper de órfãos, cron a cada 3 min). Respondem na hora com `job_id`; a ferramenta nova
+`acompanhar_geracao` devolve o `content_id` quando fica pronto. Não se documentou "aumente o timeout"
+porque isso empurraria o conserto para cada cliente — e o Desktop nem respeita a configuração.
+
+**Cada chamada abria um login novo.** `generate_link` + `/verify` a cada chamada, porque o cache
+nunca acertava. Custava ~1,5 s por chamada, esbarrava no rate limit de `/verify` (30 por 5 min, em
+IPs de saída compartilhados) e sobrescrevia `last_sign_in_at`, inflando a métrica de usuários ativos.
+
+→ `_shared/sessao-usuario.ts`: uma sessão por usuário em `sessoes_servico`, renovada por
+`refresh_token` (não abre sessão nova). O worker da fila tinha a MESMA troca duplicada e passou a usar
+o mesmo módulo.
+
+Medido depois, no mesmo teste de ponta a ponta:
+
+| | antes | depois |
+|---|---|---|
+| resposta do `gerar_post` | 75,8 s | 0,67 s (com `job_id`) |
+| leitura de saldo | 1,5–2,6 s | 0,8 s (2,5 s só na primeira) |
+| logins abertos | 1 por chamada | 1 no teste inteiro, MCP + worker |
+| geração pela fila | — | pronta em 78 s, 1 tentativa |
+
+Efeito colateral bom: geração pedida pelo Claude/Codex aparece no painel de fila do `/agent` ao vivo.
 
 ## 4. Fora de escopo (v1)
 
@@ -172,6 +205,12 @@ alternativo de cobrança aqui viraria buraco de margem.
 5. **Fuso horário.** Ele opera em SC, Goiânia, BH e Rio. Agendar em UTC sem dizer isso gera post às
    3h da manhã. Mitigação: a API aceita e devolve horário com fuso explícito.
 6. **npm scope `@trendpulse`** pode não estar registrado. Verificar antes da Fase 3.
+7. **`sessoes_servico` guarda refresh tokens**, que valem uma sessão. Mitigação: RLS ligada, nenhuma
+   policy, sem grant para `anon`/`authenticated` — só a service role lê, que já consegue abrir sessão
+   para qualquer usuário. Se o refresh for recusado (senha trocada, logout global), o módulo cai no
+   magic link e grava a sessão nova.
+8. **Fila serializa por usuário.** Pedir 16 peças de uma vez leva ~16 × 1 min, uma de cada vez. É o
+   preço de não estourar a edge function; o agente deve ser orientado a acompanhar, não a repetir.
 
 ---
 
@@ -196,6 +235,8 @@ alternativo de cobrança aqui viraria buraco de margem.
       `agent-tools.ts`, autenticada por PAT. Config de duas linhas para Claude e Codex.
 - [ ] **7. Fluxo de aprovação.** "Aprovar a semana" na UI do calendário — o pedido explícito do Maikon.
 - [ ] **8. Teste de ponta a ponta com o Maikon**, numa marca real, agendando uma semana.
+- [x] **9. Estabilidade.** Geração assíncrona pela fila + sessão reutilizada (§3.6). 20 testes em
+      `src/test/mcp-core.test.ts`; verificado de ponta a ponta em produção.
 
 ---
 

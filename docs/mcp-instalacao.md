@@ -117,6 +117,11 @@ O agente escolhe a ferramenta sozinho; você fala normal:
 - *"joga essa arte que eu fiz aqui no TrendPulse pra terça 9h, no @hearttsurgery"*
 - *"agenda essas 16 imagens na Jornada, segunda/quarta/sexta"*
 
+**Geração responde na hora, a peça fica pronta em 1 a 2 minutos.** Quando você pede um post, o agente
+recebe um número de acompanhamento e confere sozinho até ficar pronto. Se ele disser "está gerando",
+é isso — não peça de novo, ou serão duas peças e duas cobranças. A geração também aparece ao vivo na
+fila do Assistente, dentro do TrendPulse.
+
 **Geração cobra crédito** (10 por post, 10 por slide de carrossel, 6 por série de tweet card). Peça o
 saldo antes de mandar gerar em lote.
 

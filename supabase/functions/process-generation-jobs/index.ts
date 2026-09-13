@@ -10,6 +10,7 @@
 //
 // Se sobrar job na fila ao fim do budget, o worker RE-INVOCA a si mesmo (encadeia) até esvaziar.
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { jwtDoUsuario } from "../_shared/sessao-usuario.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -29,26 +30,10 @@ const SERVICE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const admin = createClient(SUPABASE_URL, SERVICE);
 
-// Minta um JWT de usuário (fluxo admin generate_link → verify), sem enviar e-mail. Necessário só no
-// caminho CRON (o kick já traz o JWT do usuário). O ai-agent roda getUser + as tools autenticam como
-// o usuário, então o worker precisa agir COMO ele.
-async function mintUserJwt(userId: string): Promise<string | null> {
-  const { data, error } = await admin.auth.admin.getUserById(userId);
-  if (error || !data?.user?.email) return null;
-  const link = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
-    method: "POST",
-    headers: { apikey: SERVICE, Authorization: `Bearer ${SERVICE}`, "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "magiclink", email: data.user.email }),
-  }).then((r) => r.json()).catch(() => null);
-  const hash = link?.hashed_token;
-  if (!hash) return null;
-  const verify = await fetch(`${SUPABASE_URL}/auth/v1/verify`, {
-    method: "POST",
-    headers: { apikey: ANON, "Content-Type": "application/json" },
-    body: JSON.stringify({ type: "magiclink", token_hash: hash }),
-  }).then((r) => r.json()).catch(() => null);
-  return verify?.access_token || null;
-}
+// JWT de usuário no caminho CRON/INTERNO vem de `_shared/sessao-usuario.ts`, que REUSA a sessão.
+// Antes havia aqui um mintUserJwt próprio (generate_link + verify) — um login novo por usuário a cada
+// varredura de 3 min, e agora também a cada job enfileirado pelo MCP. É a mesma troca que abria 8
+// sessões em 15 s no servidor MCP; uma implementação só serve os dois.
 
 // Chama o ai-agent headless COMO o usuário (JWT dele). Devolve { content_id, needs_review, text }.
 async function runAgentHeadless(userJwt: string, job: any): Promise<any> {
@@ -150,7 +135,7 @@ Deno.serve(async (req) => {
       }
       let processed = 0;
       for (const uid of userIds) {
-        const jwt = await mintUserJwt(uid);
+        const jwt = await jwtDoUsuario(uid);
         if (!jwt) { console.warn(`[jobs] não mintou JWT p/ user=${uid}`); continue; }
         const remaining = await processOne(uid, jwt); // 1 job por usuário por invocação
         processed++;
