@@ -869,7 +869,7 @@ Mensagem: "${message}"`;
             if (isPhotoBackground) {
               const { data: bgPhotos } = await svc.from("brand_examples")
                 .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "background").limit(6);
-              if (bgPhotos?.length) photoBackgroundUrls = bgPhotos.map((r: any) => r.image_url);
+              if (bgPhotos?.length) photoBackgroundUrls = bgPhotos.map((r: any) => r.image_url).filter((u: string) => typeof u === "string" && u.startsWith(supabaseUrl)); // só fotos deste projeto (ver "FOTO MORTA" abaixo)
               console.log(`[ai-chat] photo_backgrounds mode: ${photoBackgroundUrls.length} photos`);
             } else if ((brand as any).creation_mode === "from_scratch") {
               // from_scratch = gerar livre só a partir da identidade textual da marca.
@@ -879,7 +879,7 @@ Mensagem: "${message}"`;
             } else {
               const { data: refs } = await svc.from("brand_examples")
                 .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "reference").limit(6);
-              if (refs?.length) referenceImageUrls = refs.map((r: any) => r.image_url);
+              if (refs?.length) referenceImageUrls = refs.map((r: any) => r.image_url).filter((u: string) => typeof u === "string" && u.startsWith(supabaseUrl)); // idem: referência do projeto antigo não carrega
             }
           }
         }
@@ -1024,6 +1024,16 @@ NÃO copie textos das referências (categorias, hashtags, datas, rodapés, nomes
           .filter(Boolean)
           .slice(0, 5);
         const brandHeadingFont = (brandSnapshot?.fonts as any)?.headings || null;
+
+        // FOTO MORTA: marca de fotos pessoais sem nenhuma foto válida. Gerar assim entregaria a frase
+        // SEM a pessoa — ou com um rosto inventado — e cobraria por isso. Caso real (Maikon, 2026-09-14):
+        // a única foto dele apontava para o projeto Supabase antigo (era Lovable), cujo domínio não existe
+        // mais; as frases de julho saíram sem a foto. 4 das 5 fotos de fundo do sistema estavam assim.
+        // Recusar aqui acontece ANTES da imagem e da cobrança: nada é debitado.
+        if (isPhotoBackground && photoBackgroundUrls.length === 0) {
+          replyOverride = "Sua marca de fotos pessoais não tem nenhuma foto válida cadastrada, então a frase sairia sem você. Adicione suas fotos em Marcas → (sua marca) → Fotos pessoais e peça de novo. Nada foi cobrado.";
+          break;
+        }
 
         let imagePrompt: string;
 
@@ -1383,7 +1393,7 @@ Responda APENAS em JSON:
             if (isPhotoBackground) {
               const { data: bgPhotos } = await svc.from("brand_examples")
                 .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "background").limit(6);
-              if (bgPhotos?.length) photoBackgroundUrls = bgPhotos.map((r: any) => r.image_url);
+              if (bgPhotos?.length) photoBackgroundUrls = bgPhotos.map((r: any) => r.image_url).filter((u: string) => typeof u === "string" && u.startsWith(supabaseUrl)); // só fotos deste projeto (ver "FOTO MORTA" abaixo)
               console.log(`[ai-chat] photo_backgrounds mode: ${photoBackgroundUrls.length} photos`);
             } else if ((brand as any).creation_mode === "from_scratch") {
               // from_scratch = gerar livre só a partir da identidade textual da marca.
@@ -1393,7 +1403,7 @@ Responda APENAS em JSON:
             } else {
               const { data: refs } = await svc.from("brand_examples")
                 .select("image_url").eq("brand_id", requestBrandId).eq("purpose", "reference").limit(6);
-              if (refs?.length) referenceImageUrls = refs.map((r: any) => r.image_url);
+              if (refs?.length) referenceImageUrls = refs.map((r: any) => r.image_url).filter((u: string) => typeof u === "string" && u.startsWith(supabaseUrl)); // idem: referência do projeto antigo não carrega
             }
           }
         }

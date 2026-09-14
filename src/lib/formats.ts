@@ -8,7 +8,7 @@
  *
  * Quem exibe formato IMPORTA daqui. Nunca copie esta lista.
  */
-import { Image as ImageIcon, LayoutGrid, Newspaper, Smartphone, MessageSquareQuote, Linkedin } from "lucide-react";
+import { Image as ImageIcon, LayoutGrid, Newspaper, Smartphone, MessageSquareQuote, Linkedin, Quote } from "lucide-react";
 
 export interface ContentFormat {
   id: string;
@@ -25,6 +25,15 @@ export const CONTENT_FORMATS: ContentFormat[] = [
     id: "post", icon: ImageIcon, emoji: "📷", label: "Post", cost: 10,
     template: "Crie um post para Instagram sobre: ",
     hint: "Uma imagem única pro feed do Instagram.",
+  },
+  {
+    // Voltou a pedido do Maikon (2026-09-14): existia só na tela antiga (/chat) e ficou de fora quando
+    // os atalhos viraram esta lista única. O template termina em "frase: " DE PROPÓSITO — o antigo
+    // ("...frase inspiracional de autoridade sobre: X") fazia o extrator cortar a frase no lugar
+    // errado. No /agent, clicar também seleciona a marca de fotos pessoais (ver AgentChat).
+    id: "frase", icon: Quote, emoji: "💡", label: "Frase", cost: 25,
+    template: "Crie uma imagem com a minha foto pessoal de fundo e a frase: ",
+    hint: "Sua foto pessoal de fundo com a frase escrita por cima. Usa as fotos cadastradas na sua marca de fotos pessoais.",
   },
   {
     id: "carrossel", icon: LayoutGrid, emoji: "🎠", label: "Carrossel", cost: 50,

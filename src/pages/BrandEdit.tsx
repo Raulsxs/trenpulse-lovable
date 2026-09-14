@@ -467,7 +467,7 @@ export default function BrandEdit() {
                   <div className="space-y-1">
                     <h3 className="text-sm font-semibold">Fotos pessoais</h3>
                     <p className="text-xs text-muted-foreground">
-                      Fotos que serão usadas como fundo dos posts no modo "📸 Foto + texto". Ideal para fotos profissionais.
+                      Suas fotos de fundo para o atalho "Frase" no Assistente. Use fotos em que você aparece bem, de preferência na vertical.
                     </p>
                   </div>
                   <BrandPhotoBackgrounds brandId={brand.id} />

@@ -1,3 +1,4 @@
+import { temaDeFrase } from "./frase.ts";
 // agent-tools.ts — catálogo de ferramentas do orquestrador agêntico (ai-agent).
 // Cada tool é um WRAPPER sobre uma edge function que JÁ existe (ai-chat via intent_hint,
 // publish-postforme, connect-social, scrape-trends) — o agente COMPÕE, não reimplementa.
@@ -486,7 +487,8 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
     case "gerar_post": {
       // Imagem anexada vira referência de estilo (image-to-image), igual gerar_carrossel.
       const refs = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
-      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE", format: "post", platform: input.plataforma, brandId, model, imageUrls: refs.length ? refs : undefined, replicateRef: refs.length ? true : undefined }), "Post");
+      return genResult(await // temaDeFrase: se o usuário escreveu "frase:", o texto DELE vira "frase: <texto>" — ver _shared/frase.ts.
+      callAiChat(ctx, { message: temaDeFrase(ctx.userText, input.tema), intent_hint: "GENERATE", format: "post", platform: input.plataforma, brandId, model, imageUrls: refs.length ? refs : undefined, replicateRef: refs.length ? true : undefined }), "Post");
     }
     case "gerar_carrossel": {
       // Imagens anexadas viram REFERÊNCIA DE ESTILO (recriar carrossel mantendo a identidade visual —
@@ -539,7 +541,7 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
         }
       }
 
-      return genResult(await callAiChat(ctx, { message: temaStory, intent_hint: "GENERATE", format: "story", platform: input.plataforma, brandId, model, imageUrls: refs.length ? refs : undefined, replicateRef: refs.length ? true : undefined }), "Story");
+      return genResult(await callAiChat(ctx, { message: temaDeFrase(ctx.userText, temaStory), intent_hint: "GENERATE", format: "story", platform: input.plataforma, brandId, model, imageUrls: refs.length ? refs : undefined, replicateRef: refs.length ? true : undefined }), "Story");
     }
     case "gerar_tweet_card": {
       // Fotos anexadas viram MÍDIA dentro dos cards (não gera imagem). O LLM não conhece as URLs.

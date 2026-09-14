@@ -19,6 +19,7 @@ import QueuePanel from "@/components/chat/QueuePanel";
 import FirstSteps from "@/components/onboarding/FirstSteps";
 import HelpCenterModal from "@/components/onboarding/HelpCenterModal";
 import { CONTENT_FORMATS } from "@/lib/formats";
+import { escolherMarcaDeFotos } from "@/lib/fotosPessoais";
 import { useCredits } from "@/hooks/useCredits";
 import { useGenerationQueue } from "@/hooks/useGenerationQueue";
 import { isSupportedDocument, extractDocumentText, truncateForPrompt } from "@/lib/documentExtract";
@@ -101,7 +102,7 @@ export default function AgentChat() {
   const [uiMessages, setUiMessages] = useState<Msg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
-  const [brands, setBrands] = useState<{ id: string; name: string }[]>([]);
+  const [brands, setBrands] = useState<{ id: string; name: string; creation_mode?: string | null }[]>([]);
   // Modo e marca PERSISTEM entre sessões (quem prefere Econômico / uma marca fixa não re-seleciona toda vez).
   const [brandId, setBrandId] = useState<string>(() => { try { return localStorage.getItem("tp_agent_brand") || ""; } catch { return ""; } });
   const [model, setModel] = useState<string>(() => { try { return localStorage.getItem("tp_agent_model") || "gpt-image-2"; } catch { return "gpt-image-2"; } });
@@ -132,6 +133,32 @@ export default function AgentChat() {
   useEffect(() => { try { localStorage.setItem("tp_agent_model", model); } catch { /* ignore */ } }, [model]);
   useEffect(() => { try { localStorage.setItem("tp_agent_brand", brandId); } catch { /* ignore */ } }, [brandId]);
 
+  // Atalho "Frase": a frase só sai COM a foto se a marca selecionada for de fotos pessoais e tiver foto
+  // válida. As tentativas do Maikon em julho saíram "sem marca" — ninguém lembra de trocar o seletor
+  // antes. Então o atalho troca sozinho, e avisa quando não há foto utilizável.
+  const prepararFrase = async () => {
+    const candidatas = brands.filter((b) => b.creation_mode === "photo_backgrounds");
+    if (candidatas.length === 0) {
+      toast("Para frase com a sua foto, crie uma marca de fotos pessoais.", {
+        action: { label: "Criar marca", onClick: () => navigate("/brands/new") },
+      });
+      return;
+    }
+    const { data } = await supabase.from("brand_examples")
+      .select("brand_id, image_url").eq("purpose", "background").in("brand_id", candidatas.map((b) => b.id));
+    const escolha = escolherMarcaDeFotos(candidatas, (data as any[]) || [], brandId);
+    if (!escolha) return;
+    if (escolha.marca.id !== brandId) setBrandId(escolha.marca.id);
+    if (escolha.fotos === 0) {
+      toast.warning(`"${escolha.marca.name}" ainda não tem uma foto sua que funcione.`, {
+        description: "Adicione suas fotos para a frase sair com você de fundo.",
+        action: { label: "Adicionar fotos", onClick: () => navigate(`/brands/${escolha.marca.id}/edit`) },
+      });
+    } else if (escolha.marca.id !== brandId) {
+      toast.success(`Usando "${escolha.marca.name}" — ${escolha.fotos} foto${escolha.fotos > 1 ? "s" : ""} sua${escolha.fotos > 1 ? "s" : ""}.`);
+    }
+  };
+
   const convo = useRef<any[]>([]);        // messages Anthropic (continuidade)
   const curId = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -146,7 +173,7 @@ export default function AgentChat() {
   useEffect(() => {
     const onBrandCreated = async (e: Event) => {
       const detail = (e as CustomEvent).detail || {};
-      const { data } = await supabase.from("brands").select("id, name").limit(20);
+      const { data } = await supabase.from("brands").select("id, name, creation_mode").limit(20);
       if (data) setBrands(data as any);
       if (detail.brandId) setBrandId(detail.brandId);
     };
@@ -156,7 +183,7 @@ export default function AgentChat() {
 
   useEffect(() => {
     (async () => {
-      const { data } = await supabase.from("brands").select("id, name").limit(20);
+      const { data } = await supabase.from("brands").select("id, name, creation_mode").limit(20);
       if (data) {
         setBrands(data as any);
         // Marca persistida foi deletada? volta pra "Sem marca" (evita id fantasma no seletor).
@@ -599,7 +626,7 @@ export default function AgentChat() {
                 key={qa.label}
                 type="button"
                 disabled={sending}
-                onClick={() => { setInput(qa.template); inputRef.current?.focus(); }}
+                onClick={() => { setInput(qa.template); inputRef.current?.focus(); if (qa.id === "frase") prepararFrase(); }}
                 title={`${qa.hint}\n\nCusta ~${qa.cost} créditos.`}
                 className="group inline-flex items-center gap-1.5 h-7 shrink-0 rounded-full border border-border bg-background px-2.5 text-[12px] font-medium text-muted-foreground hover:border-primary/50 hover:text-foreground hover:bg-primary/[0.03] disabled:opacity-40 disabled:pointer-events-none transition-all"
               >

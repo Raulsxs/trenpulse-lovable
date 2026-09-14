@@ -65,7 +65,7 @@ function TutorialPost() {
 // ── 2. Post com uma frase sua ──────────────────────────────────────────────────────────────────
 function TutorialFrase() {
   const step = useSteps([700, 2100, 3000, 5400]);
-  const pedido = 'Cria um post com a frase: "Pequenos passos levam a grandes conquistas"';
+  const pedido = 'Crie uma imagem com a minha foto pessoal de fundo e a frase: "Pequenos passos levam a grandes conquistas"';
 
   return (
     <AppFrame>
@@ -76,12 +76,12 @@ function TutorialFrase() {
         {step === 3 && <Working text="Criando o design…" />}
         {step >= 4 && (
           <>
-            <Msg role="assistant" delay={0.05}>Feito, com as cores da sua marca.</Msg>
+            <Msg role="assistant" delay={0.05}>Feito, com a sua foto de fundo.</Msg>
             <ResultCard title="Pequenos passos levam a grandes conquistas" meta="Instagram · Post" />
           </>
         )}
       </AppChat>
-      {/* Sem atalho aceso: este pedido é digitado direto, não existe botão "Frase". */}
+      {/* O atalho "Frase" preenche este pedido e já seleciona a marca de fotos pessoais. */}
       <AppComposer typed={step === 1 ? typed(pedido, 1, 1, step) : ""} caret={step === 1} />
     </AppFrame>
   );

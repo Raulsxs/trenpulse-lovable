@@ -9,6 +9,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { AGENT_TOOLS, GATED_TOOLS, CONFIRM_CREDIT_THRESHOLD, estimateToolCost, dispatchTool, type ToolCtx } from "../_shared/agent-tools.ts";
 import { replicateAgentTurn } from "../_shared/agent-fallback.ts";
 import { orChat, AGENT_MODEL_CHAIN, consumidorSumiu } from "../_shared/openrouter.ts";
+import { ultimoTextoDoUsuario } from "../_shared/frase.ts";
 import { buildBrandBrief } from "../_shared/brand-context.ts";
 
 const corsHeaders = {
@@ -55,6 +56,7 @@ COMO AGIR:
 - Se o usuário nomear a REDE (LinkedIn, Instagram, TikTok, Facebook, X), passe SEMPRE o campo "plataforma" na ferramenta de geração — senão o conteúdo sai como Instagram e a legenda/formato ficam errados para a rede pedida.
 - FORMATO pedido é OBRIGATÓRIO respeitar. Se o usuário pede CARROSSEL, use a ferramenta/formato de carrossel (gerar_carrossel, ou link_para_post com formato='carrossel' quando vier de um link). Se pede STORY, formato='story'. NUNCA gere um post único quando pediram carrossel. Ao colar um LINK e pedir carrossel numa rede, chame link_para_post com formato='carrossel' E plataforma=<rede>.
 - INFERIR FORMATO quando não for dito: um VERSÍCULO, frase/citação, mensagem inspiracional ou "card motivacional" quase sempre é STORY (9:16) — nesses casos gere story por padrão (gerar_story). Na dúvida entre post e story, gere e ofereça a outra versão em 1 linha ("quer também em story?"). Não force post único num conteúdo que pede story.
+- FRASE COM FOTO PESSOAL (atalho "Frase", "minha foto pessoal de fundo", "com a frase:"): é CITAÇÃO — passe a frase EXATA no tema, no formato frase: "<texto exato>", incluindo o autor se o usuário deu. NUNCA resuma, reescreva nem "melhore" a frase. A foto vem da marca selecionada no seletor; não peça para anexar foto. Se a ferramenta responder que não há foto válida cadastrada, repasse essa orientação ao usuário e não tente gerar de novo.
 - TROCAR DE FORMATO depois de gerar ("agora quero em story", "faz uma versão em carrossel", "gerou post, preciso de story"): gere o NOVO formato do MESMO tema com a ferramenta certa (gerar_story / gerar_carrossel) — NÃO use editar_conteudo (ele regenera no MESMO formato, não converte). Reaproveite o assunto do que já foi gerado.
 - HONESTIDADE: confirme só o que a ferramenta REALMENTE gerou. Se saiu 1 post, diga "post"; só diga "carrossel" se gerou carrossel (vários slides). Nunca afirme um formato/rede diferente do que a ferramenta retornou.
 - Se o usuário anexa a PRÓPRIA imagem já pronta (📎 nesta mensagem) e quer postá-la COMO ESTÁ (ex.: um certificado/diploma → post de conquista no LinkedIn, foto de evento, arte pronta), use postar_imagem_com_legenda — NÃO use gerar_post (que redesenha a imagem e distorce o certificado). Só use gerar_post quando ele quer que VOCÊ crie uma imagem nova.
@@ -238,6 +240,11 @@ Deno.serve(async (req) => {
     defaultBrandId: body.brandId ?? null,
     defaultModel: selectedModel,
     pendingImageUrls: Array.isArray(body.imageUrls) ? body.imageUrls : [],
+    // Fala CRUA do usuário neste turno. O campo existia no ToolCtx e NUNCA era preenchido — por isso o
+    // "gera com nano banana" nunca vencia o seletor, e a frase literal não tinha de onde vir. O chat do
+    // app manda `messages` (sem `message`), a fila manda `message`: cobre os dois. Capturado antes da
+    // injeção de visão, que reescreve o content do último turno.
+    userText: typeof body.message === "string" && body.message ? body.message : ultimoTextoDoUsuario(body.messages),
   };
 
   // Texto limpo do turno novo do usuário — capturado ANTES da injeção de visão (que reescreve o
