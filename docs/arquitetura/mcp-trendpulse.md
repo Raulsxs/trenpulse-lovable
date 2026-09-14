@@ -257,6 +257,13 @@ Efeito colateral bom: geração pedida pelo Claude/Codex aparece no painel de fi
       `?link=trend`. Permissões fixas (read/generate/schedule): o Supabase não aceita escopo
       customizado, então a tela de consentimento declara a lista. PAT continua, como "avançado".
 
+      **Armadilha que só apareceu no navegador:** o servidor OAuth do Supabase valida a ORIGEM da
+      chamada contra o `site_url`. Com `site_url` sem www e o app rodando no www (o domínio sem www faz
+      308), a tela de consentimento recebia `400 unauthorized request origin` e mostrava "pedido
+      expirou" — enquanto o teste por script, que não manda `Origin`, passava. Medido: Origin www → 400,
+      Origin sem www → 200, sem Origin → 200. Conserto: `site_url = https://www.trendpulse.com.br`, o
+      endereço onde o app de fato roda. Qualquer mudança de domínio precisa mexer nos dois juntos.
+
 ---
 
 ## 7. Critério de pronto
