@@ -186,7 +186,7 @@ describe("conexão por link — descoberta OAuth", () => {
 
   it("pelo link da Trend, o recurso é o link — é o endereço que o usuário colou e o cliente compara", () => {
     expect(urlDoRecurso("trend", SUPA)).toBe(LINK_MCP);
-    expect(LINK_MCP).toBe("https://trendpulse.com.br/mcp");
+    expect(LINK_MCP).toBe("https://www.trendpulse.com.br/mcp");
   });
 
   it("direto no Supabase (token antigo), o recurso é o endereço da função", () => {
@@ -195,7 +195,7 @@ describe("conexão por link — descoberta OAuth", () => {
   });
 
   it("metadados do link seguem a RFC 9728: .well-known na raiz, caminho do recurso depois", () => {
-    expect(urlMetadados(LINK_MCP)).toBe("https://trendpulse.com.br/.well-known/oauth-protected-resource/mcp");
+    expect(urlMetadados(LINK_MCP)).toBe("https://www.trendpulse.com.br/.well-known/oauth-protected-resource/mcp");
     expect(urlMetadados(`${SUPA}/functions/v1/mcp`)).toBe(`${SUPA}/functions/v1/mcp/.well-known/oauth-protected-resource`);
   });
 
@@ -207,7 +207,7 @@ describe("conexão por link — descoberta OAuth", () => {
 
   it("o 401 carrega o endereço dos metadados — é o que faz o cliente abrir o login sozinho", () => {
     expect(cabecalhoWwwAuthenticate(LINK_MCP))
-      .toBe('Bearer resource_metadata="https://trendpulse.com.br/.well-known/oauth-protected-resource/mcp"');
+      .toBe('Bearer resource_metadata="https://www.trendpulse.com.br/.well-known/oauth-protected-resource/mcp"');
   });
 
   it("quem conecta por link agenda e gera, mas não publica na hora", () => {

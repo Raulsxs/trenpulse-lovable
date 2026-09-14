@@ -222,13 +222,15 @@ export function toolsVisiveis(
  *   3. se registram sozinhos (RFC 7591), abrem o navegador na tela de consentimento da Trend
  *   4. voltam com um token — que é um JWT de usuário comum, com a claim `client_id` a mais
  *
- * O link é da Trend (`trendpulse.com.br/mcp`), não o endereço cru do Supabase: a Vercel repassa. A
+ * O link é da Trend (`www.trendpulse.com.br/mcp`), não o endereço cru do Supabase: a Vercel repassa. A
  * função descobre que veio pelo link pelo `?link=trend` que a regra de rewrite acrescenta — host e
  * cabeçalhos de proxy não são confiáveis para isso.
  */
 
-export const LINK_MCP = "https://trendpulse.com.br/mcp";
-const METADADOS_DO_LINK = "https://trendpulse.com.br/.well-known/oauth-protected-resource/mcp";
+// COM www: o domínio sem www responde 308 para o www. O cliente compara o `resource` dos metadados com o
+// endereço que o usuário colou — um redirect no meio e os dois não batem mais. O link é o destino final.
+export const LINK_MCP = "https://www.trendpulse.com.br/mcp";
+const METADADOS_DO_LINK = "https://www.trendpulse.com.br/.well-known/oauth-protected-resource/mcp";
 
 /**
  * Permissões de quem conecta por link. FIXAS de propósito: o Supabase só aceita os escopos padrão do
@@ -258,7 +260,7 @@ export function metadadosDoRecurso(recurso: string, supabaseUrl: string) {
     authorization_servers: [`${supabaseUrl}/auth/v1`],
     bearer_methods_supported: ["header"],
     resource_name: "TrendPulse",
-    resource_documentation: "https://trendpulse.com.br/profile?tab=agentes",
+    resource_documentation: "https://www.trendpulse.com.br/profile?tab=agentes",
   };
 }
 

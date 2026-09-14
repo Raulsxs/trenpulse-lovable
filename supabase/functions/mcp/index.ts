@@ -20,7 +20,7 @@
  * Medido: um gerar_post levava 75,8 s, e Codex e Claude Desktop cortam em ~60 s — a peça era gerada
  * e cobrada, o agente via timeout e tentava de novo, cobrando outra vez.
  *
- * CONEXÃO POR LINK (OAuth). O usuário cola `https://trendpulse.com.br/mcp` no Claude ou no Codex e
+ * CONEXÃO POR LINK (OAuth). O usuário cola `https://www.trendpulse.com.br/mcp` no Claude ou no Codex e
  * aprova na tela da Trend — sem token para copiar. O OAuth é todo do Supabase Auth; aqui só (a)
  * respondemos 401 com `WWW-Authenticate` apontando para os metadados do recurso, (b) servimos esses
  * metadados, e (c) aceitamos o token resultante, que é um JWT de usuário comum (RLS vale direto, sem a

@@ -3,7 +3,7 @@
 O TrendPulse expõe um servidor MCP. Conectando, o Claude e o Codex passam a gerar conteúdo com a
 identidade da sua marca, consultar o calendário e agendar posts sem você sair da conversa.
 
-**Link:** `https://trendpulse.com.br/mcp`
+**Link:** `https://www.trendpulse.com.br/mcp`
 
 ---
 
@@ -23,7 +23,7 @@ Em planos Team e Enterprise, só administradores adicionam conectores.
 ### Claude Code
 
 ```bash
-claude mcp add --transport http trendpulse https://trendpulse.com.br/mcp
+claude mcp add --transport http trendpulse https://www.trendpulse.com.br/mcp
 ```
 
 ```bash
@@ -35,7 +35,7 @@ Ou, dentro do Claude Code, `/mcp` → TrendPulse → autenticar. O navegador abr
 ### Codex
 
 ```bash
-codex mcp add trendpulse --url https://trendpulse.com.br/mcp
+codex mcp add trendpulse --url https://www.trendpulse.com.br/mcp
 ```
 
 ```bash

@@ -25,7 +25,7 @@ import { toast } from "sonner";
  */
 
 /** Tem que ser igual a LINK_MCP em supabase/functions/_shared/mcp-core.ts. */
-const LINK = "https://trendpulse.com.br/mcp";
+const LINK = "https://www.trendpulse.com.br/mcp";
 /** Endereço direto da função, usado só pelo token pessoal. */
 const ENDPOINT_DIRETO = "https://qdmhqxpazffmaxleyzxs.supabase.co/functions/v1/mcp";
 

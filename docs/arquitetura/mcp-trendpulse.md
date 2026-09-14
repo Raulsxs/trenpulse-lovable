@@ -249,7 +249,7 @@ Efeito colateral bom: geração pedida pelo Claude/Codex aparece no painel de fi
          agendamento" do Calendar.tsx.
       Verificado em produção com arquivo real: upload pelo comando devolvido, reuso do link recusado,
       agendar, listar, desagendar, reagendar.
-- [x] **11. Conexão por link (OAuth) (2026-09-14).** `https://trendpulse.com.br/mcp` — cola no Claude
+- [x] **11. Conexão por link (OAuth) (2026-09-14).** `https://www.trendpulse.com.br/mcp` (com www: o domínio sem www faz 308) — cola no Claude
       ou no Codex, autoriza na Trend, pronto. O OAuth é o servidor OAuth 2.1 do próprio Supabase Auth
       (registro dinâmico ligado; tela em `/oauth/consent`). O MCP responde 401 com
       `WWW-Authenticate`, serve os metadados do recurso (RFC 9728) e aceita o token resultante, que é
