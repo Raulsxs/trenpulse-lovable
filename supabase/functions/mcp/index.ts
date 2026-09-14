@@ -20,6 +20,12 @@
  * Medido: um gerar_post levava 75,8 s, e Codex e Claude Desktop cortam em ~60 s — a peça era gerada
  * e cobrada, o agente via timeout e tentava de novo, cobrando outra vez.
  *
+ * CONEXÃO POR LINK (OAuth). O usuário cola `https://trendpulse.com.br/mcp` no Claude ou no Codex e
+ * aprova na tela da Trend — sem token para copiar. O OAuth é todo do Supabase Auth; aqui só (a)
+ * respondemos 401 com `WWW-Authenticate` apontando para os metadados do recurso, (b) servimos esses
+ * metadados, e (c) aceitamos o token resultante, que é um JWT de usuário comum (RLS vale direto, sem a
+ * troca de sessão que o PAT precisa). Detalhes em `_shared/mcp-core.ts`.
+ *
  * TRANSPORTE: responde `application/json` no POST, que a spec permite explicitamente ("the server
  * MUST either return Content-Type: text/event-stream, or application/json"). Sem SSE e sem
  * Mcp-Session-Id: o servidor é sem estado, então não há mensagem iniciada por servidor pra
@@ -33,6 +39,7 @@ import { jwtDoUsuario } from "../_shared/sessao-usuario.ts";
 import {
   FERRAMENTAS_LENTAS, TOOL_ACOMPANHAR, colunasDoJob, ehUuid, promptDoJob, textoDoJob, tituloDoJob, toolsVisiveis,
   TOOL_PREPARAR_ENVIO, caminhoEnvio, extensaoImagem, mimeDaExtensao,
+  ESCOPOS_OAUTH, cabecalhoWwwAuthenticate, metadadosDoRecurso, urlDoRecurso,
 } from "../_shared/mcp-core.ts";
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -43,7 +50,7 @@ const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, content-type, mcp-protocol-version, mcp-session-id, accept",
   "Access-Control-Allow-Methods": "POST, GET, DELETE, OPTIONS",
-  "Access-Control-Expose-Headers": "mcp-session-id",
+  "Access-Control-Expose-Headers": "mcp-session-id, www-authenticate",
 };
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -86,24 +93,49 @@ const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =
 const rpcErro = (id: unknown, code: number, message: string) =>
   json({ jsonrpc: "2.0", id: id ?? null, error: { code, message } });
 
-interface Autenticado { userId: string; scopes: string[] }
+interface Autenticado {
+  userId: string;
+  scopes: string[];
+  /** Presente só na conexão por link: o próprio token OAuth já é um JWT de usuário, usado direto. */
+  jwtOAuth: string | null;
+}
 
 async function autenticar(req: Request): Promise<Autenticado | null> {
   const header = req.headers.get("Authorization") || "";
   if (!header.startsWith("Bearer ")) return null;
   const token = header.slice(7).trim();
-  if (!token.startsWith("tp_pat_")) return null;
-
+  if (!token) return null;
   const svc = createClient(SUPABASE_URL, SERVICE_KEY);
-  const { data, error } = await svc.rpc("verify_api_token", { p_token: token });
-  if (error || !data || data.length === 0) return null;
-  return { userId: data[0].user_id, scopes: data[0].scopes || [] };
+
+  // ── Token pessoal (instalador / Perfil → Agentes, modo avançado) ──
+  if (token.startsWith("tp_pat_")) {
+    const { data, error } = await svc.rpc("verify_api_token", { p_token: token });
+    if (error || !data || data.length === 0) return null;
+    return { userId: data[0].user_id, scopes: data[0].scopes || [], jwtOAuth: null };
+  }
+
+  // ── Conexão por link: token OAuth emitido pelo Supabase Auth ──
+  // getUser valida assinatura, expiração E se a sessão ainda existe. É isso que faz "Desconectar" em
+  // Perfil → Agentes derrubar o acesso na hora: revogar o app apaga as sessões daquele cliente.
+  const { data: { user }, error } = await svc.auth.getUser(token);
+  if (error || !user) return null;
+  return { userId: user.id, scopes: [...ESCOPOS_OAUTH], jwtOAuth: token };
 }
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   // Sem stream iniciado por servidor: a spec manda 405 pra quem não oferece SSE no GET.
+  // O rewrite do link da Trend acrescenta ?link=trend. É por ele — e não pelo host, que num proxy não é
+  // confiável — que sabemos qual endereço o usuário colou, e o cliente compara com esse endereço.
+  const endereco = new URL(req.url);
+  const recurso = urlDoRecurso(endereco.searchParams.get("link"), SUPABASE_URL);
+
+  // Metadados do recurso protegido (RFC 9728): diz ao cliente onde fica o servidor de autorização.
+  if (req.method === "GET" && endereco.pathname.endsWith("/.well-known/oauth-protected-resource")) {
+    return json(metadadosDoRecurso(recurso, SUPABASE_URL));
+  }
+
   if (req.method === "GET") return new Response("SSE não oferecido neste endpoint", { status: 405, headers: corsHeaders });
   // Servidor sem estado: não há sessão pra encerrar.
   if (req.method === "DELETE") return new Response(null, { status: 405, headers: corsHeaders });
@@ -123,8 +155,24 @@ Deno.serve(async (req) => {
   // Notificações e respostas não têm `id` e não geram resposta: 202 sem corpo, como a spec pede.
   if (id === undefined || id === null) return new Response(null, { status: 202, headers: corsHeaders });
 
-  // `initialize` responde ANTES de exigir credencial: o cliente precisa conseguir descobrir o
-  // servidor e mostrar erro de auth com contexto, em vez de um 401 seco no handshake.
+  // Credencial ANTES de tudo, com HTTP 401 de verdade. Antes o initialize respondia sem credencial e o
+  // erro vinha depois como JSON-RPC com status 200 — e aí nenhum cliente iniciava o OAuth: é o 401 com
+  // WWW-Authenticate que faz o Claude e o Codex abrirem o login da Trend sozinhos.
+  const auth = await autenticar(req);
+  if (!auth) {
+    return json(
+      {
+        jsonrpc: "2.0", id,
+        error: {
+          code: -32001,
+          message: "Conecte sua conta TrendPulse: autorize pelo navegador, ou gere um token em trendpulse.com.br → Perfil → Agentes.",
+        },
+      },
+      401,
+      { "WWW-Authenticate": cabecalhoWwwAuthenticate(recurso) },
+    );
+  }
+
   if (method === "initialize") {
     const pedida = params?.protocolVersion;
     return json({
@@ -144,10 +192,6 @@ Deno.serve(async (req) => {
 
   if (method === "ping") return json({ jsonrpc: "2.0", id, result: {} });
 
-  const auth = await autenticar(req);
-  if (!auth) {
-    return rpcErro(id, -32001, "Token inválido, revogado ou expirado. Gere um novo em trendpulse.com.br → Perfil.");
-  }
 
   if (method === "tools/list") {
     return json({ jsonrpc: "2.0", id, result: { tools: toolsVisiveis(AGENT_TOOLS as any[], CATALOGO, auth.scopes) } });
@@ -249,7 +293,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    const jwt = await jwtDoUsuario(auth.userId);
+    // Conexão por link já traz um JWT de usuário; só o token pessoal precisa da sessão de serviço.
+    const jwt = auth.jwtOAuth ?? await jwtDoUsuario(auth.userId);
     if (!jwt) return rpcErro(id, -32603, "Não consegui abrir sessão para este usuário.");
 
     const userClient = createClient(SUPABASE_URL, ANON_KEY, {

@@ -209,3 +209,58 @@ export function toolsVisiveis(
   if (scopes.includes("schedule")) lista.push(TOOL_PREPARAR_ENVIO);
   return lista;
 }
+
+/* ════════════════════════ Conexão por LINK (OAuth) ════════════════════════
+ *
+ * O usuário cola UM link no Claude ou no Codex, clica em conectar, entra na conta da Trend e aprova.
+ * Sem token para copiar. Quem faz o OAuth é o próprio Supabase Auth (servidor OAuth 2.1 com registro
+ * dinâmico de cliente); este servidor só precisa DIZER onde ele está. A sequência que os clientes
+ * seguem (Claude, Claude Code, Codex — todos implementam a spec de autorização do MCP):
+ *
+ *   1. chamam o MCP sem credencial → recebem 401 com `WWW-Authenticate: Bearer resource_metadata=...`
+ *   2. leem esses metadados (RFC 9728) → descobrem o servidor de autorização (Supabase Auth)
+ *   3. se registram sozinhos (RFC 7591), abrem o navegador na tela de consentimento da Trend
+ *   4. voltam com um token — que é um JWT de usuário comum, com a claim `client_id` a mais
+ *
+ * O link é da Trend (`trendpulse.com.br/mcp`), não o endereço cru do Supabase: a Vercel repassa. A
+ * função descobre que veio pelo link pelo `?link=trend` que a regra de rewrite acrescenta — host e
+ * cabeçalhos de proxy não são confiáveis para isso.
+ */
+
+export const LINK_MCP = "https://trendpulse.com.br/mcp";
+const METADADOS_DO_LINK = "https://trendpulse.com.br/.well-known/oauth-protected-resource/mcp";
+
+/**
+ * Permissões de quem conecta por link. FIXAS de propósito: o Supabase só aceita os escopos padrão do
+ * OpenID (openid, email, profile, phone) — não há como pedir "agendar" no token. A tela de
+ * consentimento mostra exatamente esta lista, então o que o usuário aprova é o que vale.
+ * `publish` fica de fora pelo mesmo motivo do token: publicar na hora pula o calendário.
+ */
+export const ESCOPOS_OAUTH: readonly string[] = ["read", "generate", "schedule"];
+
+/** Endereço canônico do recurso: o link da Trend quando veio por ele, o do Supabase quando direto. */
+export function urlDoRecurso(link: string | null | undefined, supabaseUrl: string): string {
+  return link === "trend" ? LINK_MCP : `${supabaseUrl}/functions/v1/mcp`;
+}
+
+/**
+ * Onde ficam os metadados do recurso. Para o link, segue a RFC 9728 (o `.well-known` vai na RAIZ do
+ * domínio, com o caminho do recurso depois). Para o endereço direto, a função só recebe o que está sob
+ * /functions/v1/mcp, então os metadados ficam num subcaminho dela.
+ */
+export function urlMetadados(recurso: string): string {
+  return recurso === LINK_MCP ? METADADOS_DO_LINK : `${recurso}/.well-known/oauth-protected-resource`;
+}
+
+export function metadadosDoRecurso(recurso: string, supabaseUrl: string) {
+  return {
+    resource: recurso,
+    authorization_servers: [`${supabaseUrl}/auth/v1`],
+    bearer_methods_supported: ["header"],
+    resource_name: "TrendPulse",
+    resource_documentation: "https://trendpulse.com.br/profile?tab=agentes",
+  };
+}
+
+export const cabecalhoWwwAuthenticate = (recurso: string): string =>
+  `Bearer resource_metadata="${urlMetadados(recurso)}"`;

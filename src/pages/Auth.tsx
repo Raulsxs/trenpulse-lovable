@@ -23,6 +23,13 @@ const Auth = () => {
   const isSessionExpired = searchParams.get("expired") === "1";
   // ?coupon= (NUNCA ?code= — colide com o parâmetro do PKCE do Supabase Auth).
   const couponParam = couponFromUrl(`?${searchParams.toString()}`);
+  // Para onde voltar depois de entrar. Existe para a conexão por link (OAuth): a tela de consentimento
+  // manda o usuário sem sessão para cá com ?next=/oauth/consent?authorization_id=... — sem voltar, o
+  // pedido de conexão se perdia e o Claude/Codex ficava esperando para sempre.
+  // Só caminho INTERNO: começa com "/" e não com "//" (que o navegador lê como outro domínio). Aceitar
+  // URL completa aqui transformaria o login num redirecionador aberto para phishing.
+  const nextParam = searchParams.get("next");
+  const destinoSeguro = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : null;
   const defaultTab = isSignupTab ? "signup" : "login";
   const [isLoading, setIsLoading] = useState(false);
   const [loadingAccountId, setLoadingAccountId] = useState<string | null>(null);
@@ -63,7 +70,7 @@ const Auth = () => {
       // Persist rotated tokens BEFORE navigating — page unload races onAuthStateChange
       rememberAccount(newSession);
 
-      window.location.href = "/agent";
+      window.location.href = destinoSeguro ?? "/agent";
     } catch {
       // Token expired/rotated — go to login form pre-filled with this email
       forgetAccount(account.userId);
@@ -112,7 +119,7 @@ const Auth = () => {
       // Save tokens immediately so multi-account switcher has fresh tokens right away
       rememberAccount(session);
 
-      navigate("/agent");
+      navigate(destinoSeguro ?? "/agent");
     } catch (error: any) {
       toast.error(error.message || "Erro ao fazer login");
     } finally {
@@ -167,7 +174,7 @@ const Auth = () => {
     setIsGoogleLoading(true);
     try {
       if (couponParam) savePendingCoupon(couponParam);                          // L1: localStorage
-      const redirectTo = `${window.location.origin}/onboarding${couponParam ? `?coupon=${couponParam}` : ""}`; // L2
+      const redirectTo = destinoSeguro ? `${window.location.origin}${destinoSeguro}` : `${window.location.origin}/onboarding${couponParam ? `?coupon=${couponParam}` : ""}`; // L2
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {

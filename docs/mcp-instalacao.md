@@ -3,35 +3,63 @@
 O TrendPulse expõe um servidor MCP. Conectando, o Claude e o Codex passam a gerar conteúdo com a
 identidade da sua marca, consultar o calendário e agendar posts sem você sair da conversa.
 
-**Endpoint:** `https://qdmhqxpazffmaxleyzxs.supabase.co/functions/v1/mcp`
+**Link:** `https://trendpulse.com.br/mcp`
 
 ---
 
-## 1. Pegue seu token
+## 1. Conectar pelo link (recomendado)
 
-Entre em **[Perfil → Agentes](https://trendpulse.com.br/profile?tab=agentes)**, dê um nome ao acesso
-("Claude no meu notebook" serve), escolha o que ele pode fazer e clique em **Criar token**.
+Sem token para copiar e sem arquivo para editar. Os passos também estão, com botão de copiar, em
+**[Perfil → Agentes](https://trendpulse.com.br/profile?tab=agentes)**.
 
-O token começa com `tp_pat_` e aparece **uma única vez**. Guarde num gerenciador de senhas — o
-TrendPulse só armazena o hash e não consegue mostrar de novo.
+### Claude (site e app)
 
-Ele carrega **escopos**, que limitam o que o agente pode fazer:
+1. Abra **[Configurações → Conectores](https://claude.ai/customize/connectors)**.
+2. **Adicionar conector personalizado** → nome `TrendPulse` → cole o link.
+3. **Conectar** → entre com a sua conta TrendPulse → **Autorizar**.
 
-| Escopo | Libera |
-|---|---|
-| `read` | saldo, calendário, redes conectadas |
-| `generate` | criar post, carrossel, story, tweet card |
-| `schedule` | agendar conteúdo e montar calendário |
-| `publish` | publicar na hora — **fora do padrão**, peça só se quiser |
+Em planos Team e Enterprise, só administradores adicionam conectores.
 
-Ferramenta fora do escopo **nem aparece** para o agente.
+### Claude Code
+
+```bash
+claude mcp add --transport http trendpulse https://trendpulse.com.br/mcp
+```
+
+```bash
+claude mcp login trendpulse
+```
+
+Ou, dentro do Claude Code, `/mcp` → TrendPulse → autenticar. O navegador abre na tela da Trend.
+
+### Codex
+
+```bash
+codex mcp add trendpulse --url https://trendpulse.com.br/mcp
+```
+
+```bash
+codex mcp login trendpulse
+```
+
+### O que o app pode fazer depois de autorizado
+
+Consultar saldo, calendário e redes; criar conteúdo (gasta crédito); agendar, reagendar e tirar do
+calendário; subir artes do computador. **Não** publica na hora — tudo passa pelo calendário.
+
+### Desconectar
+
+**Perfil → Agentes → Apps conectados → Desconectar.** O acesso para na chamada seguinte; nada do que
+foi criado ou agendado se perde.
 
 ---
 
-A própria tela já monta o comando de instalação com o seu token dentro — é só copiar e colar no
-terminal. Se preferir clicar em vez de colar, use o instalador abaixo.
+## Avançado: token pessoal
 
-## 2. Jeito fácil: o instalador
+Para automações, servidores e o instalador de clique duplo. Gere em **Perfil → Agentes → Avançado**.
+O endpoint do token é `https://qdmhqxpazffmaxleyzxs.supabase.co/functions/v1/mcp`.
+
+### Instalador de clique duplo (usa token)
 
 Peça o arquivo ao Raul e **dê um clique duplo**. Ele conecta o TrendPulse ao Claude Desktop, ao
 Claude Code e ao Codex — o que estiver na máquina — e testa o token antes de escrever qualquer

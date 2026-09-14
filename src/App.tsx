@@ -27,6 +27,8 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
  */
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+// Estático como o Auth: é a primeira tela de quem conecta pelo link, não pode piscar fallback.
+import OAuthConsent from "./pages/OAuthConsent";
 import ResetPassword from "./pages/ResetPassword";
 import Pricing from "./pages/Pricing";
 import PrivacyPolicy from "./pages/PrivacyPolicy";
@@ -95,6 +97,7 @@ const RoutedApp = () => {
       {/* Direção "Ateliê" em avaliação, ao lado da / que continua no ar. Ver LandingNova.tsx. */}
       <Route path="/landing-nova" element={<LandingNova />} />
       <Route path="/auth" element={<Auth />} />
+      <Route path="/oauth/consent" element={<OAuthConsent />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/content/:id" element={<ContentPreview />} />
       <Route path="/download/:id" element={<DownloadPage />} />

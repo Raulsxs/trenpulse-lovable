@@ -14,6 +14,7 @@ import {
   FERRAMENTAS_LENTAS, TOOL_ACOMPANHAR, promptDoJob, colunasDoJob, tituloDoJob,
   sessaoAindaValida, textoDoJob, toolsVisiveis,
   TOOL_PREPARAR_ENVIO, extensaoImagem, mimeDaExtensao, caminhoEnvio,
+  LINK_MCP, ESCOPOS_OAUTH, urlDoRecurso, urlMetadados, metadadosDoRecurso, cabecalhoWwwAuthenticate,
 } from "../../supabase/functions/_shared/mcp-core";
 
 const CATALOGO = {
@@ -177,5 +178,40 @@ describe("preparar_envio_imagem — arte do computador para o calendário", () =
 
   it("recusa userId que não é uuid — um caminho montado com lixo escaparia da pasta", () => {
     expect(() => caminhoEnvio("../outro", "png")).toThrow();
+  });
+});
+
+describe("conexão por link — descoberta OAuth", () => {
+  const SUPA = "https://qdmhqxpazffmaxleyzxs.supabase.co";
+
+  it("pelo link da Trend, o recurso é o link — é o endereço que o usuário colou e o cliente compara", () => {
+    expect(urlDoRecurso("trend", SUPA)).toBe(LINK_MCP);
+    expect(LINK_MCP).toBe("https://trendpulse.com.br/mcp");
+  });
+
+  it("direto no Supabase (token antigo), o recurso é o endereço da função", () => {
+    expect(urlDoRecurso(null, SUPA)).toBe(`${SUPA}/functions/v1/mcp`);
+    expect(urlDoRecurso("qualquer-outra-coisa", SUPA)).toBe(`${SUPA}/functions/v1/mcp`);
+  });
+
+  it("metadados do link seguem a RFC 9728: .well-known na raiz, caminho do recurso depois", () => {
+    expect(urlMetadados(LINK_MCP)).toBe("https://trendpulse.com.br/.well-known/oauth-protected-resource/mcp");
+    expect(urlMetadados(`${SUPA}/functions/v1/mcp`)).toBe(`${SUPA}/functions/v1/mcp/.well-known/oauth-protected-resource`);
+  });
+
+  it("aponta o servidor de autorização para o Supabase Auth", () => {
+    const m = metadadosDoRecurso(LINK_MCP, SUPA);
+    expect(m.resource).toBe(LINK_MCP);
+    expect(m.authorization_servers).toEqual([`${SUPA}/auth/v1`]);
+  });
+
+  it("o 401 carrega o endereço dos metadados — é o que faz o cliente abrir o login sozinho", () => {
+    expect(cabecalhoWwwAuthenticate(LINK_MCP))
+      .toBe('Bearer resource_metadata="https://trendpulse.com.br/.well-known/oauth-protected-resource/mcp"');
+  });
+
+  it("quem conecta por link agenda e gera, mas não publica na hora", () => {
+    expect([...ESCOPOS_OAUTH].sort()).toEqual(["generate", "read", "schedule"]);
+    expect(ESCOPOS_OAUTH).not.toContain("publish");
   });
 });
