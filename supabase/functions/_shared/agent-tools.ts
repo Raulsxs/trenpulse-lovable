@@ -907,7 +907,7 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
     }
     case "detalhes_conteudo": {
       const { data: c } = await ctx.userClient.from("generated_contents")
-        .select("title, content_type, platform, slide_count, generation_metadata").eq("id", input.contentId).maybeSingle();
+        .select("title, content_type, platform, slide_count, generation_metadata, caption, image_urls, rendered_image_urls, slides").eq("id", input.contentId).maybeSingle();
       if (!c) return { ok: false, content: "Conteúdo não encontrado." };
       const gm: any = c.generation_metadata || {};
       // A PRIMEIRA entrada (asc) é a geração original; ignora edições posteriores (edit_slide).
@@ -922,7 +922,18 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
         tweet_card: "Satori (tweet card)", editorial_slide: "Satori + foto (editorial)", edit_slide: "edição de slide",
       };
       const modelo = action ? (MODEL_BY_ACTION[action] || action) : "padrão (GPT-Image 2)";
-      return { ok: true, content: `"${c.title || c.content_type}" — ${c.content_type}${c.slide_count ? ` (${c.slide_count} slides)` : ""}, ${c.platform || "instagram"}. Modelo de imagem: **${modelo}**.${gm.prompt ? ` Prompt: "${String(gm.prompt).slice(0, 160)}".` : ""}` };
+      // Imagem e legenda (2026-10-02): agente de fora (MCP) nao tinha como ver a arte nem o texto da peca que
+      // ele mesmo gerou — o painel de conteudo da Pulse ficava sem miniatura. Linhas com prefixo fixo
+      // (imagem_url= / legenda=) para quem le por programa; a legenda vem por ultimo, inteira.
+      const urls = (arr: unknown) => (Array.isArray(arr) ? arr.filter((u: any) => typeof u === "string" && u.startsWith("http")) : []);
+      const slideUrls = Array.isArray(c.slides) ? c.slides.map((s: any) => s?.image_url || s?.background_image_url).filter((u: any) => typeof u === "string" && u) : [];
+      const imagens = [...new Set([...urls(c.rendered_image_urls), ...urls(c.image_urls), ...slideUrls])];
+      const extra = [
+        imagens.length ? `imagem_url=${imagens[0]}` : null,
+        imagens.length > 1 ? `imagens=${imagens.length}` : null,
+        c.caption ? `legenda=${String(c.caption)}` : null,
+      ].filter(Boolean).join("\n");
+      return { ok: true, content: `"${c.title || c.content_type}" — ${c.content_type}${c.slide_count ? ` (${c.slide_count} slides)` : ""}, ${c.platform || "instagram"}. Modelo de imagem: **${modelo}**.${gm.prompt ? ` Prompt: "${String(gm.prompt).slice(0, 160)}".` : ""}${extra ? `\n${extra}` : ""}` };
     }
     case "mostrar_conteudo": {
       const SEL = "id, content_type, platform, image_urls, slides";
