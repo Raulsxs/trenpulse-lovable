@@ -207,6 +207,36 @@ describe("listar_conexoes — até quando a conexão se sustenta sem o usuário"
   });
 });
 
+describe("Post for Me fora do ar não é 'nenhuma conta conectada'", () => {
+  // connect-social devolve lista vazia COM error=pfm_unavailable. Ler isso como "sem conta" faria o
+  // agente mandar o usuário reconectar tudo à toa — o mesmo falso "reconecte" de 05/10, por outro caminho.
+  const foraDoAr = () => {
+    const { ctx, userClient } = contexto([], { generated_contents: [{ id: ID_OK }] });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ connections: [], error: "pfm_unavailable", message: "Não consegui verificar suas contas conectadas agora. Tente de novo em instantes." }), { status: 200 })));
+    return { ctx, userClient };
+  };
+
+  it("listar_conexoes falha dizendo que não deu para verificar", async () => {
+    const r = await dispatchTool(foraDoAr().ctx, "listar_conexoes", {});
+    expect(r.ok).toBe(false);
+    expect(r.content).toMatch(/Não consegui verificar/);
+    expect(r.content).not.toMatch(/Nenhuma rede conectada|conectar em Perfil/);
+  });
+
+  it("agendar não conclui que a conta sumiu nem grava nada", async () => {
+    const { ctx, userClient } = foraDoAr();
+    const r = await resolverContas(ctx, ["linkedin"], ["spc_pagina"]);
+    expect(r.ok).toBe(false);
+    if (!r.ok) {
+      expect(r.erro).toMatch(/Não consegui verificar/);
+      expect(r.erro).not.toMatch(/desconhecida|não tem conta/);
+    }
+    const a = await dispatchTool(ctx, "agendar_conteudo", { contentId: ID_OK, data_hora_iso: "2026-10-06T09:00:00-03:00", plataformas: ["linkedin"], contas: ["spc_pagina"] });
+    expect(a.ok).toBe(false);
+    expect(userClient.atualizacoes).toEqual([]);
+  });
+});
+
 describe("agendar — conta que precisa reconectar é recusada na hora, não às 09:00 do dia", () => {
   it("resolverContas recusa a conta vencida pedida pelo id e diz como resolver", async () => {
     const { ctx } = contexto([PAGINA, VENCIDA]);

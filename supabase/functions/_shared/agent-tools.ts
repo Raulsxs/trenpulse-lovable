@@ -411,6 +411,15 @@ function genResult(data: any, kind: string): ToolResult {
 }
 
 /**
+ * O connect-social devolve lista VAZIA com `error: "pfm_unavailable"` quando o Post for Me não responde.
+ * Ler isso como "sem conta conectada" faria o agente mandar o usuário reconectar tudo à toa.
+ */
+const semLeituraDasContas = (d: any): string | null =>
+  d?.error === "pfm_unavailable"
+    ? (d.message || "Não consegui verificar as contas conectadas agora. Tente de novo em instantes.")
+    : null;
+
+/**
  * Resolve em QUAIS CONTAS publicar, a partir da plataforma e/ou de ids escolhidos.
  *
  * POR QUE ISTO EXISTE: o publish-postforme, sem `accountIds`, resolve por
@@ -436,6 +445,8 @@ export async function resolverContas(
     body: JSON.stringify({ action: "list" }),
   });
   const d = await res.json().catch(() => ({}));
+  const fora = semLeituraDasContas(d);
+  if (fora) return { ok: false, erro: fora };
   const conectadas = (d?.connections || []).filter((c: any) => c.pfm_account_id);
   const descreve = (arr: any[]) =>
     arr.map((c: any) => `${c.platform}: ${c.account_name || "(sem nome)"} → conta=${c.pfm_account_id}`).join("; ");
@@ -1069,6 +1080,8 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
         body: JSON.stringify({ action: "list" }),
       });
       const d = await res.json().catch(() => ({}));
+      const fora = semLeituraDasContas(d);
+      if (fora) return { ok: false, content: fora };
       // O ID VAI JUNTO de propósito. Sem ele o agente ve "instagram (agessaude)" e nao tem como
       // ESCOLHER essa conta: o publicador, recebendo so a plataforma, faz
       // `connections.find(c => c.platform === tp)` e pega a PRIMEIRA da lista. Com tres Instagram,
@@ -1299,6 +1312,8 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         body: JSON.stringify({ action: "list" }),
       });
       const connData = await connRes.json().catch(() => ({}));
+      const fora = semLeituraDasContas(connData);
+      if (fora) return { ok: false, content: fora };
       const connections = connData?.connections || [];
       if (!Array.isArray(connections) || connections.length === 0) {
         return { ok: false, content: "Nenhuma rede social conectada. Conecte uma rede em Perfil → Conexões antes de publicar." };
