@@ -1,4 +1,5 @@
 import { temaDeFrase } from "./frase.ts";
+import { avisoDeValidade, instanteSP, legendaQueSai, linhaDaConexao, motivoDaFalha, precisaReconectar, recusaPorContaVencida } from "./publicacao.ts";
 // agent-tools.ts — catálogo de ferramentas do orquestrador agêntico (ai-agent).
 // Cada tool é um WRAPPER sobre uma edge function que JÁ existe (ai-chat via intent_hint,
 // publish-postforme, connect-social, scrape-trends) — o agente COMPÕE, não reimplementa.
@@ -244,7 +245,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "detalhes_conteudo",
-    description: "Retorna detalhes técnicos de um conteúdo gerado (qual MODELO de imagem foi usado, prompt, formato). Chame quando o usuário pergunta 'qual modelo foi usado' ou detalhes da geração.",
+    description: "Retorna detalhes de um conteúdo gerado: qual MODELO de imagem foi usado, prompt, formato, o estado da publicação (com o motivo, se falhou) e a legenda que vai ao ar. Chame quando o usuário pergunta 'qual modelo foi usado', detalhes da geração ou por que uma peça não foi publicada.",
     input_schema: {
       type: "object",
       properties: { contentId: { type: "string" } },
@@ -291,7 +292,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "listar_agenda",
-    description: "Lista o calendário: o que está agendado num período, com dia, hora de Brasília, rede e o content_id de cada peça. Chame quando o usuário pergunta o que está agendado, antes de agendar algo novo (para não colidir), e antes de reagendar ou desagendar — o content_id vem daqui. Sem datas, mostra os próximos 30 dias.",
+    description: "Lista o calendário: o que está agendado num período, com dia, hora de Brasília, rede e o content_id de cada peça. Chame quando o usuário pergunta o que está agendado, antes de agendar algo novo (para não colidir), e antes de reagendar ou desagendar — o content_id vem daqui. Peça que falhou vem com o motivo (FALHOU: ...). Sem datas, mostra os próximos 30 dias.",
     input_schema: {
       type: "object",
       properties: {
@@ -302,7 +303,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "listar_conexoes",
-    description: "Lista as redes sociais conectadas do usuário. Chame antes de publicar/agendar para saber onde dá pra postar.",
+    description: "Lista as redes sociais conectadas do usuário, com a validade de cada conexão: 'renova sozinha' não precisa de nada; conta VENCIDA não publica até o usuário reconectar. Chame antes de publicar/agendar para saber onde dá pra postar.",
     input_schema: { type: "object", properties: {} },
   },
   {
@@ -438,6 +439,13 @@ export async function resolverContas(
   const conectadas = (d?.connections || []).filter((c: any) => c.pfm_account_id);
   const descreve = (arr: any[]) =>
     arr.map((c: any) => `${c.platform}: ${c.account_name || "(sem nome)"} → conta=${c.pfm_account_id}`).join("; ");
+  // Conta que precisa reconectar (acesso vencido e sem como renovar): o publicador recusa na hora de
+  // publicar, então aceitar o agendamento só esconde a falha até lá. Acesso vencido em conta RENOVÁVEL
+  // passa: o Post for Me renova ao publicar (ver _shared/publicacao.ts).
+  const recusaVencidas = (ids: string[]) => {
+    const vencidas = conectadas.filter((c: any) => ids.includes(c.pfm_account_id) && precisaReconectar(c));
+    return vencidas.length ? recusaPorContaVencida(vencidas) : null;
+  };
 
   if (contasPedidas.length) {
     const validas = new Set(conectadas.map((c: any) => c.pfm_account_id));
@@ -445,6 +453,8 @@ export async function resolverContas(
     if (invalidas.length) {
       return { ok: false, erro: `Conta desconhecida: ${invalidas.join(", ")}. Disponíveis — ${descreve(conectadas)}` };
     }
+    const recusa = recusaVencidas(contasPedidas);
+    if (recusa) return { ok: false, erro: recusa };
     return { ok: true, accountIds: contasPedidas };
   }
 
@@ -465,6 +475,8 @@ export async function resolverContas(
       erro: `Você tem mais de uma conta em ${ambiguas.join(" e ")} — PERGUNTE ao usuário em qual perfil publicar e chame de novo passando \`contas\`. Opções: ${opcoes}`,
     };
   }
+  const recusa = recusaVencidas(escolhidas);
+  if (recusa) return { ok: false, erro: recusa };
   return { ok: true, accountIds: escolhidas };
 }
 
@@ -907,7 +919,7 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
     }
     case "detalhes_conteudo": {
       const { data: c } = await ctx.userClient.from("generated_contents")
-        .select("title, content_type, platform, slide_count, generation_metadata, caption, image_urls, rendered_image_urls, slides").eq("id", input.contentId).maybeSingle();
+        .select("title, content_type, platform, slide_count, generation_metadata, caption, hashtags, platform_captions, image_urls, rendered_image_urls, slides, status, publish_error, scheduled_accounts, scheduled_at, published_at").eq("id", input.contentId).maybeSingle();
       if (!c) return { ok: false, content: "Conteúdo não encontrado." };
       const gm: any = c.generation_metadata || {};
       // A PRIMEIRA entrada (asc) é a geração original; ignora edições posteriores (edit_slide).
@@ -928,10 +940,23 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
       const urls = (arr: unknown) => (Array.isArray(arr) ? arr.filter((u: any) => typeof u === "string" && u.startsWith("http")) : []);
       const slideUrls = Array.isArray(c.slides) ? c.slides.map((s: any) => s?.image_url || s?.background_image_url).filter((u: any) => typeof u === "string" && u) : [];
       const imagens = [...new Set([...urls(c.rendered_image_urls), ...urls(c.image_urls), ...slideUrls])];
+      // Estado e motivo da falha (2026-10-05): a peça falhava, o motivo ficava em publish_error e o agente
+      // respondia "não dá para saber". A legenda é a que VAI AO AR na rede da peça (variante da rede, não a
+      // padrão): o painel da Pulse mostrava um texto e o LinkedIn recebia outro.
+      // Quem publica pelo agendador perde o scheduled_at (o publicador zera): a peça some de listar_agenda
+      // e é por aqui, com status e publicado_em, que dá para saber que ela saiu.
+      const rede = (c.scheduled_accounts as any)?.platforms?.[0] || c.platform || "instagram";
+      const legenda = legendaQueSai(c, rede);
+      const erroPub = motivoDaFalha(c.status, c.publish_error).replace(" · FALHOU: ", "");
+      const agendadoPara = instanteSP(c.scheduled_at), publicadoEm = instanteSP(c.published_at);
       const extra = [
+        c.status ? `status=${c.status}` : null,
+        agendadoPara ? `agendado_para=${agendadoPara}` : null,
+        publicadoEm ? `publicado_em=${publicadoEm}` : null,
+        erroPub ? `erro_publicacao=${erroPub}` : null,
         imagens.length ? `imagem_url=${imagens[0]}` : null,
         imagens.length > 1 ? `imagens=${imagens.length}` : null,
-        c.caption ? `legenda=${String(c.caption)}` : null,
+        legenda ? `legenda=${legenda}` : null,
       ].filter(Boolean).join("\n");
       return { ok: true, content: `"${c.title || c.content_type}" — ${c.content_type}${c.slide_count ? ` (${c.slide_count} slides)` : ""}, ${c.platform || "instagram"}. Modelo de imagem: **${modelo}**.${gm.prompt ? ` Prompt: "${String(gm.prompt).slice(0, 160)}".` : ""}${extra ? `\n${extra}` : ""}` };
     }
@@ -995,7 +1020,7 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
       }
       const { data } = await ctx.userClient
         .from("generated_contents")
-        .select("id, title, content_type, scheduled_at, platform, status")
+        .select("id, title, content_type, scheduled_at, platform, status, publish_error")
         .not("scheduled_at", "is", null)
         .gte("scheduled_at", deData.toISOString())
         .lte("scheduled_at", ateData.toISOString())
@@ -1005,7 +1030,8 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
       const dia = (d: Date) => noFuso(d, { day: "2-digit", month: "2-digit", year: "numeric" });
       const items = (data || []).map((c: any) => {
         const quando = noFuso(new Date(c.scheduled_at), { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-        return `• ${quando} — ${c.title || c.content_type} (${c.platform || "?"}, ${c.status}) → content_id=${c.id}`;
+        // O motivo da falha vai DEPOIS do content_id: o começo da linha é lido por programa.
+        return `• ${quando} — ${c.title || c.content_type} (${c.platform || "?"}, ${c.status}) → content_id=${c.id}${motivoDaFalha(c.status, c.publish_error)}`;
       }).join("\n");
       return {
         ok: true,
@@ -1051,14 +1077,17 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
       if (lista.length === 0) {
         return { ok: true, content: "Nenhuma rede conectada. O usuário precisa conectar em Perfil → Conexões antes de publicar." };
       }
-      const linhas = lista.map((c: any) => `- ${c.platform}: ${c.account_name || "(sem nome)"} → conta=${c.pfm_account_id}`).join("\n");
+      // A VALIDADE VAI JUNTO (2026-10-05): até quando a conexão se sustenta sem o usuário, e VENCIDA
+      // quando só reconectando. Sem isso o agente agenda numa conta morta e só descobre na falha.
+      const linhas = lista.map((c: any) => linhaDaConexao(c)).join("\n");
       const porPlataforma: Record<string, number> = {};
       for (const c of lista) porPlataforma[c.platform] = (porPlataforma[c.platform] || 0) + 1;
       const duplicadas = Object.entries(porPlataforma).filter(([, n]) => n > 1).map(([p]) => p);
       const aviso = duplicadas.length
         ? `\n\nATENÇÃO: há mais de uma conta em ${duplicadas.join(" e ")}. Ao agendar, passe SEMPRE o campo \`contas\` com o id certo — e, se o usuário não disse qual perfil, PERGUNTE antes de agendar.`
         : "";
-      return { ok: true, content: `Contas conectadas:\n${linhas}${aviso}` };
+      const validade = avisoDeValidade(lista);
+      return { ok: true, content: `Contas conectadas:\n${linhas}${aviso}${validade ? `\n\n${validade}` : ""}` };
     }
     case "consultar_saldo": {
       const { data } = await ctx.userClient.from("user_credits").select("balance").maybeSingle();

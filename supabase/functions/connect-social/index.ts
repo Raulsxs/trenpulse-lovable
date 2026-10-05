@@ -3,6 +3,7 @@
  * Actions: connect (default), list, disconnect
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { contaDoPfm } from "../_shared/publicacao.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -107,19 +108,12 @@ Deno.serve(async (req) => {
           (a: any) => a.external_id && a.external_id !== user.id,
         ).length;
 
+        // Validade do token: o front avisa "reconecte" antes do publish falhar (token IG/LinkedIn dura
+        // ~60 dias; vencido sem renovação, o publish dá 400). O formato da conta, com `renovavel` e a
+        // validade do refresh token, vive em _shared/publicacao.ts (testado); os tokens não saem de lá.
         const connections = connectedAccounts
           .filter((a: any) => a.external_id === user.id)
-          .map((a: any) => ({
-            user_id: user.id,
-            platform: a.platform,
-            pfm_account_id: a.id,
-            status: "connected",
-            account_name: a.username || a.name || null,
-            // Validade do token: o front avisa "reconecte" antes do publish falhar (token IG/LinkedIn
-            // dura ~60 dias e não tem refresh → expira silencioso e o publish dá 400).
-            expires_at: a.access_token_expires_at || null,
-            expired: a.access_token_expires_at ? new Date(a.access_token_expires_at).getTime() < Date.now() : false,
-          }));
+          .map((a: any) => contaDoPfm(a, user.id));
 
         console.log(
           `[connect-social] PFM list for user=${user.id}: total=${allAccounts.length}, connected=${connectedAccounts.length}, mine=${connections.length}, orphan_no_external_id=${orphanCount}, owned_by_others=${otherUserCount}`,

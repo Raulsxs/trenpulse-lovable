@@ -5,6 +5,7 @@
  * Handles: immediate publish, scheduled publish, multi-platform publish
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { bloqueioPorConexao, contaDoPfm, erroComConexaoVencida } from "../_shared/publicacao.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -117,12 +118,8 @@ Deno.serve(async (req) => {
           connections = pfmAccounts
             .filter((a: any) => a.status === "connected")
             .filter((a: any) => a.external_id === userId)
-            .map((a: any) => ({
-              platform: a.platform,
-              pfm_account_id: a.id,
-              status: "connected",
-              expires_at: a.access_token_expires_at, // p/ detectar token vencido → "reconecte"
-            }));
+            // expires_at + renovavel: p/ detectar conexão vencida SEM renovação → "reconecte"
+            .map((a: any) => contaDoPfm(a, userId as string));
           console.log(`[publish-postforme] Loaded ${connections.length} accounts from PFM API (DB was empty) for user ${userId}`);
         } else {
           console.warn(`[publish-postforme] PFM fallback HTTP ${pfmResp.status}`);
@@ -159,7 +156,7 @@ Deno.serve(async (req) => {
     }
 
     // If accountIds provided, publish to those specific accounts; otherwise use platform matching
-    const publishTargets: Array<{ platform: string; pfm_account_id: string; expires_at?: string }> = [];
+    const publishTargets: Array<{ platform: string; pfm_account_id: string; expires_at?: string | null; renovavel?: boolean }> = [];
 
     if (accountIds?.length) {
       // Specific accounts selected by user
@@ -179,7 +176,7 @@ Deno.serve(async (req) => {
             const known = new Set(pool.map((c: any) => c.pfm_account_id));
             const live = (Array.isArray(pfmData?.data) ? pfmData.data : [])
               .filter((a: any) => a.status === "connected" && a.external_id === userId)
-              .map((a: any) => ({ platform: a.platform, pfm_account_id: a.id, status: "connected", expires_at: a.access_token_expires_at }))
+              .map((a: any) => contaDoPfm(a, userId as string))
               .filter((c: any) => !known.has(c.pfm_account_id));
             if (live.length) pool = [...pool, ...live];
             console.log(`[publish-postforme] resolved ${missing.length} selected id(s) via live PFM; pool now ${pool.length}`);
@@ -192,13 +189,13 @@ Deno.serve(async (req) => {
       }
       for (const accId of accountIds) {
         const conn = pool.find((c: any) => c.pfm_account_id === accId);
-        if (conn) publishTargets.push({ platform: conn.platform, pfm_account_id: accId, expires_at: conn.expires_at });
+        if (conn) publishTargets.push({ platform: conn.platform, pfm_account_id: accId, expires_at: conn.expires_at, renovavel: conn.renovavel });
       }
     } else {
       // Legacy: match by platform name
       for (const tp of targetPlatforms) {
         const conn = connections.find((c: any) => c.platform === tp);
-        if (conn?.pfm_account_id) publishTargets.push({ platform: tp, pfm_account_id: conn.pfm_account_id, expires_at: conn.expires_at });
+        if (conn?.pfm_account_id) publishTargets.push({ platform: tp, pfm_account_id: conn.pfm_account_id, expires_at: conn.expires_at, renovavel: conn.renovavel });
       }
     }
 
@@ -217,17 +214,22 @@ Deno.serve(async (req) => {
     // Helper: publish one PFM social-post and poll for a concrete verdict.
     // Returns { success, postId?, error?, pending?, url? }.
     const publishOne = async (
-      target: { platform: string; pfm_account_id: string; expires_at?: string },
+      target: { platform: string; pfm_account_id: string; expires_at?: string | null; renovavel?: boolean },
       mediaList: string[],
       forceStory: boolean,
       slideIdxLog: string,
     ): Promise<{ success: boolean; postId?: string; error?: string; pending?: boolean; url?: string }> => {
-      // Token vencido = a plataforma rejeita com 400 genérico ("Request failed with status code 400")
-      // e o usuário não entende. Detecta ANTES e devolve instrução clara de reconexão.
+      // Acesso vencido SEM como renovar = a plataforma rejeita com 400 genérico ("Request failed with
+      // status code 400") e o usuário não entende: detecta ANTES e devolve instrução clara de reconexão.
+      // Conta RENOVÁVEL (refresh token válido) passa: o Post for Me renova o acesso na hora de publicar.
+      // Barrar essas derrubou um post do LinkedIn em 2026-10-05 (a regra vive em _shared/publicacao.ts).
+      const bloqueio = bloqueioPorConexao(target);
+      if (bloqueio) {
+        console.warn(`[publish-postforme] ${slideIdxLog}conexão VENCIDA sem renovação p/ ${target.platform} (${target.pfm_account_id}) em ${target.expires_at}`);
+        return { success: false, error: bloqueio };
+      }
       if (target.expires_at && new Date(target.expires_at).getTime() < Date.now()) {
-        console.warn(`[publish-postforme] ${slideIdxLog}token EXPIRADO p/ ${target.platform} (${target.pfm_account_id}) em ${target.expires_at}`);
-        const platLabel = target.platform.charAt(0).toUpperCase() + target.platform.slice(1);
-        return { success: false, error: `A conexão com o ${platLabel} expirou. Reconecte a conta em Perfil → Conexões e tente publicar de novo.` };
+        console.log(`[publish-postforme] ${slideIdxLog}acesso vencido em ${target.expires_at}, renovável p/ ${target.platform} (${target.pfm_account_id}): o Post for Me renova`);
       }
       const caption = platformCaptions?.[target.platform] || (defaultCaption + hashtagsStr);
       const isStory = forceStory || baseContentType === "story" || baseContentType === "reels";
@@ -270,7 +272,7 @@ Deno.serve(async (req) => {
         } catch {
           if (errText) friendlyError = `${friendlyError}: ${errText.substring(0, 200)}`;
         }
-        return { success: false, error: friendlyError };
+        return { success: false, error: erroComConexaoVencida(friendlyError, target) };
       }
 
       const pfmData = await pfmResp.json();
@@ -314,7 +316,7 @@ Deno.serve(async (req) => {
               ? ours.error
               : (ours.error?.message || JSON.stringify(ours.error)?.substring(0, 200) || "Publicação rejeitada pela plataforma");
             console.error(`[publish-postforme] ${slideIdxLog}platform rejected: ${errMsg}`);
-            return { success: false, error: errMsg };
+            return { success: false, error: erroComConexaoVencida(errMsg, target) };
           }
         } catch (pollErr: any) {
           console.warn(`[publish-postforme] ${slideIdxLog}poll ${attempt} failed: ${pollErr?.name === "AbortError" ? "timeout" : pollErr?.message}`);
