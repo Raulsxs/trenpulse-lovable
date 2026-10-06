@@ -148,6 +148,8 @@ O agente escolhe a ferramenta sozinho; você fala normal:
 - *"o que eu tenho agendado de hoje até sexta?"*
 - *"tira do calendário o post de quinta"* — a peça fica salva, só sai da agenda
 - *"passa o post de quinta pra sexta às 18h"*
+- *"quais marcas eu tenho?"* — e depois *"gera na marca PulseID"*
+- *"o que eu tenho de recorrente?"* — a agenda mostra os recorrentes e avisa se algum não está publicando
 
 **Geração responde na hora, a peça fica pronta em 1 a 2 minutos.** Quando você pede um post, o agente
 recebe um número de acompanhamento e confere sozinho até ficar pronto. Se ele disser "está gerando",
@@ -160,6 +162,10 @@ saldo antes de mandar gerar em lote.
 **Se você tem mais de um perfil na mesma rede, diga qual.** Ex.: *"agenda no @hearttsurgery"*, não só
 *"agenda no Instagram"*. Se você não disser, o agente é obrigado a perguntar antes de agendar — ele
 não escolhe sozinho, justamente pra um post não sair no perfil errado.
+
+**Agendar pelo Claude ou pelo Codex vale na hora.** Não aparece tela de confirmação no TrendPulse: o
+que o agente agenda já está no calendário e publica sozinho no horário. Se quiser revisar antes, peça
+"me mostra antes de agendar".
 
 **Arte que está no seu computador vai direto pro calendário** — no Claude Code e no Codex. O agente
 pede um link de envio, sobe o arquivo pelo terminal e agenda; a imagem não passa pela conversa. No

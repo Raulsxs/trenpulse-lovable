@@ -167,6 +167,33 @@ Medido depois, no mesmo teste de ponta a ponta:
 
 Efeito colateral bom: geração pedida pelo Claude/Codex aparece no painel de fila do `/agent` ao vivo.
 
+### 3.7 Lacunas da agenda (2026-10-06)
+
+Apareceram usando o MCP de verdade (um consumidor programático, que confere o resultado em vez de
+confiar no texto). Todas eram de **resposta que não batia com o banco**:
+
+| Sintoma | Causa | Conserto |
+|---|---|---|
+| `agendar_conteudo` dizia "Agendado" e nada mudava | update por id inexistente ou de outro dono afeta 0 linhas **sem erro** (RLS) | confere a peça antes e exige a linha gravada (`.select("id")`); senão "NADA foi agendado" |
+| `publicar` saía no perfil errado | sem `contas`, o publicador pegava a primeira conta da rede | `publicar` aceita `contas` e recusa quando há mais de um perfil e nenhum foi dito |
+| Peça publicada sumia do calendário | o publicador zerava `scheduled_at` | `estadoAposPublicar` mantém a data |
+| Publicação virava rascunho | `processing` tem dois sentidos (gerando × aguardando o Post for Me) e o cron de geração travada rebaixava os dois | `reconciliar_conteudo_preso` ignora `pfm_pending` e `published_at` |
+| Recorrente falhava em silêncio | só guardava a rede; sem conta, criava cópia que falhava 3 vezes | `account_ids` + `last_error`; `alvosDoRecorrente` decide antes de criar a cópia |
+| Recorrente não disparava na hora | o agendador retornava cedo em "No contents due" | recorrentes e reconciliação rodam em todo tick |
+| Agente não sabia o id da marca | não havia como listar | `listar_marcas` (escopo `read`) |
+
+Regras que ficam:
+
+- **Resposta de escrita só depois de conferir a linha gravada.** Update sem `.select()` não prova nada.
+- **No MCP, agendar é imediato.** Não há tela de confirmação nesse caminho; as descrições dizem isso
+  (`FERRAMENTAS_IMEDIATAS`) para o agente perguntar antes, e não depois.
+- **Formato das linhas de `listar_conexoes` e `listar_agenda` é contrato.** Há consumidor lendo por
+  regex (`→ conta=`, `→ content_id=`). Só se acrescenta; os recorrentes entram num bloco próprio,
+  depois das peças (`↻ nome — … → recorrente=<id>`).
+- **Recorrente antigo (sem `account_ids`) com várias redes publica só na primeira.** Sempre foi assim
+  (a cópia herda `platforms[0]`); ligar as outras redes agora faria posts novos aparecerem sem ninguém
+  ter pedido. Recorrente criado pela tela nova grava os perfis e publica em todos.
+
 ## 4. Fora de escopo (v1)
 
 - **Publicação imediata** (`publicar_agora`) — o usuário pediu aprovação antes; entra só se ele pedir.
