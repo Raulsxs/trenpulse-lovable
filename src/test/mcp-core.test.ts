@@ -15,6 +15,7 @@ import {
   sessaoAindaValida, textoDoJob, toolsVisiveis,
   TOOL_PREPARAR_ENVIO, extensaoImagem, mimeDaExtensao, caminhoEnvio,
   LINK_MCP, ESCOPOS_OAUTH, urlDoRecurso, urlMetadados, metadadosDoRecurso, cabecalhoWwwAuthenticate,
+  FERRAMENTAS_IMEDIATAS, TOOL_LISTAR_MARCAS, textoDasMarcas,
 } from "../../supabase/functions/_shared/mcp-core";
 
 const CATALOGO = {
@@ -47,7 +48,9 @@ describe("FERRAMENTAS_LENTAS", () => {
 describe("toolsVisiveis", () => {
   it("só mostra o que o escopo permite, e nunca o que está fora do catálogo", () => {
     const nomes = toolsVisiveis(TOOLS, CATALOGO, ["read"]).map((t) => t.name);
-    expect(nomes).toEqual(["consultar_saldo"]);
+    // listar_marcas acompanha o escopo de leitura: sem o id da marca, nada do que é gerado sai com identidade.
+    expect(nomes).toEqual(["consultar_saldo", "listar_marcas"]);
+    expect(nomes).not.toContain("editar_slide");
   });
 
   it("quem pode gerar ganha acompanhar_geracao — senão receberia um job_id sem ter como usar", () => {
@@ -213,5 +216,59 @@ describe("conexão por link — descoberta OAuth", () => {
   it("quem conecta por link agenda e gera, mas não publica na hora", () => {
     expect([...ESCOPOS_OAUTH].sort()).toEqual(["generate", "read", "schedule"]);
     expect(ESCOPOS_OAUTH).not.toContain("publish");
+  });
+});
+
+describe("marcas pelo MCP — sem o id, tudo o que o agente gera sai sem identidade", () => {
+  // Caso real (2026-10-04): o CRM de um cliente gerava pelo MCP e nenhuma ferramenta devolvia um brandId.
+  const COM_MARCA = [
+    { name: "gerar_post", description: "cria post", input_schema: { type: "object", properties: { tema: { type: "string" }, brandId: { type: "string" } } } },
+    { name: "consultar_saldo", description: "saldo", input_schema: { type: "object", properties: {} } },
+    { name: "agendar_arte", description: "agenda arte", input_schema: { type: "object", properties: { imagem: { type: "string" } } } },
+  ];
+
+  it("listar_marcas aparece para quem lê a conta, e só para quem lê", () => {
+    expect(toolsVisiveis(TOOLS, CATALOGO, ["read"]).map((t) => t.name)).toContain("listar_marcas");
+    expect(toolsVisiveis(TOOLS, CATALOGO, ["generate", "schedule"]).map((t) => t.name)).not.toContain("listar_marcas");
+    expect(TOOL_LISTAR_MARCAS.description).toMatch(/ANTES de gerar/);
+  });
+
+  it("a dica de brandId só entra onde a ferramenta aceita brandId", () => {
+    const vis = toolsVisiveis(COM_MARCA, CATALOGO, ["read", "generate", "schedule"]);
+    expect(vis.find((t) => t.name === "gerar_post")!.description).toMatch(/passe brandId \(ids em listar_marcas\)/);
+    expect(vis.find((t) => t.name === "agendar_arte")!.description).not.toMatch(/brandId/);
+    expect(vis.find((t) => t.name === "consultar_saldo")!.description).toBe("saldo");
+  });
+
+  it("cada marca sai com nome, id e o modo em português", () => {
+    const txt = textoDasMarcas([
+      { id: "b1", name: "Heart surgery", creation_mode: "style_copy" },
+      { id: "b2", name: "Fotos pessoais", creation_mode: "photo_backgrounds" },
+      { id: "b3", name: null, creation_mode: "modo_novo" },
+    ]);
+    expect(txt).toContain("- Heart surgery → marca=b1 · copia o estilo dos exemplos");
+    expect(txt).toContain("- Fotos pessoais → marca=b2 · fotos pessoais de fundo");
+    expect(txt).toContain("- (sem nome) → marca=b3");
+    expect(txt).toMatch(/PERGUNTE/);
+  });
+
+  it("sem marca cadastrada, diz que a peça sai sem identidade e onde criar", () => {
+    expect(textoDasMarcas([])).toMatch(/Nenhuma marca cadastrada/);
+  });
+});
+
+describe("agendar pelo MCP é imediato — a descrição não pode prometer confirmação que não existe", () => {
+  // No app há uma tela de confirmação. Pelo MCP não: a descrição antiga dizia "sempre será confirmada
+  // pelo usuário", o agente externo confiava e agendava sem perguntar.
+  it("as três ferramentas que gravam no calendário avisam que a ação já vale", () => {
+    expect([...FERRAMENTAS_IMEDIATAS].sort()).toEqual(["agendar_arte", "agendar_conteudo", "desagendar_conteudo"]);
+    const arte = toolsVisiveis(TOOLS, CATALOGO, ["schedule"]).find((t) => t.name === "agendar_arte")!;
+    expect(arte.description).toMatch(/AQUI A AÇÃO É IMEDIATA/);
+    expect(arte.description).toMatch(/confirme com o usuário/);
+  });
+
+  it("ferramenta de leitura não ganha o aviso", () => {
+    const saldo = toolsVisiveis(TOOLS, CATALOGO, ["read"]).find((t) => t.name === "consultar_saldo")!;
+    expect(saldo.description).not.toMatch(/IMEDIATA/);
   });
 });

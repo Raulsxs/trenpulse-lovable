@@ -5,7 +5,7 @@
  * Handles: immediate publish, scheduled publish, multi-platform publish
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { bloqueioPorConexao, contaDoPfm, erroComConexaoVencida } from "../_shared/publicacao.ts";
+import { bloqueioPorConexao, contaDoPfm, erroComConexaoVencida, estadoAposPublicar } from "../_shared/publicacao.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -391,11 +391,9 @@ Deno.serve(async (req) => {
     const anySuccess = results.some(r => r.success);
     const anyPending = results.some((r: any) => r.pending === true);
     if (anySuccess) {
-      await svc.from("generated_contents").update({
-        status: scheduledAt ? "scheduled" : "published",
-        published_at: scheduledAt ? null : new Date().toISOString(),
-        scheduled_at: scheduledAt || null,
-      }).eq("id", contentId);
+      // estadoAposPublicar NÃO zera scheduled_at na publicação imediata: era o que fazia toda peça
+      // publicada sumir do calendário (ver _shared/publicacao.ts).
+      await svc.from("generated_contents").update(estadoAposPublicar(scheduledAt, new Date().toISOString())).eq("id", contentId);
     } else if (anyPending && !scheduledAt) {
       // Guarda o que ficou pendente (post_id + account_id) pra reconciliação: sem isto o "processing"
       // travava pra sempre. O scheduler reconsulta o PFM depois e resolve pra published/failed.

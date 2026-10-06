@@ -6,6 +6,7 @@
  * calls publish-postforme for each.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { alvosDoRecorrente, contaDoPfm, type AlvosDoRecorrente } from "../_shared/publicacao.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -43,16 +44,15 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (!dueContents?.length) {
-      return new Response(JSON.stringify({ message: "No contents due", count: 0 }), {
-        status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    console.log(`[scheduler] Found ${dueContents.length} contents due for publishing`);
+    // SEM `return` quando não há peça vencida. Havia um aqui ("No contents due"), e ele saía ANTES dos
+    // recorrentes e da reconciliação lá embaixo: os dois só rodavam no minuto em que, por acaso, outra
+    // peça vencia. Medido em 2026-10-06: recorrentes das 10h e das 11h (UTC) disparando juntos às 12:00,
+    // e um das 22h parado desde 22/09 — ninguém tinha peça vencendo à noite.
+    const vencidas = dueContents || [];
+    if (vencidas.length) console.log(`[scheduler] Found ${vencidas.length} contents due for publishing`);
     const results = [];
 
-    for (const content of dueContents) {
+    for (const content of vencidas) {
       const prevAttempts = (content as any).publish_attempts || 0;
       const nextAttempts = prevAttempts + 1;
       try {
@@ -152,7 +152,7 @@ Deno.serve(async (req) => {
 
       const { data: dueRecurring, error: recErr } = await supabase
         .from("recurring_schedules")
-        .select("id, user_id, content_id, platforms, hour_utc, jitter_minutes, last_run_at")
+        .select("id, user_id, content_id, name, platforms, account_ids, hour_utc, jitter_minutes, last_run_at")
         .eq("active", true)
         .contains("days_of_week", [dow])
         .lte("hour_utc", hourNow);
@@ -161,6 +161,25 @@ Deno.serve(async (req) => {
         console.error("[scheduler] recurring query error:", recErr.message);
       } else if (dueRecurring?.length) {
         console.log(`[scheduler] ${dueRecurring.length} recurring schedule(s) candidate for today (dow=${dow}, hour=${hourNow})`);
+
+        // Contas do Post for Me, lidas UMA vez por execução (a API devolve as de todos os usuários).
+        // null = não deu para ler. Nesse caso o recorrente segue como antes, sem conta gravada: um
+        // soluço do Post for Me não pode suspender o recorrente de todo mundo.
+        let contasPfm: any[] | null = null;
+        const pfmKey = Deno.env.get("POSTFORME_API_KEY");
+        if (pfmKey) {
+          try {
+            const r = await fetch("https://api.postforme.dev/v1/social-accounts", { headers: { Authorization: `Bearer ${pfmKey}` } });
+            if (r.ok) {
+              const d = await r.json();
+              contasPfm = Array.isArray(d?.data) ? d.data : null;
+            } else {
+              console.warn(`[scheduler] recorrentes: Post for Me HTTP ${r.status} — seguindo sem conferir as contas`);
+            }
+          } catch (e: any) {
+            console.warn("[scheduler] recorrentes: Post for Me fora do ar —", e?.message);
+          }
+        }
 
         for (const sched of dueRecurring) {
           try {
@@ -189,6 +208,27 @@ Deno.serve(async (req) => {
               continue;
             }
 
+            // ONDE publicar. Sem isto a cópia nascia sem conta: rede com vários perfis saía num perfil
+            // sorteado, e rede sem conta falhava três vezes em silêncio (ver alvosDoRecorrente).
+            // Mesmo filtro do publicador: só conta conectada cujo external_id é o dono.
+            let alvo: AlvosDoRecorrente | null = null;
+            if (contasPfm) {
+              const contas = contasPfm
+                .filter((a: any) => a.status === "connected" && a.external_id === sched.user_id)
+                .map((a: any) => contaDoPfm(a, sched.user_id));
+              alvo = alvosDoRecorrente(sched as any, contas);
+              if (!alvo.publica) {
+                // Não cria a cópia: ela só serviria para falhar. Marca como rodado hoje (para não
+                // reavaliar a cada 5 min) e deixa o motivo onde o dono vê.
+                await supabase.from("recurring_schedules")
+                  .update({ last_run_at: new Date().toISOString(), last_error: alvo.aviso })
+                  .eq("id", sched.id);
+                console.warn(`[scheduler] recurring ${sched.id}: não publicou — ${alvo.aviso}`);
+                recurringResults.push({ id: sched.id, status: "skipped", error: alvo.aviso || "sem conta" });
+                continue;
+              }
+            }
+
             // Stagger the actual publish time within jitter_minutes after the configured hour
             // so daily recurring posts don't fire at the exact same minute every day.
             const jitter = (sched as any).jitter_minutes ?? 15;
@@ -204,7 +244,9 @@ Deno.serve(async (req) => {
                 hashtags: src.hashtags,
                 image_urls: src.image_urls,
                 slides: src.slides,
-                platform: src.platform,
+                platform: alvo?.platforms[0] || (Array.isArray(sched.platforms) && sched.platforms[0]) || src.platform,
+                // Mesmo formato do modal de Agendar: com accountIds o agendador publica EXATAMENTE neles.
+                scheduled_accounts: alvo?.accountIds.length ? { platforms: alvo.platforms, accountIds: alvo.accountIds } : null,
                 content_type: src.content_type,
                 platform_captions: src.platform_captions,
                 brand_id: src.brand_id,
@@ -229,19 +271,12 @@ Deno.serve(async (req) => {
               continue;
             }
 
-            // If the recurring rule overrides platforms, write that into the spawned entry too.
-            if (Array.isArray(sched.platforms) && sched.platforms.length > 0) {
-              await supabase
-                .from("generated_contents")
-                .update({ platform: sched.platforms[0] })
-                .eq("id", spawned.id);
-            }
-
             // Mark the schedule as fired *now* (not at spawnedAt) so the same-day dedup check
             // works regardless of jitter — last_run_at being >= todayAtSchedHour is the gate.
             await supabase
               .from("recurring_schedules")
-              .update({ last_run_at: new Date().toISOString() })
+              // last_error acompanha o que foi conferido AGORA; sem leitura das contas, fica como estava.
+              .update({ last_run_at: new Date().toISOString(), ...(alvo ? { last_error: alvo.aviso } : {}) })
               .eq("id", sched.id);
 
             console.log(`[scheduler] recurring ${sched.id}: spawned content ${spawned.id} from source ${sched.content_id}`);
@@ -265,7 +300,7 @@ Deno.serve(async (req) => {
       const pfmApiKey = Deno.env.get("POSTFORME_API_KEY");
       const { data: stuck } = await supabase
         .from("generated_contents")
-        .select("id, generation_metadata")
+        .select("id, generation_metadata, scheduled_at")
         .eq("status", "processing")
         .not("generation_metadata->pfm_pending", "is", null)
         .limit(20);
@@ -291,7 +326,8 @@ Deno.serve(async (req) => {
         }
         // Resolve só quando não há mais nada pendente (evita marcar cedo demais).
         if (!stillPending && anySuccess) {
-          await supabase.from("generated_contents").update({ status: "published", published_at: new Date().toISOString() }).eq("id", c.id);
+          // Peça agendada saiu na hora agendada: gravar "agora" diria que saiu quando o cron conferiu.
+          await supabase.from("generated_contents").update({ status: "published", published_at: (c as any).scheduled_at || new Date().toISOString() }).eq("id", c.id);
           reconResults.push({ id: c.id, status: "published" });
         } else if (!stillPending && anyFail) {
           await supabase.from("generated_contents").update({ status: "failed", publish_error: firstErr || "Publicação rejeitada" }).eq("id", c.id);

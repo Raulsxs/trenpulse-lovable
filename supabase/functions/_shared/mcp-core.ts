@@ -41,6 +41,52 @@ export const TOOL_ACOMPANHAR = {
   },
 };
 
+/**
+ * Ferramentas que GRAVAM no calendário. Dentro do app existe uma tela de confirmação antes de agendar;
+ * pelo MCP não existe: a chamada já vale. A descrição ganha esse aviso só aqui.
+ */
+export const FERRAMENTAS_IMEDIATAS = new Set(["agendar_conteudo", "agendar_arte", "desagendar_conteudo"]);
+
+/**
+ * Ferramenta só do MCP: as marcas do usuário, com o id que as ferramentas de geração pedem.
+ *
+ * POR QUE EXISTE (2026-10-04): no app, a marca vem do seletor e os nomes vão no prompt do agente. Pelo
+ * MCP não há seletor nem prompt: todas as ferramentas de geração aceitam `brandId`, mas nenhuma
+ * devolvia um id. Um agente externo não tinha como descobrir uma marca sequer, e tudo o que ele gerava
+ * saía SEM identidade visual — que é o que o produto vende.
+ */
+export const TOOL_LISTAR_MARCAS = {
+  name: "listar_marcas",
+  description:
+    "Lista as marcas do usuário com o id de cada uma. Chame ANTES de gerar qualquer conteúdo: sem brandId " +
+    "a peça sai sem a identidade visual da marca. Quem tem várias empresas tem várias marcas — se o " +
+    "usuário não disse qual, PERGUNTE em vez de escolher.",
+  inputSchema: { type: "object", properties: {} },
+};
+
+const MODO_DA_MARCA: Record<string, string> = {
+  photo_backgrounds: "fotos pessoais de fundo",
+  style_copy: "copia o estilo dos exemplos",
+  inspired: "inspirada nos exemplos",
+  from_scratch: "criada do zero",
+};
+
+/** O que o agente lê em listar_marcas. Uma linha por marca: `- nome → marca=<id> · modo`. */
+export function textoDasMarcas(marcas: Array<{ id: string; name?: string | null; creation_mode?: string | null }>): string {
+  if (!marcas.length) {
+    return "Nenhuma marca cadastrada: as peças saem sem identidade visual. O usuário cria marcas em trendpulse.com.br → Marcas.";
+  }
+  const linhas = marcas.map((m) => {
+    const modo = MODO_DA_MARCA[String(m.creation_mode || "")];
+    return `- ${m.name || "(sem nome)"} → marca=${m.id}${modo ? ` · ${modo}` : ""}`;
+  });
+  return (
+    `Marcas:\n${linhas.join("\n")}\n\n` +
+    "Nas ferramentas de geração, passe o id em `brandId`. No agendar_arte, passe o nome ou o id em `marca`. " +
+    "Se o usuário não disse qual marca, PERGUNTE: na marca errada a peça sai com a identidade visual de outra empresa."
+  );
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 export const ehUuid = (s: unknown): s is string => typeof s === "string" && UUID.test(s);
 
@@ -195,14 +241,22 @@ export function toolsVisiveis(
 ): Array<{ name: string; description?: string; inputSchema: unknown }> {
   const lista = agentTools
     .filter((t) => catalogo[t.name] && scopes.includes(catalogo[t.name].escopo))
-    .map((t) => ({
-      name: t.name,
+    .map((t) => {
+      // Avisos que só valem no MCP entram como sufixo; ferramenta sem aviso mantém a descrição intacta.
+      const avisos: string[] = [];
       // Nas lentas, o agente precisa saber ANTES de chamar que a resposta é um job, não a peça.
-      description: FERRAMENTAS_LENTAS.has(t.name)
-        ? `${t.description || ""} RESPONDE NA HORA COM UM job_id — a peça fica pronta em 1 a 2 minutos; acompanhe com acompanhar_geracao.`
-        : t.description,
-      inputSchema: t.input_schema ?? { type: "object", properties: {} },
-    }));
+      if (FERRAMENTAS_LENTAS.has(t.name)) avisos.push("RESPONDE NA HORA COM UM job_id — a peça fica pronta em 1 a 2 minutos; acompanhe com acompanhar_geracao.");
+      // Só onde o schema aceita brandId: prometer a marca numa ferramenta que a ignora seria mentira.
+      if ((t.input_schema as any)?.properties?.brandId) avisos.push("Para sair com a identidade da marca certa, passe brandId (ids em listar_marcas).");
+      if (FERRAMENTAS_IMEDIATAS.has(t.name)) avisos.push("AQUI A AÇÃO É IMEDIATA, sem tela de confirmação: confirme com o usuário a data, a hora e o perfil ANTES de chamar.");
+      return {
+        name: t.name,
+        description: avisos.length ? `${t.description || ""} ${avisos.join(" ")}` : t.description,
+        inputSchema: t.input_schema ?? { type: "object", properties: {} },
+      };
+    });
+  // Quem lê a conta precisa enxergar as marcas: sem o id, nada do que é gerado sai com identidade.
+  if (scopes.includes("read")) lista.push(TOOL_LISTAR_MARCAS);
   // Quem pode gerar precisa poder acompanhar; senão receberia um job_id sem ter como usá-lo.
   if (scopes.includes("generate")) lista.push(TOOL_ACOMPANHAR);
   // Quem pode agendar precisa conseguir mandar a arte do próprio computador — é o caso central.

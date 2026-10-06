@@ -1,5 +1,5 @@
 import { temaDeFrase } from "./frase.ts";
-import { avisoDeValidade, instanteSP, legendaQueSai, linhaDaConexao, motivoDaFalha, precisaReconectar, recusaPorContaVencida } from "./publicacao.ts";
+import { avisoDeValidade, instanteSP, legendaQueSai, linhaDaConexao, linhaDoRecorrente, motivoDaFalha, precisaReconectar, recusaPorContaVencida } from "./publicacao.ts";
 // agent-tools.ts — catálogo de ferramentas do orquestrador agêntico (ai-agent).
 // Cada tool é um WRAPPER sobre uma edge function que JÁ existe (ai-chat via intent_hint,
 // publish-postforme, connect-social, scrape-trends) — o agente COMPÕE, não reimplementa.
@@ -338,7 +338,10 @@ export const AGENT_TOOLS = [
   },
   {
     name: "agendar_conteudo",
-    description: "AGENDA um conteúdo já gerado para publicar numa data/hora. AÇÃO QUE PUBLICA NO FUTURO — sempre será confirmada pelo usuário antes de efetivar. Chame com o content_id e a data/hora.",
+    // A frase "sempre será confirmada pelo usuário" saiu daqui: só é verdade DENTRO do app, que tem tela de
+    // confirmação. Pelo MCP a ação é imediata, e o agente externo lia a promessa e agendava sem perguntar.
+    // O app avisa o agente dele no system prompt; o MCP acrescenta o aviso próprio (FERRAMENTAS_IMEDIATAS).
+    description: "AGENDA um conteúdo já gerado para publicar numa data/hora. AÇÃO QUE PUBLICA NO FUTURO. Chame com o content_id e a data/hora. Para MUDAR a data de algo já agendado, chame de novo com a nova data. Confira a resposta: só está agendado se ela disser 'Agendado para'.",
     input_schema: {
       type: "object",
       properties: {
@@ -374,12 +377,13 @@ export const AGENT_TOOLS = [
   },
   {
     name: "publicar",
-    description: "PUBLICA AGORA um conteúdo já gerado nas redes. AÇÃO IRREVERSÍVEL — sempre será confirmada pelo usuário antes de efetivar. Chame com o content_id.",
+    description: "PUBLICA AGORA um conteúdo já gerado nas redes. AÇÃO IRREVERSÍVEL. Chame com o content_id. Se o usuário tem mais de um perfil na mesma rede, passe `contas` — sem isso a ferramenta recusa e lista os perfis.",
     input_schema: {
       type: "object",
       properties: {
         contentId: { type: "string" },
         plataformas: { type: "array", items: { type: "string" } },
+        contas: { type: "array", items: { type: "string" }, description: "IDs das contas de destino, vindos de listar_conexoes (campo conta=...). OBRIGATORIO quando o usuario tem mais de uma conta na mesma rede. Se ele nao disse em qual perfil, PERGUNTE antes de publicar." },
       },
       required: ["contentId"],
     },
@@ -1044,11 +1048,24 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
         // O motivo da falha vai DEPOIS do content_id: o começo da linha é lido por programa.
         return `• ${quando} — ${c.title || c.content_type} (${c.platform || "?"}, ${c.status}) → content_id=${c.id}${motivoDaFalha(c.status, c.publish_error)}`;
       }).join("\n");
+      // RECORRENTES. Vivem em outra tabela e só viram peça no dia em que disparam, então esta ferramenta
+      // não os mostrava: o agente via a semana "vazia" e agendava por cima de um post diário, ou dizia ao
+      // usuário que não havia nada programado. Bloco à parte, DEPOIS das peças, para não mexer nas linhas
+      // que são lidas por programa.
+      const { data: recs } = await ctx.userClient
+        .from("recurring_schedules")
+        .select("id, name, platforms, days_of_week, hour_utc, active, last_error")
+        .order("created_at", { ascending: false })
+        .limit(20);
+      const recorrentes = (recs || []).map((r: any) => linhaDoRecorrente(r)).join("\n");
+      const blocoRecorrentes = recorrentes
+        ? `\n\nRecorrentes (publicam sozinhos nos dias marcados; só viram peça, com content_id, no dia em que disparam):\n${recorrentes}`
+        : "";
       return {
         ok: true,
-        content: items
+        content: (items
           ? `Agenda de ${dia(deData)} a ${dia(ateData)} (horário de Brasília):\n${items}`
-          : `Nada agendado entre ${dia(deData)} e ${dia(ateData)}.`,
+          : `Nada agendado entre ${dia(deData)} e ${dia(ateData)}.`) + blocoRecorrentes,
       };
     }
     case "desagendar_conteudo": {
@@ -1281,6 +1298,23 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         return { ok: false, content: `Essa data ja passou (${dAgd.toLocaleString("pt-BR")}). Agende no futuro.` };
       }
 
+      // A peça existe e é desta conta? Com RLS, um content_id errado (ou de outra conta) NÃO dá erro no
+      // update: atualiza zero linhas. A ferramenta respondia "Agendado para terça às 9h" com o calendário
+      // vazio — achado com o CRM de um cliente operando pelo MCP (2026-10-04).
+      if (!input?.contentId) return { ok: false, content: "Faltou o content_id. NADA foi agendado." };
+      const { data: pecaAgd } = await ctx.userClient
+        .from("generated_contents")
+        .select("id, title, status, published_at")
+        .eq("id", input.contentId)
+        .maybeSingle();
+      if (!pecaAgd) {
+        return { ok: false, content: `Conteúdo não encontrado (content_id=${input.contentId}). NADA foi agendado. Confira o id em listar_agenda ou em acompanhar_geracao.` };
+      }
+      // Reagendar o que já saiu publicaria a mesma peça de novo.
+      if (pecaAgd.published_at || pecaAgd.status === "published") {
+        return { ok: false, content: `"${pecaAgd.title}" já foi publicado. NADA foi agendado: agendar de novo publicaria a mesma peça duas vezes. Para repetir o conteúdo, gere ou adapte uma peça nova.` };
+      }
+
       const platsAgd: string[] = Array.isArray(input.plataformas) ? input.plataformas.filter(Boolean) : [];
       const contasAgd = Array.isArray(input.contas) ? input.contas.filter(Boolean).map(String) : [];
       const rc = await resolverContas(ctx, platsAgd, contasAgd);
@@ -1300,27 +1334,41 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         if (platsAgd.length) patch.platform = platsAgd[0];
       }
 
-      const { error } = await ctx.userClient.from("generated_contents").update(patch).eq("id", input.contentId);
-      if (error) return { ok: false, content: `Falha ao agendar: ${error.message}` };
+      // `.select("id")` devolve as linhas GRAVADAS: sem linha, não agendou — mesmo sem erro.
+      const { data: gravadas, error } = await ctx.userClient.from("generated_contents").update(patch).eq("id", input.contentId).select("id");
+      if (error) return { ok: false, content: `Falha ao agendar: ${error.message}. NADA foi agendado.` };
+      if (!Array.isArray(gravadas) || gravadas.length === 0) {
+        return { ok: false, content: "O agendamento não foi gravado. NADA foi agendado; tente de novo." };
+      }
       return { ok: true, content: `Agendado para ${dAgd.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} (horario de Brasilia).` };
     }
     case "publicar": {
-      // INVARIANTE de código (não só dica ao LLM): só publica se houver rede conectada.
-      // Reusa o mesmo endpoint/lógica de listar_conexoes (connect-social action:"list").
-      const connRes = await fetch(`${ctx.supabaseUrl}/functions/v1/connect-social`, {
-        method: "POST", headers: { Authorization: ctx.userAuthHeader, apikey: ctx.anonKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "list" }),
-      });
-      const connData = await connRes.json().catch(() => ({}));
-      const fora = semLeituraDasContas(connData);
-      if (fora) return { ok: false, content: fora };
-      const connections = connData?.connections || [];
-      if (!Array.isArray(connections) || connections.length === 0) {
-        return { ok: false, content: "Nenhuma rede social conectada. Conecte uma rede em Perfil → Conexões antes de publicar." };
-      }
+      if (!input?.contentId) return { ok: false, content: "Faltou o content_id. Nada foi publicado." };
+      const { data: pecaPub } = await ctx.userClient
+        .from("generated_contents")
+        .select("id, title, platform, scheduled_accounts")
+        .eq("id", input.contentId)
+        .maybeSingle();
+      if (!pecaPub) return { ok: false, content: `Conteúdo não encontrado (content_id=${input.contentId}). Nada foi publicado.` };
+
+      // CONTA DE DESTINO. Esta ferramenta mandava só a rede, e o publicador, sem `accountIds`, usa
+      // `connections.find(c => c.platform === tp)`: a PRIMEIRA conta daquela rede. Com três LinkedIn, o
+      // post saía num perfil sorteado. É a mesma falha corrigida em agendar_arte e agendar_conteudo em
+      // setembro; publicar tinha ficado de fora. Ordem: o que o agente passou → os perfis que o usuário
+      // já tinha escolhido ao agendar esta peça → a rede de criação (que recusa se for ambígua).
+      let contasPub: string[] = Array.isArray(input.contas) ? input.contas.filter(Boolean).map(String) : [];
+      let platsPub: string[] = Array.isArray(input.plataformas) ? input.plataformas.filter(Boolean) : [];
+      const jaEscolhidas = (pecaPub as any).scheduled_accounts?.accountIds;
+      if (!contasPub.length && !platsPub.length && Array.isArray(jaEscolhidas) && jaEscolhidas.length) contasPub = jaEscolhidas.map(String);
+      if (!contasPub.length && !platsPub.length) platsPub = [pecaPub.platform || "instagram"];
+
+      // resolverContas já cobre: Post for Me fora do ar, rede sem conta, perfil ambíguo e conta vencida.
+      const rcPub = await resolverContas(ctx, platsPub, contasPub);
+      if (!rcPub.ok) return { ok: false, content: `${rcPub.erro} Nada foi publicado.` };
+
       const res = await fetch(`${ctx.supabaseUrl}/functions/v1/publish-postforme`, {
         method: "POST", headers: { Authorization: ctx.userAuthHeader, apikey: ctx.anonKey, "Content-Type": "application/json" },
-        body: JSON.stringify({ contentId: input.contentId, platforms: input.plataformas }),
+        body: JSON.stringify({ contentId: input.contentId, platforms: platsPub.length ? platsPub : undefined, accountIds: rcPub.accountIds }),
       });
       const d = await res.json().catch(() => ({}));
       if (d?.error) return { ok: false, content: `Falha ao publicar: ${d.error}` };

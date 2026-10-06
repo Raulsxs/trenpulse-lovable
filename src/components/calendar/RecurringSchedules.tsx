@@ -8,7 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, Repeat, Upload, Image as ImageIcon } from "lucide-react";
+import { Loader2, Plus, Trash2, Repeat, Upload, Image as ImageIcon, AlertTriangle } from "lucide-react";
+import { Checkbox } from "@/components/ui/checkbox";
+import { useConnectedAccounts } from "@/hooks/useConnectedAccounts";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -24,6 +26,10 @@ interface RecurringSchedule {
   active: boolean;
   last_run_at: string | null;
   created_at: string;
+  /** Perfis escolhidos (ids do Post for Me). Null = recorrente antigo, que só conhece a rede. */
+  account_ids?: string[] | null;
+  /** O que o agendador achou de errado no último disparo (rede sem conta, perfil ambíguo). */
+  last_error?: string | null;
 }
 
 const JITTER_OPTIONS = [
@@ -92,6 +98,27 @@ export default function RecurringSchedules({ userId }: { userId: string }) {
   const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(["instagram"]);
   const [submitting, setSubmitting] = useState(false);
 
+  // PERFIS. O recorrente guardava só a rede, e o publicador pegava a primeira conta dela: quem tem três
+  // Instagram publicava num perfil sorteado, todo dia. Agora o perfil é escolhido aqui e gravado.
+  const { accounts } = useConnectedAccounts();
+  const [selectedAccountIds, setSelectedAccountIds] = useState<string[]>([]);
+  const contasDasRedes = useMemo(
+    () => accounts.filter((a) => a.pfm_account_id && !a.expired && selectedPlatforms.includes(a.platform)),
+    [accounts, selectedPlatforms],
+  );
+  useEffect(() => {
+    setSelectedAccountIds((prev) => {
+      const validas = contasDasRedes.map((a) => a.pfm_account_id as string);
+      const next = prev.filter((id) => validas.includes(id));
+      // Rede com um perfil só entra sozinha: não há o que escolher.
+      for (const rede of selectedPlatforms) {
+        const daRede = contasDasRedes.filter((a) => a.platform === rede);
+        if (daRede.length === 1 && !next.includes(daRede[0].pfm_account_id as string)) next.push(daRede[0].pfm_account_id as string);
+      }
+      return next.length === prev.length && next.every((id) => prev.includes(id)) ? prev : next;
+    });
+  }, [contasDasRedes, selectedPlatforms]);
+
   const fetchAll = useCallback(async () => {
     if (!userId) return;
     setLoading(true);
@@ -128,6 +155,7 @@ export default function RecurringSchedules({ userId }: { userId: string }) {
     setSelectedHourLocal(9);
     setSelectedJitter(15);
     setSelectedPlatforms(["instagram"]);
+    setSelectedAccountIds([]);
   };
 
   const toggleDay = (dow: number) => {
@@ -192,6 +220,22 @@ export default function RecurringSchedules({ userId }: { userId: string }) {
       toast.error("Escolha pelo menos uma plataforma");
       return;
     }
+    // Só confere os perfis quando a lista de contas carregou. Com a lista vazia (Post for Me fora do ar)
+    // não dá para saber: o recorrente é criado pela rede e o agendador avisa no primeiro disparo.
+    if (accounts.length > 0) {
+      for (const rede of selectedPlatforms) {
+        const nome = PLATFORM_OPTIONS.find((p) => p.id === rede)?.label || rede;
+        const daRede = contasDasRedes.filter((a) => a.platform === rede);
+        if (daRede.length === 0) {
+          toast.error(`Você não tem conta de ${nome} conectada. Conecte em Perfil → Conexões ou tire essa rede.`);
+          return;
+        }
+        if (!daRede.some((a) => selectedAccountIds.includes(a.pfm_account_id as string))) {
+          toast.error(`Escolha em qual perfil de ${nome} publicar.`);
+          return;
+        }
+      }
+    }
     setSubmitting(true);
     try {
       let contentId = selectedContentId;
@@ -218,11 +262,12 @@ export default function RecurringSchedules({ userId }: { userId: string }) {
         content_id: contentId,
         name: name || null,
         platforms: selectedPlatforms,
+        account_ids: accounts.length > 0 ? selectedAccountIds : null,
         days_of_week: selectedDays,
         hour_utc: hourUtc,
         jitter_minutes: selectedJitter,
         active: true,
-      });
+      } as any); // `as any`: account_ids é coluna nova, ainda fora dos tipos gerados
 
       if (error) {
         toast.error("Erro ao criar agendamento: " + error.message);
@@ -328,6 +373,14 @@ export default function RecurringSchedules({ userId }: { userId: string }) {
                     <p className="text-xs text-muted-foreground truncate">
                       {formatDays(sched.days_of_week)} · {formatHour(sched.hour_utc)}{sched.jitter_minutes > 0 ? ` (±${sched.jitter_minutes}min)` : ""} · {sched.platforms.join(", ")}
                     </p>
+                    {/* O agendador grava aqui quando não publicou, ou publicou com ressalva. Antes a falha
+                        só existia numa peça "failed" perdida no calendário, e ninguém via. */}
+                    {sched.last_error && (
+                      <p className="mt-1 flex items-start gap-1 text-xs text-amber-700 dark:text-amber-400">
+                        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+                        <span>{sched.last_error}</span>
+                      </p>
+                    )}
                   </div>
                   <Switch
                     checked={sched.active}
@@ -517,6 +570,31 @@ export default function RecurringSchedules({ userId }: { userId: string }) {
                 ))}
               </div>
             </div>
+
+            {contasDasRedes.length > 0 && (
+              <div className="space-y-2">
+                <Label>Perfis</Label>
+                <div className="space-y-1.5">
+                  {contasDasRedes.map((a) => {
+                    const id = a.pfm_account_id as string;
+                    const rede = PLATFORM_OPTIONS.find((p) => p.id === a.platform)?.label || a.platform;
+                    return (
+                      <label key={id} className="flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted/50">
+                        <Checkbox
+                          checked={selectedAccountIds.includes(id)}
+                          onCheckedChange={(v) => setSelectedAccountIds((prev) => (v ? [...prev, id] : prev.filter((x) => x !== id)))}
+                        />
+                        <span className="min-w-0 truncate">
+                          <span className="text-muted-foreground">{rede} · </span>
+                          {a.account_name || "sem nome"}
+                        </span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">O post sai exatamente nos perfis marcados.</p>
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-3 border-t">

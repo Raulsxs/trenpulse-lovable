@@ -40,6 +40,7 @@ import {
   FERRAMENTAS_LENTAS, TOOL_ACOMPANHAR, colunasDoJob, ehUuid, promptDoJob, textoDoJob, tituloDoJob, toolsVisiveis,
   TOOL_PREPARAR_ENVIO, caminhoEnvio, extensaoImagem, mimeDaExtensao,
   ESCOPOS_OAUTH, cabecalhoWwwAuthenticate, metadadosDoRecurso, urlDoRecurso,
+  TOOL_LISTAR_MARCAS, textoDasMarcas,
 } from "../_shared/mcp-core.ts";
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -183,9 +184,13 @@ Deno.serve(async (req) => {
         serverInfo: { name: "trendpulse", title: "TrendPulse", version: "0.1.0" },
         instructions:
           "Gera e agenda conteúdo de rede social no TrendPulse, com a identidade visual da marca do usuário. " +
-          "Antes de gerar, chame listar_conexoes para saber quais redes estão conectadas, e consultar_saldo " +
-          "para conferir crédito — geração cobra crédito e falha sem saldo. O `tema` das ferramentas de " +
-          "geração é o ASSUNTO do conteúdo, nunca uma instrução ou referência como 'o post acima'.",
+          "ANTES DE GERAR: chame listar_marcas e passe o brandId — sem ele a peça sai sem identidade; se o " +
+          "usuário tem mais de uma marca e não disse qual, pergunte. Chame consultar_saldo: geração cobra " +
+          "crédito e falha sem saldo. O `tema` é o ASSUNTO do conteúdo, nunca uma instrução ou referência " +
+          "como 'o post acima'. ANTES DE AGENDAR: chame listar_conexoes e listar_agenda (ela mostra também " +
+          "os recorrentes, que publicam sozinhos todo dia). Agendar aqui é IMEDIATO, sem tela de confirmação: " +
+          "confirme com o usuário a data, a hora e o perfil antes de chamar. Só diga que agendou se a " +
+          "resposta da ferramenta disser 'Agendado para'; se ela recusar, nada foi agendado.",
       },
     });
   }
@@ -204,6 +209,21 @@ Deno.serve(async (req) => {
       json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: texto }], isError: !ok } });
 
     // ── acompanhar_geracao: só existe no MCP ──
+    // ── listar_marcas: só existe no MCP (no app a marca vem do seletor) ──
+    if (nome === TOOL_LISTAR_MARCAS.name) {
+      if (!auth.scopes.includes("read")) {
+        return rpcErro(id, -32001, `Este token não tem o escopo "read", exigido por ${nome}.`);
+      }
+      // Service role + filtro pelo dono: uma leitura só, com o mesmo isolamento que a RLS daria.
+      const svc = createClient(SUPABASE_URL, SERVICE_KEY);
+      const { data, error } = await svc.from("brands")
+        .select("id, name, creation_mode")
+        .eq("owner_user_id", auth.userId)
+        .order("name", { ascending: true });
+      if (error) return resultado(`Não consegui ler as marcas: ${error.message}`, false);
+      return resultado(textoDasMarcas(data || []), true);
+    }
+
     if (nome === TOOL_ACOMPANHAR.name) {
       if (!auth.scopes.includes("generate")) {
         return rpcErro(id, -32001, `Este token não tem o escopo "generate", exigido por ${nome}.`);

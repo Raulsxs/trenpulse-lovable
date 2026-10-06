@@ -174,3 +174,113 @@ export function legendaQueSai(
   const hashtags = Array.isArray(c.hashtags) ? "\n\n" + c.hashtags.join(" ") : "";
   return ((c.caption || c.title || "") + hashtags).trimEnd();
 }
+
+// ───────────────────────────── Depois de publicar ─────────────────────────────
+
+/**
+ * O que o publicador grava na peça quando a publicação dá certo.
+ *
+ * POR QUE EXISTE (2026-10-05): a gravação era `scheduled_at: scheduledAt || null`. Publicação feita na
+ * hora não traz `scheduledAt`, então a data agendada era APAGADA — e o calendário e o `listar_agenda`
+ * só mostram o que tem data. Em 286 peças publicadas, 257 tinham sumido do calendário.
+ *
+ * Publicou agora: marca published e NÃO toca em `scheduled_at` (a peça continua no dia em que estava).
+ * Agendou no Post for Me: segue scheduled, na data pedida.
+ * O agendador só reprocessa `status = scheduled`, então manter a data numa peça publicada não a republica.
+ */
+export function estadoAposPublicar(scheduledAt: string | null | undefined, agoraIso: string): Record<string, unknown> {
+  if (scheduledAt) return { status: "scheduled", published_at: null, scheduled_at: scheduledAt };
+  return { status: "published", published_at: agoraIso };
+}
+
+// ──────────────────────────────── Recorrentes ────────────────────────────────
+
+/** Linha de `recurring_schedules`, no que o agendador e os agentes usam. */
+export interface Recorrente {
+  id?: string;
+  name?: string | null;
+  platforms?: string[] | null;
+  /** Perfis escolhidos (ids do Post for Me). Vazio/null = recorrente antigo, que só conhece a rede. */
+  account_ids?: string[] | null;
+  days_of_week?: number[] | null;
+  hour_utc?: number | null;
+  active?: boolean;
+  last_error?: string | null;
+}
+
+export interface AlvosDoRecorrente {
+  /** false = não há onde publicar: o agendador NÃO cria a cópia (ela falharia três vezes em silêncio). */
+  publica: boolean;
+  platforms: string[];
+  /** Vazio com `publica: true` = perfil ambíguo num recorrente antigo: o publicador escolhe como sempre fez. */
+  accountIds: string[];
+  /** O que o dono precisa saber; vai para `last_error` e aparece na tela e no listar_agenda. */
+  aviso: string | null;
+}
+
+/**
+ * Em quais contas um recorrente publica HOJE, dadas as contas conectadas do dono.
+ *
+ * POR QUE EXISTE (2026-10-05): o agendador criava a cópia do recorrente sem conta nenhuma, só com a
+ * primeira rede. Duas consequências medidas em produção:
+ *  - rede SEM conta (recorrente de Facebook de quem não tem Facebook): a cópia falhava três vezes com
+ *    "Nenhuma conta selecionada" e morria. Sete dias de falha entre 14/09 e 05/10, sem aviso a ninguém.
+ *  - rede com VÁRIAS contas: o publicador caía no legado e pegava a primeira da lista.
+ *
+ * Recorrente com perfis escolhidos (`account_ids`): publica exatamente neles, tirando os que não estão
+ * mais conectados. Recorrente antigo: usa a primeira rede, como sempre usou — as outras redes de
+ * `platforms` NUNCA foram publicadas, e passar a publicá-las agora faria um perfil começar a postar
+ * todo dia sem o dono ter visto. Isso fica avisado, não ligado.
+ *  - uma conta na rede → grava a conta (deixa de depender da ordem da lista);
+ *  - várias → mantém o comportamento antigo e avisa para escolher o perfil;
+ *  - nenhuma → não publica e avisa.
+ */
+export function alvosDoRecorrente(r: Recorrente, contas: ContaConectada[], agora = Date.now()): AlvosDoRecorrente {
+  const usaveis = contas.filter((c) => c.pfm_account_id && !precisaReconectar(c, agora));
+  const escolhidos = (r.account_ids || []).filter(Boolean);
+
+  if (escolhidos.length) {
+    const vivos = usaveis.filter((c) => escolhidos.includes(c.pfm_account_id));
+    if (!vivos.length) {
+      return { publica: false, platforms: [], accountIds: [], aviso: "Nenhum dos perfis escolhidos está conectado: nada foi publicado. Reconecte em Perfil → Conexões ou recrie o recorrente." };
+    }
+    const faltam = escolhidos.length - vivos.length;
+    return {
+      publica: true,
+      platforms: [...new Set(vivos.map((c) => c.platform))],
+      accountIds: vivos.map((c) => c.pfm_account_id),
+      aviso: faltam ? `${faltam} dos perfis escolhidos não está mais conectado: publicando só nos demais. Reconecte em Perfil → Conexões.` : null,
+    };
+  }
+
+  const redes = (r.platforms || []).filter(Boolean);
+  const rede = redes[0] || "instagram";
+  const outras = redes.slice(1);
+  const notaOutras = outras.length ? ` Este recorrente é antigo e publica só em ${rede}: ${outras.join(", ")} não sai. Recrie-o escolhendo os perfis.` : "";
+  const daRede = usaveis.filter((c) => c.platform === rede);
+
+  if (!daRede.length) {
+    return { publica: false, platforms: [rede], accountIds: [], aviso: `Sem conta de ${rede} conectada: nada foi publicado. Conecte em Perfil → Conexões ou recrie o recorrente em outra rede.${notaOutras}` };
+  }
+  if (daRede.length === 1) {
+    return { publica: true, platforms: [rede], accountIds: [daRede[0].pfm_account_id], aviso: notaOutras.trim() || null };
+  }
+  return { publica: true, platforms: [rede], accountIds: [], aviso: `Há ${daRede.length} perfis de ${rede} conectados e este recorrente não diz qual: está saindo no primeiro da lista. Recrie-o escolhendo o perfil.${notaOutras}` };
+}
+
+const DIAS_DA_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+
+/**
+ * Uma linha por recorrente, para o `listar_agenda`. De propósito NÃO casa com a linha de peça
+ * (`(rede, status) → content_id=`), que é lida por programa: recorrente não é peça e não tem content_id
+ * até o dia em que dispara.
+ */
+export function linhaDoRecorrente(r: Recorrente): string {
+  const dias = [...new Set(r.days_of_week || [])].filter((d) => d >= 0 && d <= 6).sort((a, b) => a - b);
+  const quando = dias.length === 7 ? "todo dia" : dias.map((d) => DIAS_DA_SEMANA[d]).join(", ") || "sem dia marcado";
+  // hour_utc → Brasília. O Brasil não tem horário de verão desde 2019, por isso o -3 fixo.
+  const hora = String((((r.hour_utc ?? 0) - 3) % 24 + 24) % 24).padStart(2, "0") + ":00";
+  const onde = (r.platforms || []).filter(Boolean).join(", ") || "sem rede";
+  const erro = String(r.last_error || "").replace(/\s+/g, " ").trim();
+  return `↻ ${r.name || "Sem nome"} — ${quando} às ${hora} em ${onde} · ${r.active === false ? "pausado" : "ativo"} → recorrente=${r.id}${erro ? ` · ATENÇÃO: ${erro}` : ""}`;
+}
