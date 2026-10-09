@@ -112,17 +112,9 @@ export function buildBrandContext(brand: any): string {
     if (tLines.length) parts.push(`Tipografia: ${tLines.join(", ")}`);
   }
 
-  // ── Logo (style_guide) ──
-  const logo = tokens?.logo && typeof tokens.logo === "object" ? tokens.logo : null;
-  if (logo && typeof logo.preferred_position === "string" && logo.preferred_position.trim()) {
-    const extra: string[] = [];
-    if (typeof logo.size_hint === "string" && logo.size_hint.trim()) extra.push(`tamanho ${logo.size_hint.trim()}`);
-    if (typeof logo.watermark_opacity === "number") extra.push(`opacidade ${logo.watermark_opacity}`);
-    const suffix = extra.length ? ` (${extra.join(", ")})` : "";
-    parts.push(`Posição do logo: ${logo.preferred_position.trim()}${suffix}`);
-  } else if (brand.logo_url) {
-    parts.push(`Logo: ${brand.logo_url}`);
-  }
+  // ── Logo ──
+  // Nada aqui de propósito: quem instrui o modelo sobre o logo é _shared/logo-integrado.ts, no
+  // gerador de imagem. Antes saía "opacidade 0" (resto do carimbo antigo) e a URL crua do logo.
 
   // ── Tom visual (legado) ──
   if (brand.visual_tone) parts.push(`Tom visual: ${brand.visual_tone}`);

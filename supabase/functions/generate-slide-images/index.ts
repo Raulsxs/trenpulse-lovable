@@ -35,7 +35,7 @@ const CUSTO_IMAGEM_USD: Record<string, number> = {
 // SÓ O TIPO é estático — `import type` é apagado na compilação e não custa nada em runtime.
 // O overlayLogo entra por import DINÂMICO lá embaixo, no único ponto onde é usado. Ver o porquê
 // no comentário da chamada.
-import type { LogoPosition } from "../_shared/logo-overlay.ts";
+import { assinaComLogo, instrucaoDoLogo, refsComLogo } from "../_shared/logo-integrado.ts";
 
 async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
   try {
@@ -482,19 +482,10 @@ serve(async (req) => {
       brandInfo = data;
     }
 
-    // ── Config do logo overlay (T02) — resolvida UMA vez, usada no reserve-canto E no overlay ──
-    // watermark_opacity=0 é comum em style_guides legados (era pra watermark de fundo); NÃO pode zerar
-    // o logo do canto → default 1. Posição/tamanho do style_guide com defaults sãos.
-    const SG_LOGO = (brandInfo?.style_guide as any)?.brand_tokens?.logo || {};
-    const VALID_LOGO_POS = ["top-right", "top-left", "bottom-right", "bottom-left", "top-center", "bottom-center"];
-    const logoPosition = (VALID_LOGO_POS.includes(SG_LOGO.preferred_position) ? SG_LOGO.preferred_position : "top-right") as LogoPosition;
-    const logoOpacity = (typeof SG_LOGO.watermark_opacity === "number" && SG_LOGO.watermark_opacity > 0 && SG_LOGO.watermark_opacity <= 1) ? SG_LOGO.watermark_opacity : 1;
-    const logoWidthPct = SG_LOGO.size_hint === "small" ? 0.16 : SG_LOGO.size_hint === "large" ? 0.30 : 0.22;
-    const LOGO_POS_PTBR: Record<string, string> = {
-      "top-right": "o canto superior direito", "top-left": "o canto superior esquerdo",
-      "bottom-right": "o canto inferior direito", "bottom-left": "o canto inferior esquerdo",
-      "top-center": "o topo centralizado", "bottom-center": "a base centralizada",
-    };
+    // ── Logo da marca: a IA integra no layout (ver _shared/logo-integrado.ts) ──
+    // O style_guide só contribui com a posição preferida. `watermark_opacity` e `size_hint` eram do
+    // carimbo antigo e não são mais lidos.
+    const logoPosition: string | null = (brandInfo?.style_guide as any)?.brand_tokens?.logo?.preferred_position || null;
     if (!brandId) {
       console.log("[generate-slide-images] No brand — generating without brand references");
     }
@@ -729,25 +720,28 @@ ${brandColorHint}
         promptText += `\n\nPROIBIDO ABSOLUTO — SEM NUMERAÇÃO DE SLIDE: não desenhe número de página, contador ("1/5", "01", "slide 2"), bolinhas/pontos de paginação, barra de progresso, seta nem texto de "próximo/arraste". A posição do slide é indicada pelo app, NUNCA dentro da imagem. Nenhum slide pode ter marcador — todos idênticos nesse aspecto.`;
       }
 
-      // Logo overlay (T02): quando a marca tem logo, NÓS compomos o logo real por cima (canto sup.
-      // direito) — determinístico, idêntico em todo slide. Então pedimos pra IA deixar esse canto LIMPO
-      // (ela desenhava logos inconsistentes ali). O overlay em si acontece no ponto de upload, abaixo.
-      const willOverlayLogo = !!brandInfo?.logo_url && brandInfo?.creation_mode !== "photo_backgrounds";
-      if (willOverlayLogo) {
-        const canto = LOGO_POS_PTBR[logoPosition] || "o canto superior direito";
-        promptText += `\n\n⚠️ ÁREA RESERVADA DA MARCA — ${canto.toUpperCase()}: uma faixa de ~32% da largura por ~18% da altura em ${canto} é EXCLUSIVA da marca (o logo é aplicado ali depois). NÃO coloque NADA nessa área: nenhum texto, título, bullet, ícone, número, forma ou ilustração. Empurre TODO o conteúdo para FORA dessa faixa — em especial o ÚLTIMO bullet e a ÚLTIMA linha de texto, que são os que mais invadem o rodapé. Se o conteúdo não couber acima da faixa, use MENOS texto (corte o último bullet), nunca invada ${canto}. Deixe ${canto} totalmente vazio.`;
-      }
-
-      const refImages = contentParts
+      const refsDeEstilo: string[] = contentParts
         .filter((p: any) => p.type === "image_url")
         .map((p: any) => p.image_url?.url)
         .filter(Boolean)
         .slice(0, 6);
 
+      // Logo integrado: o arquivo real do logo entra como ÚLTIMA referência e o prompt manda assinar
+      // a peça com ele. Não há mais carimbo depois da geração.
+      const comLogo = assinaComLogo(brandInfo);
+      const refImages = comLogo ? refsComLogo(refsDeEstilo, brandInfo.logo_url, 6) : refsDeEstilo;
+      if (comLogo) {
+        promptText += "\n\n" + instrucaoDoLogo({
+          posicaoPreferida: logoPosition,
+          variosSlides: (totalSlides || 1) > 1 || contentFormat === "carousel" || contentFormat === "document",
+          temRefsDeEstilo: refsDeEstilo.length > 0,
+        });
+      }
+
       // Exceção de segurança (modo photo_backgrounds do Maikon): foto pessoal de referência + key
       // Gemini própria → pula OpenRouter E Replicate, deixa o fluxo Gemini/inference.sh provado
       // assumir (preserva melhor a pessoa). NÃO QUEBRAR esse caminho.
-      const isPersonalPhotoMode = !!userGeminiKey && refImages.length > 0;
+      const isPersonalPhotoMode = !!userGeminiKey && refsDeEstilo.length > 0;
 
       // ── Tier 0: OpenRouter (T05) — provider PRIMÁRIO de imagem. Tem crédito e NÃO estrangula
       // (o Replicate cai a 6 req/min quando o saldo baixa → carrossel de 5 slides estourava o gateway
@@ -929,49 +923,10 @@ ${brandColorHint}
       });
     }
 
-    // ── Logo overlay determinístico (T02) ──
-    // Compõe brands.logo_url por cima do slide (Satori) → logo idêntico em todos os slides (mata o
-    // logo-drift do carrossel). Só full-design (não bg-only) com logo, fora do modo photo do Maikon.
-    // Normaliza fallback-URL pra base64 antes de compor. Try/catch → slide sem logo se algo falhar.
-    let finalImage: string | null = base64Image;
-    let fallbackUrlPassthrough: string | null = null;
-    if (!finalImage && fallbackImageResult) {
-      if (fallbackImageResult.startsWith("http")) fallbackUrlPassthrough = fallbackImageResult;
-      else finalImage = fallbackImageResult;
-    }
-    const wantLogo = !isBgOnly && !!brandInfo?.logo_url && brandInfo?.creation_mode !== "photo_backgrounds";
-    if (wantLogo) {
-      try {
-        if (!finalImage && fallbackUrlPassthrough) {
-          const b = await fetch(fallbackUrlPassthrough);
-          const buf = new Uint8Array(await b.arrayBuffer());
-          let s = ""; for (let i = 0; i < buf.length; i++) s += String.fromCharCode(buf[i]);
-          finalImage = `data:image/png;base64,${btoa(s)}`;
-          fallbackUrlPassthrough = null;
-        }
-        if (finalImage) {
-          const isLIPost = platform === "linkedin" && contentFormat === "post";
-          const isLIDoc = platform === "linkedin" && contentFormat === "document";
-          const isStory = contentFormat === "story";
-          const [lw, lh] = isLIPost ? [1200, 1200] : isLIDoc ? [1080, 1350] : isStory ? [1080, 1920] : [1080, 1080];
-          // IMPORT DINÂMICO — a razão é memória, não estilo.
-          //
-          // logo-overlay puxa React + og_edge (Satori + resvg em WASM) + ImageScript. Estático no
-          // topo, esse conjunto era instanciado no isolate a CADA invocação, mesmo quando a marca
-          // não tinha logo — que é a maioria dos casos, e é 100% dos casos quando não há marca
-          // nenhuma. Somado aos buffers de uma imagem 2K, estourava o limite do isolate e a função
-          // morria com "not having enough compute resources" ANTES de gerar qualquer coisa.
-          //
-          // Aqui dentro, o custo só existe para quem realmente tem logo pra aplicar.
-          const { overlayLogo } = await import("../_shared/logo-overlay.ts");
-          finalImage = await overlayLogo(finalImage, brandInfo.logo_url, lw, lh,
-            { position: logoPosition, opacity: logoOpacity, widthPct: logoWidthPct });
-          console.log(`[generate-slide-images] logo overlay aplicado (marca=${brandInfo.name}, pos=${logoPosition}, op=${logoOpacity})`);
-        }
-      } catch (e: any) {
-        console.warn(`[generate-slide-images] logo overlay falhou (${e?.message}) — slide sem logo`);
-      }
-    }
+    const finalImage: string | null = base64Image
+      || (fallbackImageResult && !fallbackImageResult.startsWith("http") ? fallbackImageResult : null);
+    const fallbackUrlPassthrough: string | null =
+      !base64Image && fallbackImageResult?.startsWith("http") ? fallbackImageResult : null;
 
     // If fallback returned an HTTP URL directly (not base64), use it as-is
     let imageUrl: string;
