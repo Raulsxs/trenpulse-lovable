@@ -310,7 +310,9 @@ const ContentPreview = () => {
     try {
       await supabase
         .from("generated_contents")
-        .update({ caption: editCaption, hashtags: hashtagsArr })
+        // platform_captions: null — o publicador manda a versão por rede quando ela existe; sem apagá-la,
+        // a legenda salva aqui nunca chegava à rede.
+        .update({ caption: editCaption, hashtags: hashtagsArr, platform_captions: null })
         .eq("id", id);
       setContent(prev => prev ? { ...prev, caption: editCaption, hashtags: hashtagsArr } : prev);
       setIsEditingCaption(false);
@@ -349,7 +351,7 @@ const ContentPreview = () => {
       const newHashtags = data.content.hashtags || content.hashtags;
 
       await supabase.from("generated_contents")
-        .update({ caption: newCaption, hashtags: newHashtags })
+        .update({ caption: newCaption, hashtags: newHashtags, platform_captions: null })
         .eq("id", id);
 
       setContent(prev => prev ? { ...prev, caption: newCaption, hashtags: newHashtags } : prev);

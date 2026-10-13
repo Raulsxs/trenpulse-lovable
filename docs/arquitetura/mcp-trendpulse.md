@@ -194,6 +194,26 @@ Regras que ficam:
   (a cópia herda `platforms[0]`); ligar as outras redes agora faria posts novos aparecerem sem ninguém
   ter pedido. Recorrente criado pela tela nova grava os perfis e publica em todos.
 
+### 3.8 Legenda exata (2026-10-13)
+
+O CMO da Pulse refez a imagem de uma peça agendada (sem logo) e precisava da MESMA legenda. Pelo MCP
+não havia como: `gerar_post` escreve legenda nova e `editar_legenda` pede à IA para reescrever. A peça
+ficou agendada com um texto que ninguém aprovou.
+
+Investigando, apareceu um defeito maior, de todos os usuários: o publicador manda a **variante da rede**
+(`platform_captions`) quando ela existe, e toda edição de legenda (app, chat, `editar_legenda`) gravava
+só `caption`. O texto novo aparecia na tela e a rede recebia o antigo.
+
+- `definir_legenda` (escopo `schedule`, no MCP e no app): grava o texto como veio, sem IA e sem
+  crédito. Não toca em imagem, status, data nem conta. Recusa peça publicada ou em publicação, legenda
+  acima do limite da rede (X 280, Instagram 2200, LinkedIn 3000…) e update que não grava linha. Guarda
+  a legenda que ia ao ar em `generation_metadata.legenda_anterior`.
+- Toda troca de legenda apaga as variantes por rede (`patchDeLegenda`; no front, `platform_captions:
+  null`). O que a pessoa vê é o que sai, em todas as redes da peça.
+- O catálogo exposto saiu do `index.ts` para `CATALOGO_MCP` em `_shared/mcp-core.ts`: o teste de
+  contrato confere o catálogo real, não uma cópia.
+- `editar_legenda` continua fora do MCP: reescrita por IA não serve para quem precisa de texto exato.
+
 ## 4. Fora de escopo (v1)
 
 - **Publicação imediata** (`publicar_agora`) — o usuário pediu aprovação antes; entra só se ele pedir.

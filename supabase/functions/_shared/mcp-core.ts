@@ -48,6 +48,36 @@ export const TOOL_ACOMPANHAR = {
 export const FERRAMENTAS_IMEDIATAS = new Set(["agendar_conteudo", "agendar_arte", "desagendar_conteudo"]);
 
 /**
+ * CATÁLOGO EXPOSTO. Deliberadamente um subconjunto das 24 tools do agente.
+ *
+ * Expor tudo seria ruído: o Claude escolhe pior com 24 opções, e metade delas (editar_slide,
+ * mostrar_conteudo, listar_agenda…) só faz sentido dentro do chat do app, com a UI ao lado.
+ * Aqui ficam as que resolvem o caso real — criar conteúdo e organizar o calendário de fora.
+ *
+ * Cada tool declara o ESCOPO que exige. Token sem o escopo nem vê a tool no tools/list — melhor que
+ * mostrar e recusar na chamada, porque o agente não perde turno tentando.
+ */
+export const CATALOGO_MCP: Record<string, { escopo: string }> = {
+  consultar_saldo: { escopo: "read" },
+  detalhes_conteudo: { escopo: "read" },
+  listar_agenda: { escopo: "read" },
+  listar_conexoes: { escopo: "read" },
+  gerar_post: { escopo: "generate" },
+  gerar_carrossel: { escopo: "generate" },
+  gerar_story: { escopo: "generate" },
+  gerar_tweet_card: { escopo: "generate" },
+  link_para_post: { escopo: "generate" },
+  adaptar_para_rede: { escopo: "generate" },
+  agendar_arte: { escopo: "schedule" },
+  agendar_conteudo: { escopo: "schedule" },
+  desagendar_conteudo: { escopo: "schedule" },
+  // Muda o que vai ao ar numa peça agendada: mesmo escopo de quem agenda. Só o texto exato fica
+  // exposto; editar_legenda (reescrita por IA, cobra crédito) continua só no app.
+  definir_legenda: { escopo: "schedule" },
+  planejar_calendario: { escopo: "schedule" },
+};
+
+/**
  * Ferramenta só do MCP: as marcas do usuário, com o id que as ferramentas de geração pedem.
  *
  * POR QUE EXISTE (2026-10-04): no app, a marca vem do seletor e os nomes vão no prompt do agente. Pelo

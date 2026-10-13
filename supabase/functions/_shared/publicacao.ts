@@ -175,6 +175,56 @@ export function legendaQueSai(
   return ((c.caption || c.title || "") + hashtags).trimEnd();
 }
 
+// ───────────────────────────── Trocar a legenda ─────────────────────────────
+
+/**
+ * O que gravar na peça quando a legenda muda — por edição manual, pela IA ou com texto exato.
+ *
+ * POR QUE APAGA AS VARIANTES (2026-10-13): o publicador manda a variante da rede quando ela existe
+ * (`legendaQueSai`). Toda edição gravava só `caption`, e a peça gerada pela IA já vinha com variantes:
+ * o usuário via o texto novo na tela e o LinkedIn recebia o antigo. Caso real: a peça #14 da Pulse,
+ * com a imagem trocada, ia sair às 09:00 com uma legenda que ninguém tinha escrito. Sem variante, todas
+ * as redes recebem a legenda editada — o que a pessoa vê é o que sai.
+ *
+ * Mesma regra no front (ActionCard, ContentPreview), que grava `platform_captions: null` direto.
+ */
+export function patchDeLegenda(caption: string, hashtags: string[] | null): Record<string, unknown> {
+  return { caption, hashtags: hashtags && hashtags.length ? hashtags : null, platform_captions: null };
+}
+
+/** As redes em que a peça vai sair: as escolhidas ao agendar; senão, a rede de criação. */
+export function redesDaPeca(c: { platform?: string | null; scheduled_accounts?: unknown }): string[] {
+  const escolhidas = (c.scheduled_accounts as { platforms?: unknown } | null | undefined)?.platforms;
+  if (Array.isArray(escolhidas)) {
+    const redes = escolhidas.filter((p: unknown): p is string => typeof p === "string" && !!p);
+    if (redes.length) return [...new Set(redes)];
+  }
+  return [c.platform || "instagram"];
+}
+
+/** Limite de caracteres da legenda por rede. Rede fora da lista não é barrada aqui. */
+export const LIMITE_DE_LEGENDA: Record<string, number> = {
+  instagram: 2200,
+  linkedin: 3000,
+  x: 280,
+  tiktok: 2200,
+  threads: 500,
+  bluesky: 300,
+};
+
+/**
+ * Recusa de legenda que a rede não aceita. Gravar e deixar a peça falhar na hora de publicar seria
+ * pior: o agente diria "pronto" e a falha só apareceria às 09:00 do dia.
+ */
+export function legendaAcimaDoLimite(texto: string, redes: string[]): string | null {
+  // Conta caracteres como a rede conta (emoji é 1), não unidades UTF-16.
+  const tamanho = [...texto].length;
+  const estouradas = redes.filter((r) => LIMITE_DE_LEGENDA[r] !== undefined && tamanho > LIMITE_DE_LEGENDA[r]);
+  if (!estouradas.length) return null;
+  const limites = estouradas.map((r) => `${r} aceita ${LIMITE_DE_LEGENDA[r]}`).join("; ");
+  return `A legenda tem ${tamanho} caracteres e não cabe (${limites}).`;
+}
+
 // ───────────────────────────── Depois de publicar ─────────────────────────────
 
 /**

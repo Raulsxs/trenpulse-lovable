@@ -1,5 +1,5 @@
 import { temaDeFrase } from "./frase.ts";
-import { avisoDeValidade, instanteSP, legendaQueSai, linhaDaConexao, linhaDoRecorrente, motivoDaFalha, precisaReconectar, recusaPorContaVencida } from "./publicacao.ts";
+import { avisoDeValidade, instanteSP, legendaAcimaDoLimite, legendaQueSai, linhaDaConexao, linhaDoRecorrente, motivoDaFalha, patchDeLegenda, precisaReconectar, recusaPorContaVencida, redesDaPeca } from "./publicacao.ts";
 // agent-tools.ts — catálogo de ferramentas do orquestrador agêntico (ai-agent).
 // Cada tool é um WRAPPER sobre uma edge function que JÁ existe (ai-chat via intent_hint,
 // publish-postforme, connect-social, scrape-trends) — o agente COMPÕE, não reimplementa.
@@ -230,6 +230,18 @@ export const AGENT_TOOLS = [
         instrucao: { type: "string", description: "O que a nova legenda deve dizer/mudar. Ex.: 'foca nos 20% finais e usabilidade, tom realista'." },
       },
       required: ["instrucao"],
+    },
+  },
+  {
+    name: "definir_legenda",
+    description: "Grava EXATAMENTE o texto que você passar como legenda de uma peça já gerada ou agendada — sem IA, sem reescrever, sem custo. A imagem, o status, a data e a conta do agendamento NÃO mudam. Chame quando o usuário dá o texto pronto ('usa esta legenda', 'a legenda é: ...', 'volta a legenda original') e quando a imagem de uma peça agendada foi trocada e a legenda antiga tem que continuar. O texto vale para TODAS as redes da peça (substitui as versões por rede): inclua as hashtags no próprio texto. Para a IA REESCREVER a legenda, use editar_legenda. Não funciona em peça já publicada. Confira a resposta: só gravou se ela disser 'Legenda gravada'.",
+    input_schema: {
+      type: "object",
+      properties: {
+        contentId: { type: "string", description: "content_id da peça (de listar_agenda, acompanhar_geracao ou dos resultados anteriores)." },
+        legenda: { type: "string", description: "O texto final, exatamente como deve ir ao ar, com quebras de linha e hashtags. Não resuma nem ajuste." },
+      },
+      required: ["contentId", "legenda"],
     },
   },
   {
@@ -855,9 +867,10 @@ Responda SOMENTE JSON: {"caption":"a legenda completa","hashtags":["#..."]}`;
       } catch (e: any) { return { ok: false, content: `Erro ao reescrever a legenda: ${e?.message || e}` }; }
       if (!caption) return { ok: false, content: "A legenda voltou vazia. Tenta de novo com mais detalhe do que mudar." };
 
-      // Atualiza NO LUGAR (mesma peça, mesma imagem) — só o texto muda.
+      // Atualiza NO LUGAR (mesma peça, mesma imagem) — só o texto muda. patchDeLegenda apaga as variantes
+      // por rede: sem isso o publicador mandaria a variante antiga e a legenda reescrita nunca sairia.
       const { error: updErr } = await ctx.userClient.from("generated_contents")
-        .update({ caption, hashtags: hashtags.length ? hashtags : null }).eq("id", src.id);
+        .update(patchDeLegenda(caption, hashtags)).eq("id", src.id);
       if (updErr) return { ok: false, content: `Não consegui salvar a nova legenda: ${updErr.message}.` };
 
       try {
@@ -871,6 +884,62 @@ Responda SOMENTE JSON: {"caption":"a legenda completa","hashtags":["#..."]}`;
         ok: true,
         content: `Legenda reescrita (content_id=${src.id}) — a IMAGEM não mudou. O preview atualiza sozinho. Confirme em 1 frase; não repita a legenda inteira.`,
         action_result: { content_id: src.id, content_type: src.content_type || "post", platform: plataforma },
+      };
+    }
+    case "definir_legenda": {
+      // POR QUE EXISTE (2026-10-13): o CMO da Pulse trocou a imagem da peça #14 (agendada) e precisava da
+      // MESMA legenda. Não havia como: gerar_post escreve legenda nova, editar_legenda pede à IA para
+      // reescrever. A peça ficou agendada com um texto que ninguém aprovou. Aqui o texto é gravado como
+      // veio: sem IA, sem crédito, sem tocar em imagem, status, data ou conta.
+      if (!input?.contentId) return { ok: false, content: "Faltou o content_id. Nada foi gravado." };
+      const texto = typeof input.legenda === "string" ? input.legenda : "";
+      if (!texto.trim()) return { ok: false, content: "A legenda veio vazia. Nada foi gravado." };
+
+      const { data: peca } = await ctx.userClient
+        .from("generated_contents")
+        .select("id, title, status, published_at, platform, scheduled_accounts, scheduled_at, caption, hashtags, platform_captions, generation_metadata")
+        .eq("id", input.contentId)
+        .maybeSingle();
+      if (!peca) return { ok: false, content: `Conteúdo não encontrado (content_id=${input.contentId}). Nada foi gravado. Confira o id em listar_agenda.` };
+      if (peca.published_at || peca.status === "published") {
+        return { ok: false, content: `"${peca.title}" já foi publicado. Nada foi gravado: a legenda que está na rede só muda editando o post lá.` };
+      }
+      // O agendador trava a peça em "publishing" enquanto manda para a rede; mudar agora não chegaria.
+      if (peca.status === "publishing") {
+        return { ok: false, content: `"${peca.title}" está sendo publicado neste momento. Nada foi gravado.` };
+      }
+
+      const redes = redesDaPeca(peca);
+      const acima = legendaAcimaDoLimite(texto, redes);
+      if (acima) return { ok: false, content: `${acima} Nada foi gravado.` };
+
+      // Registro do que havia antes: a legenda que IRIA AO AR (variante da rede), não só a padrão.
+      const gm = peca.generation_metadata && typeof peca.generation_metadata === "object" ? peca.generation_metadata : {};
+      const patch = {
+        ...patchDeLegenda(texto, null),
+        generation_metadata: { ...gm, legenda_anterior: { texto: legendaQueSai(peca, redes[0]), trocada_em: new Date().toISOString(), por: "definir_legenda" } },
+      };
+      // Os filtros de status repetem a checagem no próprio update: se o agendador pegou a peça entre a
+      // leitura e a gravação, nenhuma linha muda. `.select("id")` diz o que foi gravado de fato (com RLS,
+      // id de outra conta também volta vazio, sem erro).
+      const { data: gravadas, error } = await ctx.userClient
+        .from("generated_contents")
+        .update(patch)
+        .eq("id", peca.id)
+        .neq("status", "publishing")
+        .neq("status", "published")
+        .select("id");
+      if (error) return { ok: false, content: `Falha ao gravar a legenda: ${error.message}. Nada foi gravado.` };
+      if (!Array.isArray(gravadas) || gravadas.length === 0) {
+        return { ok: false, content: "A legenda não foi gravada (a peça pode ter entrado em publicação agora). Confira com detalhes_conteudo." };
+      }
+
+      const agendada = instanteSP(peca.status === "scheduled" ? peca.scheduled_at : null);
+      return {
+        ok: true,
+        content: `Legenda gravada (content_id=${peca.id}). Vai ao ar exatamente como enviada em ${redes.join(" e ")}` +
+          `${agendada ? `, no horário já agendado (${agendada})` : ""}. Imagem, status, data e conta não mudaram.`,
+        action_result: { content_id: peca.id, platform: redes[0] },
       };
     }
     case "editar_slide": {
