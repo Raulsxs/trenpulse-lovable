@@ -194,7 +194,7 @@ export function patchDeLegenda(caption: string, hashtags: string[] | null): Reco
 
 /** As redes em que a peça vai sair: as escolhidas ao agendar; senão, a rede de criação. */
 export function redesDaPeca(c: { platform?: string | null; scheduled_accounts?: unknown }): string[] {
-  const escolhidas = (c.scheduled_accounts as any)?.platforms;
+  const escolhidas = (c.scheduled_accounts as { platforms?: unknown } | null | undefined)?.platforms;
   if (Array.isArray(escolhidas)) {
     const redes = escolhidas.filter((p: unknown): p is string => typeof p === "string" && !!p);
     if (redes.length) return [...new Set(redes)];

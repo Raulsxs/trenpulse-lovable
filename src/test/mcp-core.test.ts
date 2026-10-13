@@ -281,19 +281,19 @@ describe("contrato do catálogo real — o que o CMO e os clientes enxergam pelo
   it("toda ferramenta do catálogo existe no agente, com schema", () => {
     const nomes = new Set(AGENT_TOOLS.map((t) => t.name));
     for (const nome of Object.keys(CATALOGO_MCP)) expect(nomes.has(nome), nome).toBe(true);
-    expect(toolsVisiveis(AGENT_TOOLS as any[], CATALOGO_MCP, TODAS).length).toBeGreaterThan(Object.keys(CATALOGO_MCP).length);
+    expect(toolsVisiveis(AGENT_TOOLS, CATALOGO_MCP, TODAS).length).toBeGreaterThan(Object.keys(CATALOGO_MCP).length);
   });
 
   it("definir_legenda aparece para quem agenda, com content_id e legenda obrigatórios", () => {
-    const t = toolsVisiveis(AGENT_TOOLS as any[], CATALOGO_MCP, ["schedule"]).find((x) => x.name === "definir_legenda")!;
+    const t = toolsVisiveis(AGENT_TOOLS, CATALOGO_MCP, ["schedule"]).find((x) => x.name === "definir_legenda")!;
     expect(t).toBeDefined();
-    expect((t.inputSchema as any).required.sort()).toEqual(["contentId", "legenda"]);
+    expect((t.inputSchema as { required: string[] }).required.sort()).toEqual(["contentId", "legenda"]);
     expect(t.description).toMatch(/EXATAMENTE/);
     expect(t.description).toMatch(/Legenda gravada/);
   });
 
   it("definir_legenda não aparece para token só de leitura ou geração", () => {
-    const nomes = toolsVisiveis(AGENT_TOOLS as any[], CATALOGO_MCP, ["read", "generate"]).map((t) => t.name);
+    const nomes = toolsVisiveis(AGENT_TOOLS, CATALOGO_MCP, ["read", "generate"]).map((t) => t.name);
     expect(nomes).not.toContain("definir_legenda");
   });
 
