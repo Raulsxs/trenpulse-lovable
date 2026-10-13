@@ -1433,11 +1433,15 @@ export default function ActionCard({
               onClick={async () => {
                 setSavingCaption(true);
                 try {
-                  const tags = editedHashtags.split(/[\s,]+/).map(t => t.replace(/^#/, "").trim()).filter(Boolean);
-                  const { error } = await supabase.from("generated_contents").update({ caption: editedCaption, hashtags: tags }).eq("id", contentId);
+                  // Grava COM "#", como a geração e o ContentPreview: o publicador junta as hashtags como estão.
+                  const tags = editedHashtags.split(/[\s,]+/).map(t => t.replace(/^#+/, "").trim()).filter(Boolean).map(t => `#${t}`);
+                  // platform_captions: null — o publicador manda a versão por rede quando ela existe; sem
+                  // apagá-la, a legenda editada aparecia aqui e a rede recebia a antiga.
+                  const { error } = await supabase.from("generated_contents").update({ caption: editedCaption, hashtags: tags, platform_captions: null }).eq("id", contentId);
                   if (error) throw error;
                   setCaptionText(editedCaption);
                   setHashtagsList(tags);
+                  setPlatformCaptions({});
                   setCaptionEditOpen(false);
                   toast.success("Legenda atualizada!");
                 } catch (err: any) {
