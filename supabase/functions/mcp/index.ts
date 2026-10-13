@@ -40,7 +40,7 @@ import {
   FERRAMENTAS_LENTAS, TOOL_ACOMPANHAR, colunasDoJob, ehUuid, promptDoJob, textoDoJob, tituloDoJob, toolsVisiveis,
   TOOL_PREPARAR_ENVIO, caminhoEnvio, extensaoImagem, mimeDaExtensao,
   ESCOPOS_OAUTH, cabecalhoWwwAuthenticate, metadadosDoRecurso, urlDoRecurso,
-  TOOL_LISTAR_MARCAS, textoDasMarcas,
+  TOOL_LISTAR_MARCAS, textoDasMarcas, CATALOGO_MCP,
 } from "../_shared/mcp-core.ts";
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -57,33 +57,6 @@ const corsHeaders = {
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
-
-/**
- * CATÁLOGO EXPOSTO. Deliberadamente um subconjunto das 24 tools do agente.
- *
- * Expor tudo seria ruído: o Claude escolhe pior com 24 opções, e metade delas (editar_slide,
- * mostrar_conteudo, listar_agenda…) só faz sentido dentro do chat do app, com a UI ao lado.
- * Aqui ficam as que resolvem o caso real — criar conteúdo e organizar o calendário de fora.
- *
- * Cada tool declara o ESCOPO que exige. Token sem o escopo nem vê a tool no tools/list — melhor que
- * mostrar e recusar na chamada, porque o agente não perde turno tentando.
- */
-const CATALOGO: Record<string, { escopo: string }> = {
-  consultar_saldo: { escopo: "read" },
-  detalhes_conteudo: { escopo: "read" },
-  listar_agenda: { escopo: "read" },
-  listar_conexoes: { escopo: "read" },
-  gerar_post: { escopo: "generate" },
-  gerar_carrossel: { escopo: "generate" },
-  gerar_story: { escopo: "generate" },
-  gerar_tweet_card: { escopo: "generate" },
-  link_para_post: { escopo: "generate" },
-  adaptar_para_rede: { escopo: "generate" },
-  agendar_arte: { escopo: "schedule" },
-  agendar_conteudo: { escopo: "schedule" },
-  desagendar_conteudo: { escopo: "schedule" },
-  planejar_calendario: { escopo: "schedule" },
-};
 
 const json = (body: unknown, status = 200, extra: Record<string, string> = {}) =>
   new Response(JSON.stringify(body), {
@@ -190,7 +163,10 @@ Deno.serve(async (req) => {
           "como 'o post acima'. ANTES DE AGENDAR: chame listar_conexoes e listar_agenda (ela mostra também " +
           "os recorrentes, que publicam sozinhos todo dia). Agendar aqui é IMEDIATO, sem tela de confirmação: " +
           "confirme com o usuário a data, a hora e o perfil antes de chamar. Só diga que agendou se a " +
-          "resposta da ferramenta disser 'Agendado para'; se ela recusar, nada foi agendado.",
+          "resposta da ferramenta disser 'Agendado para'; se ela recusar, nada foi agendado. " +
+          "LEGENDA: as ferramentas de geração escrevem uma legenda nova. Quando o usuário quer um texto " +
+          "específico (ex.: manter a legenda original ao refazer a imagem), chame definir_legenda com o " +
+          "texto exato depois de gerar; só está gravada se a resposta disser 'Legenda gravada'.",
       },
     });
   }
@@ -199,7 +175,7 @@ Deno.serve(async (req) => {
 
 
   if (method === "tools/list") {
-    return json({ jsonrpc: "2.0", id, result: { tools: toolsVisiveis(AGENT_TOOLS as any[], CATALOGO, auth.scopes) } });
+    return json({ jsonrpc: "2.0", id, result: { tools: toolsVisiveis(AGENT_TOOLS as any[], CATALOGO_MCP, auth.scopes) } });
   }
 
   if (method === "tools/call") {
@@ -278,7 +254,8 @@ Deno.serve(async (req) => {
       );
     }
 
-    const entrada = CATALOGO[nome];
+    // O catálogo exposto e o escopo de cada ferramenta: CATALOGO_MCP, em _shared/mcp-core.ts.
+    const entrada = CATALOGO_MCP[nome];
     if (!entrada) return rpcErro(id, -32602, `Ferramenta desconhecida: ${nome}`);
     if (!auth.scopes.includes(entrada.escopo)) {
       return rpcErro(id, -32001, `Este token não tem o escopo "${entrada.escopo}", exigido por ${nome}.`);

@@ -15,8 +15,9 @@ import {
   sessaoAindaValida, textoDoJob, toolsVisiveis,
   TOOL_PREPARAR_ENVIO, extensaoImagem, mimeDaExtensao, caminhoEnvio,
   LINK_MCP, ESCOPOS_OAUTH, urlDoRecurso, urlMetadados, metadadosDoRecurso, cabecalhoWwwAuthenticate,
-  FERRAMENTAS_IMEDIATAS, TOOL_LISTAR_MARCAS, textoDasMarcas,
+  FERRAMENTAS_IMEDIATAS, TOOL_LISTAR_MARCAS, textoDasMarcas, CATALOGO_MCP,
 } from "../../supabase/functions/_shared/mcp-core";
+import { AGENT_TOOLS } from "../../supabase/functions/_shared/agent-tools";
 
 const CATALOGO = {
   consultar_saldo: { escopo: "read" },
@@ -270,5 +271,37 @@ describe("agendar pelo MCP é imediato — a descrição não pode prometer conf
   it("ferramenta de leitura não ganha o aviso", () => {
     const saldo = toolsVisiveis(TOOLS, CATALOGO, ["read"]).find((t) => t.name === "consultar_saldo")!;
     expect(saldo.description).not.toMatch(/IMEDIATA/);
+  });
+});
+
+describe("contrato do catálogo real — o que o CMO e os clientes enxergam pelo MCP", () => {
+  // Lê CATALOGO_MCP e AGENT_TOOLS de verdade: uma cópia aqui passaria mesmo com o index.ts errado.
+  const TODAS = ["read", "generate", "schedule"];
+
+  it("toda ferramenta do catálogo existe no agente, com schema", () => {
+    const nomes = new Set(AGENT_TOOLS.map((t) => t.name));
+    for (const nome of Object.keys(CATALOGO_MCP)) expect(nomes.has(nome), nome).toBe(true);
+    expect(toolsVisiveis(AGENT_TOOLS as any[], CATALOGO_MCP, TODAS).length).toBeGreaterThan(Object.keys(CATALOGO_MCP).length);
+  });
+
+  it("definir_legenda aparece para quem agenda, com content_id e legenda obrigatórios", () => {
+    const t = toolsVisiveis(AGENT_TOOLS as any[], CATALOGO_MCP, ["schedule"]).find((x) => x.name === "definir_legenda")!;
+    expect(t).toBeDefined();
+    expect((t.inputSchema as any).required.sort()).toEqual(["contentId", "legenda"]);
+    expect(t.description).toMatch(/EXATAMENTE/);
+    expect(t.description).toMatch(/Legenda gravada/);
+  });
+
+  it("definir_legenda não aparece para token só de leitura ou geração", () => {
+    const nomes = toolsVisiveis(AGENT_TOOLS as any[], CATALOGO_MCP, ["read", "generate"]).map((t) => t.name);
+    expect(nomes).not.toContain("definir_legenda");
+  });
+
+  it("definir_legenda responde na hora — não vai para a fila de geração", () => {
+    expect(FERRAMENTAS_LENTAS.has("definir_legenda")).toBe(false);
+  });
+
+  it("reescrita de legenda por IA (cobra crédito, não é texto exato) continua fora do MCP", () => {
+    expect(CATALOGO_MCP).not.toHaveProperty("editar_legenda");
   });
 });
