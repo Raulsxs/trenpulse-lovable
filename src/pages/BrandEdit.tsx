@@ -98,6 +98,8 @@ export default function BrandEdit() {
       inner_frame: null as boolean | null,
       waves: null as boolean | null,
       abstract_elements: null as boolean | null,
+      // false = a arte sai sem o logo da marca (o arquivo do logo continua cadastrado).
+      logo_na_imagem: null as boolean | null,
       preferred_bg_mode: null as string | null,
       custom_notes: "",
     },
@@ -122,6 +124,7 @@ export default function BrandEdit() {
           inner_frame: vp.inner_frame ?? null,
           waves: vp.waves ?? null,
           abstract_elements: vp.abstract_elements ?? null,
+          logo_na_imagem: vp.logo_na_imagem ?? null,
           preferred_bg_mode: vp.preferred_bg_mode || null,
           custom_notes: vp.custom_notes || "",
         },
@@ -404,6 +407,12 @@ export default function BrandEdit() {
                       description="Formas geométricas e abstratas como decoração"
                       value={formData.visual_preferences.abstract_elements}
                       onChange={(v) => setFormData({ ...formData, visual_preferences: { ...formData.visual_preferences, abstract_elements: v } })}
+                    />
+                    <VisualPrefToggle
+                      label="Logo na imagem"
+                      description="Assinar a arte com o logo da marca. Em Não, a arte sai limpa e o logo continua cadastrado"
+                      value={formData.visual_preferences.logo_na_imagem}
+                      onChange={(v) => setFormData({ ...formData, visual_preferences: { ...formData.visual_preferences, logo_na_imagem: v } })}
                     />
                   </div>
 

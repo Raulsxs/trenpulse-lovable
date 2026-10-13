@@ -84,6 +84,7 @@ export const AGENT_TOOLS = [
         tema: { type: "string", description: "O ASSUNTO do post (não uma instrução). Ex.: 'hábitos para mais energia'." },
         plataforma: { type: "string", enum: ["instagram", "linkedin", "facebook", "tiktok", "x"], description: "Preencha quando o usuário nomear a rede (ex.: 'post pro LinkedIn'). Define formato/legenda da plataforma. Omitir = instagram." },
         brandId: { type: "string", description: "ID da marca a aplicar (opcional; usa a marca padrão se omitido)." },
+        sem_logo: { type: "boolean", description: "true = a peça sai SEM o logo da marca dentro da imagem. Use só quando o usuário pedir arte sem logo. Omitir = segue a configuração da marca." },
         modelo: { type: "string", enum: ["gpt-image-2", "reve", "ideogram", "seedream", "imagen-fast", "nano-banana", "qwen", "recraft", "flux-pro"], description: "Só preencha se o usuário pedir um modelo específico. Senão o app usa o selecionado no chat." },
       },
       required: ["tema"],
@@ -99,6 +100,7 @@ export const AGENT_TOOLS = [
         slides: { type: "integer", minimum: 3, maximum: 10, description: "Nº de slides (padrão 5)." },
         plataforma: { type: "string", enum: ["instagram", "linkedin", "facebook", "tiktok", "x"], description: "Preencha quando o usuário nomear a rede (ex.: 'carrossel pro LinkedIn'). Define formato/legenda da plataforma. Omitir = instagram." },
         brandId: { type: "string" },
+        sem_logo: { type: "boolean", description: "true = a peça sai SEM o logo da marca dentro da imagem. Use só quando o usuário pedir arte sem logo. Omitir = segue a configuração da marca." },
         modelo: { type: "string", enum: ["gpt-image-2", "reve", "ideogram", "seedream", "imagen-fast", "nano-banana", "qwen", "recraft", "flux-pro"], description: "Só preencha se o usuário pedir um modelo específico." },
       },
       required: ["tema"],
@@ -515,13 +517,13 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
       // Imagem anexada vira referência de estilo (image-to-image), igual gerar_carrossel.
       const refs = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
       return genResult(await // temaDeFrase: se o usuário escreveu "frase:", o texto DELE vira "frase: <texto>" — ver _shared/frase.ts.
-      callAiChat(ctx, { message: temaDeFrase(ctx.userText, input.tema), intent_hint: "GENERATE", format: "post", platform: input.plataforma, brandId, model, imageUrls: refs.length ? refs : undefined, replicateRef: refs.length ? true : undefined }), "Post");
+      callAiChat(ctx, { message: temaDeFrase(ctx.userText, input.tema), intent_hint: "GENERATE", format: "post", platform: input.plataforma, brandId, model, imageUrls: refs.length ? refs : undefined, replicateRef: refs.length ? true : undefined, generationParams: input.sem_logo === true ? { semLogo: true } : undefined }), "Post");
     }
     case "gerar_carrossel": {
       // Imagens anexadas viram REFERÊNCIA DE ESTILO (recriar carrossel mantendo a identidade visual —
       // caso Felipe). O LLM não conhece as URLs; puxamos de ctx.pendingImageUrls.
       const refFotos = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));
-      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_CAROUSEL", format: "carousel", platform: input.plataforma, brandId, model, imageUrls: refFotos.length ? refFotos : undefined, replicateRef: refFotos.length ? true : undefined, generationParams: input.slides ? { slideCount: input.slides } : undefined }), "Carrossel");
+      return genResult(await callAiChat(ctx, { message: input.tema, intent_hint: "GENERATE_CAROUSEL", format: "carousel", platform: input.plataforma, brandId, model, imageUrls: refFotos.length ? refFotos : undefined, replicateRef: refFotos.length ? true : undefined, generationParams: (input.slides || input.sem_logo === true) ? { ...(input.slides ? { slideCount: input.slides } : {}), ...(input.sem_logo === true ? { semLogo: true } : {}) } : undefined }), "Carrossel");
     }
     case "gerar_story": {
       const refs = (ctx.pendingImageUrls || []).filter((u) => typeof u === "string" && u.startsWith("http"));

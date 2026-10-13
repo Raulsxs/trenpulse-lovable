@@ -35,7 +35,7 @@ const CUSTO_IMAGEM_USD: Record<string, number> = {
 // SÓ O TIPO é estático — `import type` é apagado na compilação e não custa nada em runtime.
 // O overlayLogo entra por import DINÂMICO lá embaixo, no único ponto onde é usado. Ver o porquê
 // no comentário da chamada.
-import { assinaComLogo, instrucaoDoLogo, refsComLogo } from "../_shared/logo-integrado.ts";
+import { assinaComLogo, dispensaLogo, instrucaoDoLogo, instrucaoSemLogo, refsComLogo } from "../_shared/logo-integrado.ts";
 
 async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
   try {
@@ -356,6 +356,7 @@ serve(async (req) => {
       platform: requestPlatform,
       allSlides: requestAllSlides, // all slides data for narrative context in carousels
       userId: requestUserId, // when set, look up profiles.gemini_api_key for per-user Gemini override
+      semLogo, // true = este pedido não leva logo na arte, mesmo que a marca normalmente assine
       model: requestModel, // "gpt-image-2" | "nano-banana" | "seedream" — força modelo (Studio); ausente = hybrid por aspect
     } = await req.json();
     const platform = requestPlatform || "instagram";
@@ -728,7 +729,7 @@ ${brandColorHint}
 
       // Logo integrado: o arquivo real do logo entra como ÚLTIMA referência e o prompt manda assinar
       // a peça com ele. Não há mais carimbo depois da geração.
-      const comLogo = assinaComLogo(brandInfo);
+      const comLogo = assinaComLogo(brandInfo, semLogo === true);
       const refImages = comLogo ? refsComLogo(refsDeEstilo, brandInfo.logo_url, 6) : refsDeEstilo;
       if (comLogo) {
         promptText += "\n\n" + instrucaoDoLogo({
@@ -736,6 +737,9 @@ ${brandColorHint}
           variosSlides: (totalSlides || 1) > 1 || contentFormat === "carousel" || contentFormat === "document",
           temRefsDeEstilo: refsDeEstilo.length > 0,
         });
+      } else if (dispensaLogo(brandInfo, semLogo === true)) {
+        // Marca ou pedido sem logo: precisa PROIBIR, senão o modelo copia o logo das referências.
+        promptText += "\n\n" + instrucaoSemLogo();
       }
 
       // Exceção de segurança (modo photo_backgrounds do Maikon): foto pessoal de referência + key

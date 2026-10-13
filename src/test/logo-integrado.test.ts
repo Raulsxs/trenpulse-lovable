@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { assinaComLogo, refsComLogo, instrucaoDoLogo } from "../../supabase/functions/_shared/logo-integrado.ts";
+import { assinaComLogo, dispensaLogo, refsComLogo, instrucaoDoLogo, instrucaoSemLogo } from "../../supabase/functions/_shared/logo-integrado.ts";
 
 const LOGO = "https://x.supabase.co/storage/v1/object/public/content-images/logos/a.png";
 
@@ -58,5 +58,31 @@ describe("instrucaoDoLogo", () => {
   it("não reserva mais canto vazio nem fala em logo aplicado depois", () => {
     const t = instrucaoDoLogo({ posicaoPreferida: "top-right", variosSlides: true, temRefsDeEstilo: true });
     expect(t).not.toMatch(/ÁREA RESERVADA|aplicado ali depois/);
+  });
+});
+
+describe("peça sem logo (opção da marca ou do pedido)", () => {
+  const marca = { logo_url: LOGO, creation_mode: "style_copy" };
+  it("marca com logo_na_imagem=false não assina, e o arquivo do logo continua lá", () => {
+    const m = { ...marca, visual_preferences: { logo_na_imagem: false } };
+    expect(assinaComLogo(m)).toBe(false);
+    expect(dispensaLogo(m)).toBe(true);
+    expect(m.logo_url).toBe(LOGO);
+  });
+  it("pedido avulso sem_logo vence a marca que normalmente assina", () => {
+    expect(assinaComLogo(marca, true)).toBe(false);
+    expect(dispensaLogo(marca, true)).toBe(true);
+  });
+  it("sem opção nenhuma, ou com a opção ausente/true, continua assinando", () => {
+    expect(assinaComLogo(marca)).toBe(true);
+    expect(assinaComLogo({ ...marca, visual_preferences: { logo_na_imagem: null } })).toBe(true);
+    expect(assinaComLogo({ ...marca, visual_preferences: { logo_na_imagem: true } })).toBe(true);
+    expect(dispensaLogo(marca)).toBe(false);
+    expect(dispensaLogo(null)).toBe(false);
+  });
+  it("a instrução proíbe o logo e proíbe copiar das referências", () => {
+    const t = instrucaoSemLogo();
+    expect(t).toContain("SEM LOGO NESTA PEÇA");
+    expect(t).toContain("NÃO copie");
   });
 });

@@ -14,9 +14,37 @@ const POSICAO_PTBR: Record<string, string> = {
   "top-center": "no topo, centralizado", "bottom-center": "na base, centralizado",
 };
 
+type MarcaDoLogo = {
+  logo_url?: string | null;
+  creation_mode?: string | null;
+  visual_preferences?: { logo_na_imagem?: boolean | null } | null;
+} | null | undefined;
+
+/**
+ * A marca (ou este pedido) dispensou o logo dentro da arte. O arquivo do logo continua na marca — só
+ * não entra na imagem. `visual_preferences.logo_na_imagem === false` é a opção por marca; `semLogo`
+ * é o pedido avulso (parâmetro `sem_logo` das ferramentas de geração).
+ */
+export function dispensaLogo(brand: MarcaDoLogo, semLogo?: boolean): boolean {
+  return semLogo === true || brand?.visual_preferences?.logo_na_imagem === false;
+}
+
 /** Marca com logo que a IA deve assinar. Foto pessoal como fundo (photo_backgrounds) fica de fora. */
-export function assinaComLogo(brand: { logo_url?: string | null; creation_mode?: string | null } | null | undefined): boolean {
+export function assinaComLogo(brand: MarcaDoLogo, semLogo?: boolean): boolean {
+  if (dispensaLogo(brand, semLogo)) return false;
   return !!brand?.logo_url && /^https?:\/\//.test(brand.logo_url) && brand.creation_mode !== "photo_backgrounds";
+}
+
+/**
+ * Trecho de prompt para a peça SEM logo. Não basta deixar de anexar o arquivo: as referências de
+ * estilo costumam trazer o logo no rodapé e o modelo copia de lá.
+ */
+export function instrucaoSemLogo(): string {
+  return [
+    `SEM LOGO NESTA PEÇA — não desenhe logotipo, símbolo de marca, nome da marca como assinatura nem marca d'água em lugar nenhum da imagem.`,
+    `- Se as referências de estilo mostrarem um logo ou nome de marca, NÃO copie: deixe esse espaço limpo.`,
+    `- O layout pode manter rodapé ou faixa decorativa, desde que vazios de logo e de nome de marca.`,
+  ].join("\n");
 }
 
 /**
