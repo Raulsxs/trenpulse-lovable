@@ -36,6 +36,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { AGENT_TOOLS, dispatchTool, type ToolCtx } from "../_shared/agent-tools.ts";
 import { jwtDoUsuario } from "../_shared/sessao-usuario.ts";
+import { acharMarca, recusaDeMarca } from "../_shared/marca-pedida.ts";
 import {
   FERRAMENTAS_LENTAS, TOOL_ACOMPANHAR, colunasDoJob, ehUuid, promptDoJob, textoDoJob, tituloDoJob, toolsVisiveis,
   TOOL_PREPARAR_ENVIO, caminhoEnvio, extensaoImagem, mimeDaExtensao,
@@ -180,7 +181,7 @@ Deno.serve(async (req) => {
 
   if (method === "tools/call") {
     const nome = params?.name;
-    const args = params?.arguments || {};
+    let args = params?.arguments || {};
     const resultado = (texto: string, ok: boolean) =>
       json({ jsonrpc: "2.0", id, result: { content: [{ type: "text", text: texto }], isError: !ok } });
 
@@ -264,6 +265,15 @@ Deno.serve(async (req) => {
     // ── Lentas: vão para a fila e respondem na hora ──
     if (FERRAMENTAS_LENTAS.has(nome)) {
       const svc = createClient(SUPABASE_URL, SERVICE_KEY);
+      // Marca validada AQUI, antes da fila: o worker não devolve erro para quem chamou, e um brandId que
+      // não é marca do usuário (caso real: "pulseindata", o @ do Instagram) virava job SEM marca e peça
+      // genérica "gerada com sucesso". Nome da marca também vale; o job grava sempre o id resolvido.
+      if (typeof args?.brandId === "string" && args.brandId.trim()) {
+        const { data: marcas } = await svc.from("brands").select("id, name").eq("owner_user_id", auth.userId);
+        const achada = acharMarca(marcas || [], args.brandId);
+        if (!achada) return resultado(recusaDeMarca(args.brandId, marcas || []), false);
+        args = { ...args, brandId: achada.id };
+      }
       const { data: job, error } = await svc.from("generation_jobs").insert({
         user_id: auth.userId,
         prompt: promptDoJob(nome, args),

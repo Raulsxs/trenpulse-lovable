@@ -1,5 +1,6 @@
 import { temaDeFrase } from "./frase.ts";
 import { avisoDeValidade, instanteSP, legendaAcimaDoLimite, legendaQueSai, linhaDaConexao, linhaDoRecorrente, motivoDaFalha, patchDeLegenda, precisaReconectar, recusaPorContaVencida, redesDaPeca } from "./publicacao.ts";
+import { acharMarca, linhaDaMarca, recusaDeMarca } from "./marca-pedida.ts";
 // agent-tools.ts — catálogo de ferramentas do orquestrador agêntico (ai-agent).
 // Cada tool é um WRAPPER sobre uma edge function que JÁ existe (ai-chat via intent_hint,
 // publish-postforme, connect-social, scrape-trends) — o agente COMPÕE, não reimplementa.
@@ -259,7 +260,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "detalhes_conteudo",
-    description: "Retorna detalhes de um conteúdo gerado: qual MODELO de imagem foi usado, prompt, formato, o estado da publicação (com o motivo, se falhou) e a legenda que vai ao ar. Chame quando o usuário pergunta 'qual modelo foi usado', detalhes da geração ou por que uma peça não foi publicada.",
+    description: "Mostra a MARCA aplicada na peça (marca=... marca_id=..., ou marca=NENHUMA). Para corrigir uma peça com a marca errada ou sem marca: gere de novo com o brandId certo (ids em listar_marcas), agende a nova no mesmo horário com agendar_conteudo e tire a antiga com desagendar_conteudo. Retorna detalhes de um conteúdo gerado: qual MODELO de imagem foi usado, prompt, formato, o estado da publicação (com o motivo, se falhou) e a legenda que vai ao ar. Chame quando o usuário pergunta 'qual modelo foi usado', detalhes da geração ou por que uma peça não foi publicada.",
     input_schema: {
       type: "object",
       properties: { contentId: { type: "string" } },
@@ -306,7 +307,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "listar_agenda",
-    description: "Lista o calendário: o que está agendado num período, com dia, hora de Brasília, rede e o content_id de cada peça. Chame quando o usuário pergunta o que está agendado, antes de agendar algo novo (para não colidir), e antes de reagendar ou desagendar — o content_id vem daqui. Peça que falhou vem com o motivo (FALHOU: ...). Sem datas, mostra os próximos 30 dias.",
+    description: "Cada peça vem com a marca aplicada (marca=... ou marca=NENHUMA). Lista o calendário: o que está agendado num período, com dia, hora de Brasília, rede e o content_id de cada peça. Chame quando o usuário pergunta o que está agendado, antes de agendar algo novo (para não colidir), e antes de reagendar ou desagendar — o content_id vem daqui. Peça que falhou vem com o motivo (FALHOU: ...). Sem datas, mostra os próximos 30 dias.",
     input_schema: {
       type: "object",
       properties: {
@@ -515,7 +516,15 @@ export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Prom
   // escolhia uma pelo tema (não sabe qual está selecionada!), atropelando o seletor. Caso Maikon:
   // selecionou "Heart surgery" (clean) e saiu "Inovações em Saúde" (dark/tech) porque o artigo era
   // de cirurgia cardíaca. O palpite do LLM NUNCA deve vencer a seleção do usuário.
-  const brandId = ctx.defaultBrandId || input?.brandId || undefined;
+  let brandId: string | undefined = ctx.defaultBrandId || undefined;
+  if (!brandId && typeof input?.brandId === "string" && input.brandId.trim()) {
+    // Valida ANTES de gerar: valor que não é marca do usuário saía como peça SEM marca, em silêncio.
+    // RLS do userClient garante que só as marcas dele entram na lista.
+    const { data: marcas } = await ctx.userClient.from("brands").select("id, name");
+    const achada = acharMarca(marcas || [], input.brandId);
+    if (!achada) return { ok: false, content: recusaDeMarca(input.brandId, marcas || []) };
+    brandId = achada.id;
+  }
   // Modelo: o SELETOR (ctx.defaultModel) MANDA — mesma regra da marca acima. Antes era
   // `input?.modelo || ctx.defaultModel`: o LLM chutava `modelo` (ex.: nano-banana) na tool call e
   // atropelava o seletor — carrossel ia pro Gemini mesmo com "gpt-image-2" selecionado. Agora só
@@ -660,7 +669,7 @@ Responda SOMENTE JSON: {"title":"título curto interno","caption":"a legenda com
         status: "draft",
         platform: plataforma,
         visual_mode: "user_image",
-        brand_id: input.brandId || ctx.defaultBrandId || null,
+        brand_id: brandId || null,
         generation_metadata: { action: "post_user_image", contexto: String(input.contexto || "").slice(0, 500) },
       }).select("id").maybeSingle();
       if (insErr || !inserted?.id) return { ok: false, content: `Não consegui salvar o post: ${insErr?.message || "erro"}.` };
@@ -1005,8 +1014,12 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
     }
     case "detalhes_conteudo": {
       const { data: c } = await ctx.userClient.from("generated_contents")
-        .select("title, content_type, platform, slide_count, generation_metadata, caption, hashtags, platform_captions, image_urls, rendered_image_urls, slides, status, publish_error, scheduled_accounts, scheduled_at, published_at").eq("id", input.contentId).maybeSingle();
+        .select("title, content_type, platform, slide_count, generation_metadata, caption, hashtags, platform_captions, image_urls, rendered_image_urls, slides, status, publish_error, scheduled_accounts, scheduled_at, published_at, brand_id").eq("id", input.contentId).maybeSingle();
       if (!c) return { ok: false, content: "Conteúdo não encontrado." };
+      // Marca aplicada (2026-10-14): o agente não tinha como conferir a identidade de uma peça pronta.
+      const { data: marcaDaPeca } = (c as any).brand_id
+        ? await ctx.userClient.from("brands").select("id, name").eq("id", (c as any).brand_id).maybeSingle()
+        : { data: null };
       const gm: any = c.generation_metadata || {};
       // A PRIMEIRA entrada (asc) é a geração original; ignora edições posteriores (edit_slide).
       const { data: led } = await ctx.userClient.from("credit_ledger")
@@ -1036,6 +1049,7 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
       const erroPub = motivoDaFalha(c.status, c.publish_error).replace(" · FALHOU: ", "");
       const agendadoPara = instanteSP(c.scheduled_at), publicadoEm = instanteSP(c.published_at);
       const extra = [
+        linhaDaMarca(marcaDaPeca as any),
         c.status ? `status=${c.status}` : null,
         agendadoPara ? `agendado_para=${agendadoPara}` : null,
         publicadoEm ? `publicado_em=${publicadoEm}` : null,
@@ -1106,7 +1120,7 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
       }
       const { data } = await ctx.userClient
         .from("generated_contents")
-        .select("id, title, content_type, scheduled_at, platform, status, publish_error")
+        .select("id, title, content_type, scheduled_at, platform, status, publish_error, brand_id")
         .not("scheduled_at", "is", null)
         .gte("scheduled_at", deData.toISOString())
         .lte("scheduled_at", ateData.toISOString())
@@ -1114,10 +1128,16 @@ REGRAS: faça EXATAMENTE o ajuste pedido, nem mais nem menos; se ele cita um ele
         .limit(60);
       const noFuso = (d: Date, o: Intl.DateTimeFormatOptions) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", ...o });
       const dia = (d: Date) => noFuso(d, { day: "2-digit", month: "2-digit", year: "numeric" });
+      const idsMarca = [...new Set((data || []).map((c: any) => c.brand_id).filter(Boolean))];
+      const { data: marcasDaAgenda } = idsMarca.length
+        ? await ctx.userClient.from("brands").select("id, name").in("id", idsMarca)
+        : { data: [] as any[] };
+      const nomeDaMarca = new Map((marcasDaAgenda || []).map((b: any) => [b.id, b]));
       const items = (data || []).map((c: any) => {
         const quando = noFuso(new Date(c.scheduled_at), { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-        // O motivo da falha vai DEPOIS do content_id: o começo da linha é lido por programa.
-        return `• ${quando} — ${c.title || c.content_type} (${c.platform || "?"}, ${c.status}) → content_id=${c.id}${motivoDaFalha(c.status, c.publish_error)}`;
+        // O motivo da falha vai DEPOIS do content_id: o começo da linha é lido por programa. A marca vai
+        // por último, para não separar "content_id=... · FALHOU:" (também lido por programa).
+        return `• ${quando} — ${c.title || c.content_type} (${c.platform || "?"}, ${c.status}) → content_id=${c.id}${motivoDaFalha(c.status, c.publish_error)} · ${linhaDaMarca(nomeDaMarca.get(c.brand_id) as any)}`;
       }).join("\n");
       // RECORRENTES. Vivem em outra tabela e só viram peça no dia em que disparam, então esta ferramenta
       // não os mostrava: o agente via a semana "vazia" e agendava por cima de um post diário, ou dizia ao
