@@ -150,7 +150,8 @@ export const TOOL_PREPARAR_ENVIO = {
     "no terminal, trocando CAMINHO_DO_ARQUIVO pelo caminho real; 3) chame agendar_arte com imagem = a URL " +
     "pública devolvida (vídeo MP4 sai como Reel no Instagram). Use isto em vez de base64 — uma arte real " +
     "tem centenas de milhares de caracteres e não cabe numa chamada. Se o arquivo já está numa URL pública, " +
-    "pule esta ferramenta. Uma chamada por arquivo.",
+    "pule esta ferramenta. Uma chamada por arquivo; carrossel pronto: uma por slide, e depois um agendar_arte " +
+    "com imagens = as URLs públicas na ordem dos slides.",
   inputSchema: {
     type: "object",
     properties: {

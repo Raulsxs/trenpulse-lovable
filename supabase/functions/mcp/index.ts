@@ -252,7 +252,8 @@ Deno.serve(async (req) => {
           "2) Depois chame agendar_arte com:",
           `   imagem = ${urlPublica}`,
           // Vídeo: avisa o formato que vai ao ar, para o agente não oferecer "story" achando que é o padrão.
-          ...(ehExtensaoVideo(ext) ? ["   É um vídeo MP4: no Instagram sai como Reel; no LinkedIn, como vídeo nativo."] : []),
+          // Imagem: lembra que carrossel pronto é UM agendar_arte com imagens (2026-10-26).
+          ...(ehExtensaoVideo(ext) ? ["   É um vídeo MP4: no Instagram sai como Reel; no LinkedIn, como vídeo nativo."] : ["   Carrossel: repita isto para cada slide e chame UM agendar_arte com imagens = [as URLs públicas, na ordem dos slides]."]),
           "Sem terminal (ex.: Claude Desktop sem ferramenta de arquivo) este caminho não funciona: o arquivo precisa estar numa URL pública.",
         ].join("\n"),
         true,

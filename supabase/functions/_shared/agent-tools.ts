@@ -336,11 +336,12 @@ export const AGENT_TOOLS = [
   },
   {
     name: "agendar_arte",
-    description: "Coloca no calendario do TrendPulse uma IMAGEM OU UM VIDEO MP4 QUE VOCE JA TEM PRONTO - arte criada fora da plataforma, foto, print, video editado. Chame quando o usuario diz 'joga essa arte no TrendPulse', 'agenda essas imagens', 'agenda esse video', 'sobe isso pro calendario'. Video MP4 vira conteudo de video e sai como Reel no Instagram (no LinkedIn, video nativo). NAO gera nada e NAO cobra credito: so guarda o arquivo que voce passar e agenda. Para CRIAR arte nova com a identidade da marca, use gerar_post. Uma chamada por arquivo; para varios, chame varias vezes.",
+    description: "Coloca no calendario do TrendPulse uma IMAGEM OU UM VIDEO MP4 QUE VOCE JA TEM PRONTO - arte criada fora da plataforma, foto, print, video editado. Chame quando o usuario diz 'joga essa arte no TrendPulse', 'agenda essas imagens', 'agenda esse video', 'sobe isso pro calendario'. Video MP4 vira conteudo de video e sai como Reel no Instagram (no LinkedIn, video nativo). CARROSSEL PRONTO: passe `imagens` com 2 a 10 URLs na ordem dos slides, no lugar de `imagem` - vira um carrossel so (no Instagram sai como carrossel). NAO gera nada e NAO cobra credito: so guarda o que voce passar e agenda. Para CRIAR arte nova com a identidade da marca, use gerar_post ou gerar_carrossel. Uma chamada por post; para varios posts, chame varias vezes.",
     input_schema: {
       type: "object",
       properties: {
         imagem: { type: "string", description: "URL http(s) PUBLICA da imagem ou do video MP4 (H.264/AAC). Arquivo que esta no computador: chame ANTES preparar_envio_imagem (aceita .mp4), rode o comando de upload e passe aqui a URL publica que ela devolve. Video por URL externa: ate 50 MB. Base64 so para imagens minusculas - uma arte real vira centenas de milhares de caracteres e nao cabe numa chamada." },
+        imagens: { type: "array", items: { type: "string" }, minItems: 2, maxItems: 10, description: "CARROSSEL: 2 a 10 URLs http(s) PUBLICAS de imagens, NA ORDEM dos slides (a primeira e a capa). Use no lugar de `imagem`, nunca junto. So imagens (nada de video). Arquivo no computador: um preparar_envio_imagem + upload por imagem, e passe aqui as URLs publicas." },
         legenda: { type: "string", description: "Legenda do post, pronta para publicar. Inclua hashtags aqui se quiser." },
         data_hora_iso: { type: "string", description: "Quando publicar, ISO 8601 COM FUSO - ex.: 2026-09-15T09:00:00-03:00. O fuso importa: sem ele o horario vira UTC e o post sai 3h fora. Omitir salva como rascunho, sem agendar." },
         marca: { type: "string", description: "Nome ou id da marca dona do post. Omitir usa a marca padrao. Quando o usuario tem varias empresas, SEMPRE preencha." },
@@ -348,7 +349,8 @@ export const AGENT_TOOLS = [
         contas: { type: "array", items: { type: "string" }, description: "IDs das contas de destino, vindos de listar_conexoes (campo conta=...). OBRIGATORIO quando o usuario tem mais de uma conta na mesma rede — sem isso o post pode sair no perfil errado. Se ele nao disse em qual perfil, PERGUNTE antes de agendar." },
         titulo: { type: "string", description: "Titulo curto para achar no calendario. Omitir usa o comeco da legenda." },
       },
-      required: ["imagem", "legenda"],
+      // imagem OU imagens: a escolha e conferida no dispatch (JSON Schema simples nao expressa "um dos dois" em todo cliente)
+      required: ["legenda"],
     },
   },
   {
@@ -554,6 +556,116 @@ export async function resolverContas(
   if (recusa) return { ok: false, erro: recusa };
   return { ok: true, accountIds: escolhidas };
 }
+
+// ─────────────────────────── Arquivo pronto (agendar_arte) ───────────────────────────
+/** Teto de cada imagem: a geracao ja estourou memoria de isolate antes. Erro claro vence timeout. */
+export const LIMITE_IMAGEM = 8 * 1024 * 1024;
+/** Carrossel do Instagram: de 2 a 10 itens (limite da plataforma, repassado pelo Post for Me). */
+export const CARROSSEL_MIN = 2;
+export const CARROSSEL_MAX = 10;
+
+export type ArquivoDaArte =
+  | { ok: true; bytes: Uint8Array | null; mime: string; urlPronta: string | null }
+  | { ok: false; erro: string };
+
+/**
+ * Le UM arquivo do agendar_arte (URL http(s) ou base64) e confere tipo e tamanho. Devolve os bytes para
+ * subir ao bucket ou, quando o arquivo ja esta na pasta do usuario no nosso bucket (veio do
+ * preparar_envio_imagem), a URL pronta, sem baixar nem copiar: baixar 2 MB para subir os mesmos 2 MB de
+ * novo so gastaria memoria do isolate e tempo. Vale para video MP4 e, desde o carrossel (2026-10-26), para
+ * imagem. `soImagem`: o carrossel aceita so imagens, e a recusa diz qual item falhou (`rotulo`).
+ */
+export async function lerArquivoDaArte(
+  ctx: ToolCtx, bruta: string, opcoes: { soImagem?: boolean; rotulo?: string } = {},
+): Promise<ArquivoDaArte> {
+  const rotulo = opcoes.rotulo ? `${opcoes.rotulo}: ` : "";
+  let bytes: Uint8Array | null = null;
+  let mime = "image/jpeg";
+  let urlPronta: string | null = null;
+  try {
+    if (/^https?:\/\//i.test(bruta)) {
+      const r = await fetch(bruta);
+      if (!r.ok) return { ok: false, erro: `${rotulo}Nao consegui baixar o arquivo (HTTP ${r.status}). Confira se a URL e publica.` };
+      mime = mimeDoArquivo(r.headers.get("content-type"), bruta) || mime;
+      const tamanho = Number(r.headers.get("content-length") || 0);
+      const cancela = async () => { try { await r.body?.cancel(); } catch (_e) { /* ignora */ } };
+      const nosso = urlDoNossoEnvio(bruta, ctx.supabaseUrl, ctx.userId);
+      if (mime === "video/mp4" && nosso) {
+        await cancela();
+        if (tamanho > LIMITE_VIDEO_NOSSO) {
+          return { ok: false, erro: `${rotulo}Video grande demais (${(tamanho / 1048576).toFixed(1)} MB). O limite e ${LIMITE_VIDEO_NOSSO / 1048576} MB.` };
+        }
+        urlPronta = bruta;
+      } else if (mime.startsWith("image/") && nosso) {
+        await cancela();
+        if (tamanho > LIMITE_IMAGEM) {
+          return { ok: false, erro: `${rotulo}Imagem grande demais (${(tamanho / 1048576).toFixed(1)} MB). O limite e 8 MB - reduza antes de mandar.` };
+        }
+        urlPronta = bruta;
+      } else if (mime === "video/mp4" && tamanho > LIMITE_VIDEO_EXTERNO) {
+        // Checa ANTES de baixar: o arrayBuffer de um video enorme derrubaria o isolate.
+        await cancela();
+        return { ok: false, erro: `${rotulo}Video grande demais (${(tamanho / 1048576).toFixed(1)} MB). Por URL externa o limite e ${LIMITE_VIDEO_EXTERNO / 1048576} MB; acima disso, suba com preparar_envio_imagem.` };
+      } else {
+        bytes = new Uint8Array(await r.arrayBuffer());
+      }
+    } else {
+      const m = /^data:([^;]+);base64,(.*)$/s.exec(bruta);
+      const b64 = (m ? m[2] : bruta).replace(/\s/g, "");
+      if (m) mime = m[1];
+      const bin = atob(b64);
+      bytes = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    }
+  } catch (e: any) {
+    return { ok: false, erro: `${rotulo}Nao consegui ler o arquivo: ${e?.message}. Mande uma URL publica ou base64 valido.` };
+  }
+
+  const ehVideo = mime === "video/mp4";
+  if (opcoes.soImagem && !mime.startsWith("image/")) {
+    return { ok: false, erro: `${rotulo}Carrossel aceita so imagens (veio ${mime}). Video vai sozinho, em imagem.` };
+  }
+  if (!ehVideo && mime.startsWith("video/")) {
+    return { ok: false, erro: `${rotulo}Formato de video nao aceito (${mime}). Mande MP4 (H.264/AAC).` };
+  }
+  if (!ehVideo && !mime.startsWith("image/")) {
+    return { ok: false, erro: `${rotulo}Isso nao e uma imagem nem um video MP4 (${mime}).` };
+  }
+  if (bytes && !ehVideo && bytes.length > LIMITE_IMAGEM) {
+    return { ok: false, erro: `${rotulo}Imagem grande demais (${(bytes.length / 1048576).toFixed(1)} MB). O limite e 8 MB - reduza antes de mandar.` };
+  }
+  // content-length pode faltar (resposta em chunks): o tamanho real so se sabe depois de baixar.
+  if (bytes && ehVideo && bytes.length > LIMITE_VIDEO_EXTERNO) {
+    return { ok: false, erro: `${rotulo}Video grande demais (${(bytes.length / 1048576).toFixed(1)} MB). Por URL externa o limite e ${LIMITE_VIDEO_EXTERNO / 1048576} MB; acima disso, suba com preparar_envio_imagem.` };
+  }
+  return { ok: true, bytes, mime, urlPronta };
+}
+
+/**
+ * Guarda o arquivo lido no bucket (na pasta do usuario) e devolve a URL publica. O que ja estava na pasta
+ * do usuario (urlPronta) nao sobe de novo e volta com caminho nulo: nao e desta chamada, nao se apaga.
+ */
+async function guardarArquivoDaArte(
+  ctx: ToolCtx, a: { bytes: Uint8Array | null; mime: string; urlPronta: string | null },
+): Promise<{ ok: true; url: string; caminho: string | null } | { ok: false; erro: string }> {
+  if (a.urlPronta) return { ok: true, url: a.urlPronta, caminho: null };
+  const ext = a.mime === "video/mp4" ? "mp4" : a.mime.includes("png") ? "png" : a.mime.includes("webp") ? "webp" : "jpg";
+  const caminho = `mcp/${ctx.userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error: upErr } = await ctx.userClient.storage
+    .from("content-images").upload(caminho, a.bytes!, { contentType: a.mime, upsert: false });
+  if (upErr) return { ok: false, erro: `Falha ao guardar o arquivo: ${upErr.message}` };
+  const { data: pub } = ctx.userClient.storage.from("content-images").getPublicUrl(caminho);
+  if (!pub?.publicUrl) return { ok: false, erro: "Arquivo subiu mas nao consegui a URL publica." };
+  return { ok: true, url: pub.publicUrl, caminho };
+}
+
+/**
+ * Os slides do carrossel pronto, no formato que o gerar_carrossel grava (ai-chat, GENERATE_CAROUSEL):
+ * a imagem em image_url e background_image_url, render_mode "ai_full_design". O texto ja esta DENTRO da
+ * imagem, entao headline/body ficam vazios. A ordem e a das URLs: e ela que vai ao Post for Me.
+ */
+export const slidesDoCarrosselPronto = (urls: string[]) =>
+  urls.map((url) => ({ headline: "", body: "", bullets: [], image_url: url, background_image_url: url, render_mode: "ai_full_design" }));
 
 export async function dispatchTool(ctx: ToolCtx, name: string, input: any): Promise<ToolResult> {
   // A marca SELECIONADA no seletor (ctx.defaultBrandId) é a escolha EXPLÍCITA do usuário e MANDA.
@@ -1298,66 +1410,25 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
     case "agendar_arte": {
       // A ferramenta que fecha o caso "criei 16 artes no Claude, joga tudo no calendario".
       // NAO cobra credito: nada foi gerado aqui, so guardado e agendado. Cobrar seria vender
-      // armazenamento como se fosse geracao. Vale igual para video MP4 pronto (2026-10-26).
+      // armazenamento como se fosse geracao. Vale igual para video MP4 pronto e para carrossel
+      // pronto (`imagens`, 2026-10-26: a Pulse gera os slides fora e agenda aqui).
       const bruta = String(input.imagem || "").trim();
-      if (!bruta) return { ok: false, content: "Faltou a imagem (ou o video MP4)." };
-
-      // 1. Arquivo vira bytes. Excecao: video MP4 que ja esta na pasta do usuario no nosso bucket
-      // (veio do preparar_envio_imagem) fica onde esta — baixar 20 MB para subir os mesmos 20 MB de
-      // novo so gastaria memoria do isolate e tempo, sem ganho nenhum.
-      let bytes: Uint8Array | null = null;
-      let mime = "image/jpeg";
-      let urlPronta: string | null = null;
-      try {
-        if (/^https?:\/\//i.test(bruta)) {
-          const r = await fetch(bruta);
-          if (!r.ok) return { ok: false, content: `Nao consegui baixar o arquivo (HTTP ${r.status}). Confira se a URL e publica.` };
-          mime = mimeDoArquivo(r.headers.get("content-type"), bruta) || mime;
-          const tamanho = Number(r.headers.get("content-length") || 0);
-          const cancela = async () => { try { await r.body?.cancel(); } catch (_e) { /* ignora */ } };
-          if (mime === "video/mp4" && urlDoNossoEnvio(bruta, ctx.supabaseUrl, ctx.userId)) {
-            await cancela();
-            if (tamanho > LIMITE_VIDEO_NOSSO) {
-              return { ok: false, content: `Video grande demais (${(tamanho / 1048576).toFixed(1)} MB). O limite e ${LIMITE_VIDEO_NOSSO / 1048576} MB.` };
-            }
-            urlPronta = bruta;
-          } else if (mime === "video/mp4" && tamanho > LIMITE_VIDEO_EXTERNO) {
-            // Checa ANTES de baixar: o arrayBuffer de um video enorme derrubaria o isolate.
-            await cancela();
-            return { ok: false, content: `Video grande demais (${(tamanho / 1048576).toFixed(1)} MB). Por URL externa o limite e ${LIMITE_VIDEO_EXTERNO / 1048576} MB; acima disso, suba com preparar_envio_imagem.` };
-          } else {
-            bytes = new Uint8Array(await r.arrayBuffer());
-          }
-        } else {
-          const m = /^data:([^;]+);base64,(.*)$/s.exec(bruta);
-          const b64 = (m ? m[2] : bruta).replace(/\s/g, "");
-          if (m) mime = m[1];
-          const bin = atob(b64);
-          bytes = new Uint8Array(bin.length);
-          for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-        }
-      } catch (e: any) {
-        return { ok: false, content: `Nao consegui ler o arquivo: ${e?.message}. Mande uma URL publica ou base64 valido.` };
+      const listaImagens: string[] = Array.isArray(input.imagens)
+        ? input.imagens.map((u: unknown) => String(u ?? "").trim()).filter(Boolean)
+        : [];
+      if (bruta && listaImagens.length) {
+        return { ok: false, content: "Passe `imagem` (um arquivo) OU `imagens` (carrossel), nao os dois." };
+      }
+      const ehCarrossel = listaImagens.length > 0;
+      if (!bruta && !ehCarrossel) return { ok: false, content: "Faltou a imagem (ou o video MP4), ou a lista `imagens` do carrossel." };
+      if (ehCarrossel && listaImagens.length < CARROSSEL_MIN) {
+        return { ok: false, content: `Carrossel precisa de ${CARROSSEL_MIN} a ${CARROSSEL_MAX} imagens (veio ${listaImagens.length}). Para uma imagem so, use \`imagem\`.` };
+      }
+      if (listaImagens.length > CARROSSEL_MAX) {
+        return { ok: false, content: `Carrossel aceita no maximo ${CARROSSEL_MAX} imagens (veio ${listaImagens.length}).` };
       }
 
-      const ehVideo = mime === "video/mp4";
-      if (!ehVideo && mime.startsWith("video/")) {
-        return { ok: false, content: `Formato de video nao aceito (${mime}). Mande MP4 (H.264/AAC).` };
-      }
-      if (!ehVideo && !mime.startsWith("image/")) {
-        return { ok: false, content: `Isso nao e uma imagem nem um video MP4 (${mime}).` };
-      }
-      // Teto explicito: a geracao ja estourou memoria de isolate antes. Erro claro vence timeout.
-      const MAX_BYTES = 8 * 1024 * 1024;
-      if (bytes && !ehVideo && bytes.length > MAX_BYTES) {
-        return { ok: false, content: `Imagem grande demais (${(bytes.length / 1048576).toFixed(1)} MB). O limite e 8 MB - reduza antes de mandar.` };
-      }
-      // content-length pode faltar (resposta em chunks): o tamanho real so se sabe depois de baixar.
-      if (bytes && ehVideo && bytes.length > LIMITE_VIDEO_EXTERNO) {
-        return { ok: false, content: `Video grande demais (${(bytes.length / 1048576).toFixed(1)} MB). Por URL externa o limite e ${LIMITE_VIDEO_EXTERNO / 1048576} MB; acima disso, suba com preparar_envio_imagem.` };
-      }
-
-      // 2. Quando
+      // 1. Quando (antes de baixar ou subir qualquer coisa: data errada nao deixa arquivo orfao)
       let quando: string | null = null;
       if (input.data_hora_iso) {
         const d = new Date(input.data_hora_iso);
@@ -1375,7 +1446,7 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         }
       }
 
-      // 3. Marca (por id ou por nome)
+      // 2. Marca (por id ou por nome)
       let brandIdArte: string | null = null;
       if (input.marca) {
         const alvo = String(input.marca).trim();
@@ -1393,48 +1464,65 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         brandIdArte = ctx.defaultBrandId ?? null;
       }
 
-      // 4. Sobe pro bucket (o video que ja esta na pasta do usuario nao sobe de novo)
-      let caminho: string | null = null;
-      let urlPublica: string | undefined;
-      if (urlPronta) {
-        urlPublica = urlPronta;
-      } else {
-        const ext = ehVideo ? "mp4" : mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
-        caminho = `mcp/${ctx.userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-        const { error: upErr } = await ctx.userClient.storage
-          .from("content-images").upload(caminho, bytes!, { contentType: mime, upsert: false });
-        if (upErr) return { ok: false, content: `Falha ao guardar o arquivo: ${upErr.message}` };
-        const { data: pub } = ctx.userClient.storage.from("content-images").getPublicUrl(caminho);
-        urlPublica = pub?.publicUrl;
-      }
-      if (!urlPublica) return { ok: false, content: "Arquivo subiu mas nao consegui a URL publica." };
-
-      // 5. Cria o conteudo
+      // 3. Conta de destino. Sem isto o publicador escolheria a primeira conta da rede. Ver resolverContas().
       const legendaArte = String(input.legenda || "").trim();
       const plataformasArte: string[] = Array.isArray(input.plataformas) ? input.plataformas.filter(Boolean) : [];
-      const tituloArte = String(input.titulo || "").trim()
-        || legendaArte.split("\n")[0].slice(0, 70)
-        || "Arte enviada pelo agente";
-
-      // ── CONTA DE DESTINO ──
-      // Sem isto o publicador escolheria a primeira conta da rede. Ver resolverContas().
       const resContas = await resolverContas(ctx, plataformasArte, Array.isArray(input.contas) ? input.contas.filter(Boolean).map(String) : []);
       if (!resContas.ok) return { ok: false, content: resContas.erro };
       const contasAlvo = resContas.accountIds;
+
+      // 4. Cada arquivo vira URL publica no nosso bucket, NA ORDEM recebida (e a ordem dos slides).
+      // Um por vez: baixar 10 imagens de uma vez no isolate pesaria a memoria sem ganho. O que ja esta
+      // na pasta do usuario (veio do preparar_envio_imagem) fica onde esta, sem copia.
+      const entradas = ehCarrossel ? listaImagens : [bruta];
+      const urls: string[] = [];
+      const copiados: string[] = [];
+      // Falha no meio do carrossel: as copias feitas por ESTA chamada saem do bucket (arquivo do usuario fica).
+      const desfaz = async () => {
+        if (!copiados.length) return;
+        try { await ctx.userClient.storage.from("content-images").remove(copiados); } catch (_e) { /* ignora */ }
+      };
+      let ehVideo = false;
+      for (let i = 0; i < entradas.length; i++) {
+        const rotulo = ehCarrossel ? `Imagem ${i + 1} de ${entradas.length}` : undefined;
+        const lido = await lerArquivoDaArte(ctx, entradas[i], { soImagem: ehCarrossel, rotulo });
+        if (!lido.ok) { await desfaz(); return { ok: false, content: lido.erro }; }
+        ehVideo = lido.mime === "video/mp4";
+        const guardado = await guardarArquivoDaArte(ctx, lido);
+        if (!guardado.ok) { await desfaz(); return { ok: false, content: rotulo ? `${rotulo}: ${guardado.erro}` : guardado.erro }; }
+        urls.push(guardado.url);
+        if (guardado.caminho) copiados.push(guardado.caminho);
+      }
+      const urlPublica = urls[0];
+
+      // 5. Cria o conteudo
+      const tituloArte = String(input.titulo || "").trim()
+        || legendaArte.split("\n")[0].slice(0, 70)
+        || (ehCarrossel ? "Carrossel enviado pelo agente" : "Arte enviada pelo agente");
+      const tipo = ehCarrossel ? "carousel" : ehVideo ? "video" : "post";
 
       const linha: Record<string, unknown> = {
         user_id: ctx.userId,
         title: tituloArte,
         caption: legendaArte,
-        image_urls: [urlPublica],
+        image_urls: urls,
         // Video segue o formato do generate-video: content_type "video", URL do MP4 em image_urls e em
         // generation_metadata.video_url. E o content_type que faz o publish-postforme mandar como Reel.
-        content_type: ehVideo ? "video" : "post",
+        // Carrossel segue o do gerar_carrossel: content_type "carousel", as imagens em ordem em image_urls
+        // e em slides[] (o editor e a pre-visualizacao navegam por slides). O publish-postforme manda
+        // image_urls inteiro como media do Post for Me, e o Instagram publica como carrossel.
+        content_type: tipo,
         status: quando ? "scheduled" : "draft",
         scheduled_at: quando,
         brand_id: brandIdArte,
       };
       if (ehVideo) linha.generation_metadata = { video_url: urlPublica, origem: "agendar_arte" };
+      if (ehCarrossel) {
+        linha.slides = slidesDoCarrosselPronto(urls);
+        linha.slide_count = urls.length;
+        linha.visual_mode = "ai_full_design";
+        linha.generation_metadata = { origem: "agendar_arte" };
+      }
       if (plataformasArte.length || contasAlvo.length) {
         if (plataformasArte.length) linha.platform = plataformasArte[0];
         // accountIds PREENCHIDO: o scheduler publica exatamente nessas contas. Deixar vazio faria o
@@ -1447,18 +1535,22 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         .from("generated_contents").insert(linha).select("id").single();
       if (insErr) {
         // Imagem orfa no bucket e lixo barato; conteudo sem imagem seria pior.
-        // O video reaproveitado (urlPronta) nao e apagado: o arquivo e do usuario, nao desta chamada.
-        if (caminho) { try { await ctx.userClient.storage.from("content-images").remove([caminho]); } catch (_e) { /* ignora */ } }
+        // O arquivo reaproveitado (urlPronta) nao e apagado: e do usuario, nao desta chamada.
+        await desfaz();
         return { ok: false, content: `Falha ao criar o conteudo: ${insErr.message}` };
       }
 
       const onde = plataformasArte.length ? ` em ${plataformasArte.join(" e ")}` : "";
+      const oQue = ehCarrossel ? ` Carrossel de ${urls.length} imagens, nesta ordem.` : "";
       return {
         ok: true,
         content: quando
-          ? `Agendado para ${new Date(quando).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}${onde} (horario de Brasilia). Publica sozinho nessa hora - da pra revisar ou remover no calendario ate la. content_id=${criado.id}`
-          : `Salvo como rascunho${onde}, sem data. Agende depois com agendar_conteudo. content_id=${criado.id}`,
-        action_result: { contentId: criado.id, imageUrl: urlPublica, scheduledAt: quando, contentType: ehVideo ? "video" : "post" },
+          ? `Agendado para ${new Date(quando).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}${onde} (horario de Brasilia).${oQue} Publica sozinho nessa hora - da pra revisar ou remover no calendario ate la. content_id=${criado.id}`
+          : `Salvo como rascunho${onde}, sem data.${oQue} Agende depois com agendar_conteudo. content_id=${criado.id}`,
+        action_result: {
+          contentId: criado.id, imageUrl: urlPublica, scheduledAt: quando, contentType: tipo,
+          ...(ehCarrossel ? { imageUrls: urls } : {}),
+        },
       };
     }
 
