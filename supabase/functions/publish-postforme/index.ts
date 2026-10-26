@@ -5,7 +5,7 @@
  * Handles: immediate publish, scheduled publish, multi-platform publish
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { bloqueioPorConexao, contaDoPfm, erroComConexaoVencida, estadoAposPublicar } from "../_shared/publicacao.ts";
+import { bloqueioPorConexao, contaDoPfm, erroComConexaoVencida, estadoAposPublicar, montarPostBody } from "../_shared/publicacao.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -232,22 +232,20 @@ Deno.serve(async (req) => {
         console.log(`[publish-postforme] ${slideIdxLog}acesso vencido em ${target.expires_at}, renovável p/ ${target.platform} (${target.pfm_account_id}): o Post for Me renova`);
       }
       const caption = platformCaptions?.[target.platform] || (defaultCaption + hashtagsStr);
-      const isStory = forceStory || baseContentType === "story" || baseContentType === "reels";
-      const media = mediaList.map((url: string) => ({ url }));
-
-      const postBody: any = {
+      // Story → "stories"; vídeo no Instagram → "reels" (antes o "reels" caía em story). A regra e o
+      // corpo vivem em _shared/publicacao.ts (montarPostBody), que tem teste.
+      const postBody: any = montarPostBody({
+        platform: target.platform,
+        pfmAccountId: target.pfm_account_id,
         caption: caption || content.title || ".",
-        social_accounts: [target.pfm_account_id],
-        media,
-      };
-      if (isStory) {
-        postBody.platform_configurations = { [target.platform]: { placement: "stories" } };
-      }
-      if (scheduledAt) {
-        postBody.scheduled_at = scheduledAt;
-      }
+        mediaUrls: mediaList,
+        contentType: baseContentType,
+        forceStory,
+        scheduledAt,
+      });
+      const placement = postBody.platform_configurations?.[target.platform]?.placement || "padrão";
 
-      console.log(`[publish-postforme] ${slideIdxLog}publishing target=${target.platform} type=${baseContentType} isStory=${isStory} media=${media.length}`);
+      console.log(`[publish-postforme] ${slideIdxLog}publishing target=${target.platform} type=${baseContentType} placement=${placement} media=${mediaList.length}`);
 
       let pfmResp: Response;
       try {

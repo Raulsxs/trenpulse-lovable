@@ -134,48 +134,65 @@ export const ehUuid = (s: unknown): s is string => typeof s === "string" && UUID
  *
  * Limite honesto: exige terminal. Claude Code e Codex têm; o Claude Desktop sem ferramenta de arquivo
  * não — lá a imagem precisa estar numa URL pública.
+ *
+ * VÍDEO (2026-10-26): aceita também .mp4 (video/mp4), para a Pulse agendar os vídeos de produto prontos
+ * (1080x1920, H.264/AAC, até ~20 MB) como Reel. O NOME da ferramenta ficou "..._imagem" de propósito:
+ * agentes em produção já a chamam por esse nome, e renomear quebraria todos eles. O vídeo cai no mesmo
+ * bucket `content-images`: em produção ele não restringe tipo (allowed_mime_types nulo) nem tamanho
+ * próprio (file_size_limit nulo), então o teto é o limite global de upload do projeto.
  */
 export const TOOL_PREPARAR_ENVIO = {
   name: "preparar_envio_imagem",
   description:
-    "Prepara o envio de uma imagem que está NO COMPUTADOR (arte criada no Claude, no Codex, num editor) " +
-    "para depois agendá-la. Devolve um comando curl que sobe o arquivo e a URL pública que ele vai ter. " +
-    "Fluxo: 1) chame esta ferramenta com o nome do arquivo; 2) rode o comando no terminal, trocando " +
-    "CAMINHO_DO_ARQUIVO pelo caminho real; 3) chame agendar_arte com imagem = a URL pública devolvida. " +
-    "Use isto em vez de base64 — uma arte real tem centenas de milhares de caracteres e não cabe numa " +
-    "chamada. Se a imagem já está numa URL pública, pule esta ferramenta. Uma chamada por arquivo.",
+    "Prepara o envio de uma imagem OU de um vídeo MP4 que está NO COMPUTADOR (arte criada no Claude, no " +
+    "Codex, num editor; vídeo pronto) para depois agendá-lo. Devolve um comando curl que sobe o arquivo e a " +
+    "URL pública que ele vai ter. Fluxo: 1) chame esta ferramenta com o nome do arquivo; 2) rode o comando " +
+    "no terminal, trocando CAMINHO_DO_ARQUIVO pelo caminho real; 3) chame agendar_arte com imagem = a URL " +
+    "pública devolvida (vídeo MP4 sai como Reel no Instagram). Use isto em vez de base64 — uma arte real " +
+    "tem centenas de milhares de caracteres e não cabe numa chamada. Se o arquivo já está numa URL pública, " +
+    "pule esta ferramenta. Uma chamada por arquivo.",
   inputSchema: {
     type: "object",
     properties: {
       nome_arquivo: {
         type: "string",
-        description: "Nome do arquivo com extensão, ex.: arte-segunda.png. Aceita png, jpg, jpeg e webp.",
+        description: "Nome do arquivo com extensão, ex.: arte-segunda.png ou reel-produto.mp4. Aceita png, jpg, jpeg, webp e mp4.",
       },
     },
     required: ["nome_arquivo"],
   },
 };
 
-/** Extensão aceita a partir do nome do arquivo. Qualquer outra coisa é recusada. */
-export function extensaoImagem(nome: string): "png" | "jpg" | "webp" | null {
+/** Extensões que o envio aceita. mp4 é o único vídeo: é o que o Instagram e o LinkedIn publicam sem conversão. */
+export type ExtensaoEnvio = "png" | "jpg" | "webp" | "mp4";
+
+/**
+ * Extensão aceita a partir do nome do arquivo. Qualquer outra coisa é recusada. O nome "imagem" é
+ * histórico: desde 2026-10-26 aceita também .mp4.
+ */
+export function extensaoImagem(nome: string): ExtensaoEnvio | null {
   const m = /\.([a-z0-9]+)\s*$/i.exec(String(nome || ""));
   if (!m) return null;
   const e = m[1].toLowerCase();
   if (e === "png") return "png";
   if (e === "jpg" || e === "jpeg") return "jpg";
   if (e === "webp") return "webp";
+  if (e === "mp4") return "mp4";
   return null;
 }
 
-export const mimeDaExtensao = (ext: "png" | "jpg" | "webp"): string =>
-  ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : "image/jpeg";
+export const ehExtensaoVideo = (ext: ExtensaoEnvio): boolean => ext === "mp4";
+
+/** Mime do PUT. Tem de bater com o arquivo: é ele que o Storage grava e devolve no download. */
+export const mimeDaExtensao = (ext: ExtensaoEnvio): string =>
+  ext === "png" ? "image/png" : ext === "webp" ? "image/webp" : ext === "mp4" ? "video/mp4" : "image/jpeg";
 
 /**
  * Caminho do upload. Gerado pelo SERVIDOR, sempre dentro de `mcp/<userId>/`: quem escolhe onde o
  * arquivo cai não é o agente — senão uma URL assinada poderia sobrescrever arquivo de outra conta.
  */
 export function caminhoEnvio(
-  userId: string, ext: "png" | "jpg" | "webp", agora = Date.now(), sufixo = Math.random().toString(36).slice(2, 10),
+  userId: string, ext: ExtensaoEnvio, agora = Date.now(), sufixo = Math.random().toString(36).slice(2, 10),
 ): string {
   if (!ehUuid(userId)) throw new Error("userId inválido");
   const limpo = String(sufixo).replace(/[^a-z0-9]/gi, "").slice(0, 16) || "x";

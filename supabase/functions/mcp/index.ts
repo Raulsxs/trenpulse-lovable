@@ -39,7 +39,7 @@ import { jwtDoUsuario } from "../_shared/sessao-usuario.ts";
 import { acharMarca, recusaDeMarca } from "../_shared/marca-pedida.ts";
 import {
   FERRAMENTAS_LENTAS, TOOL_ACOMPANHAR, colunasDoJob, ehUuid, promptDoJob, textoDoJob, tituloDoJob, toolsVisiveis,
-  TOOL_PREPARAR_ENVIO, caminhoEnvio, extensaoImagem, mimeDaExtensao,
+  TOOL_PREPARAR_ENVIO, caminhoEnvio, extensaoImagem, mimeDaExtensao, ehExtensaoVideo,
   ESCOPOS_OAUTH, cabecalhoWwwAuthenticate, metadadosDoRecurso, urlDoRecurso,
   TOOL_LISTAR_MARCAS, textoDasMarcas, CATALOGO_MCP,
 } from "../_shared/mcp-core.ts";
@@ -219,12 +219,14 @@ Deno.serve(async (req) => {
     // ── preparar_envio_imagem: só existe no MCP ──
     // A arte do computador do usuário chega por URL de upload ASSINADA, não por base64 (que não cabe:
     // uma arte de 537 KB vira ~183 mil tokens). Ver TOOL_PREPARAR_ENVIO em mcp-core.ts.
+    // Vídeo .mp4 usa o mesmo caminho e o mesmo bucket; o Content-Type do PUT (video/mp4) é o que o
+    // Storage grava, e é por ele que agendar_arte reconhece o vídeo depois.
     if (nome === TOOL_PREPARAR_ENVIO.name) {
       if (!auth.scopes.includes("schedule")) {
         return rpcErro(id, -32001, `Este token não tem o escopo "schedule", exigido por ${nome}.`);
       }
       const ext = extensaoImagem(String(args.nome_arquivo || ""));
-      if (!ext) return resultado("Formato não aceito. Mande um arquivo .png, .jpg, .jpeg ou .webp.", false);
+      if (!ext) return resultado("Formato não aceito. Mande uma imagem .png, .jpg, .jpeg ou .webp, ou um vídeo .mp4.", false);
       const caminho = caminhoEnvio(auth.userId, ext);
       // Service role só para ASSINAR: a URL resultante vale para este caminho e mais nenhum, e expira.
       const sig = await fetch(`${SUPABASE_URL}/storage/v1/object/upload/sign/content-images/${caminho}`, {
@@ -249,7 +251,9 @@ Deno.serve(async (req) => {
           '   Sucesso responde com {"Key":"content-images/..."}.',
           "2) Depois chame agendar_arte com:",
           `   imagem = ${urlPublica}`,
-          "Sem terminal (ex.: Claude Desktop sem ferramenta de arquivo) este caminho não funciona: a imagem precisa estar numa URL pública.",
+          // Vídeo: avisa o formato que vai ao ar, para o agente não oferecer "story" achando que é o padrão.
+          ...(ehExtensaoVideo(ext) ? ["   É um vídeo MP4: no Instagram sai como Reel; no LinkedIn, como vídeo nativo."] : []),
+          "Sem terminal (ex.: Claude Desktop sem ferramenta de arquivo) este caminho não funciona: o arquivo precisa estar numa URL pública.",
         ].join("\n"),
         true,
       );

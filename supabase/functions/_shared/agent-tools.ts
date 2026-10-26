@@ -336,11 +336,11 @@ export const AGENT_TOOLS = [
   },
   {
     name: "agendar_arte",
-    description: "Coloca no calendario do TrendPulse uma IMAGEM QUE VOCE JA TEM PRONTA - arte criada fora da plataforma, foto, print. Chame quando o usuario diz 'joga essa arte no TrendPulse', 'agenda essas imagens', 'sobe isso pro calendario'. NAO gera imagem e NAO cobra credito: so guarda a que voce passar e agenda. Para CRIAR arte nova com a identidade da marca, use gerar_post. Uma chamada por imagem; para varias, chame varias vezes.",
+    description: "Coloca no calendario do TrendPulse uma IMAGEM OU UM VIDEO MP4 QUE VOCE JA TEM PRONTO - arte criada fora da plataforma, foto, print, video editado. Chame quando o usuario diz 'joga essa arte no TrendPulse', 'agenda essas imagens', 'agenda esse video', 'sobe isso pro calendario'. Video MP4 vira conteudo de video e sai como Reel no Instagram (no LinkedIn, video nativo). NAO gera nada e NAO cobra credito: so guarda o arquivo que voce passar e agenda. Para CRIAR arte nova com a identidade da marca, use gerar_post. Uma chamada por arquivo; para varios, chame varias vezes.",
     input_schema: {
       type: "object",
       properties: {
-        imagem: { type: "string", description: "URL http(s) PUBLICA da imagem. Arte que esta no computador: chame ANTES preparar_envio_imagem, rode o comando de upload e passe aqui a URL publica que ela devolve. Base64 so para imagens minusculas - uma arte real vira centenas de milhares de caracteres e nao cabe numa chamada." },
+        imagem: { type: "string", description: "URL http(s) PUBLICA da imagem ou do video MP4 (H.264/AAC). Arquivo que esta no computador: chame ANTES preparar_envio_imagem (aceita .mp4), rode o comando de upload e passe aqui a URL publica que ela devolve. Video por URL externa: ate 50 MB. Base64 so para imagens minusculas - uma arte real vira centenas de milhares de caracteres e nao cabe numa chamada." },
         legenda: { type: "string", description: "Legenda do post, pronta para publicar. Inclua hashtags aqui se quiser." },
         data_hora_iso: { type: "string", description: "Quando publicar, ISO 8601 COM FUSO - ex.: 2026-09-15T09:00:00-03:00. O fuso importa: sem ele o horario vira UTC e o post sai 3h fora. Omitir salva como rascunho, sem agendar." },
         marca: { type: "string", description: "Nome ou id da marca dona do post. Omitir usa a marca padrao. Quando o usuario tem varias empresas, SEMPRE preencha." },
@@ -427,6 +427,51 @@ function genResult(data: any, kind: string): ToolResult {
     };
   }
   return { ok: false, content: data?.reply || `Não consegui gerar o ${kind}. Peça para o usuário reformular.` };
+}
+
+// ─────────────────────────── Vídeo pronto (agendar_arte) ───────────────────────────
+/**
+ * Teto do vídeo que já está na pasta do usuário no bucket (subido por preparar_envio_imagem): não é
+ * baixado, então não pesa no isolate. O teto real de upload é o limite global do Storage do projeto
+ * (o bucket content-images não tem limite próprio); este número só barra antes um arquivo absurdo.
+ */
+export const LIMITE_VIDEO_NOSSO = 100 * 1024 * 1024;
+/**
+ * Teto do vídeo por URL externa: esse É baixado para a memória e subido de novo (a URL de fora pode
+ * expirar antes da hora de publicar). 50 MB cabe no isolate com folga e no limite padrão do Storage.
+ */
+export const LIMITE_VIDEO_EXTERNO = 50 * 1024 * 1024;
+
+/**
+ * Mime do arquivo baixado. Servidor que manda MP4 como application/octet-stream (comum em CDN e em
+ * bucket S3 mal configurado) conta como video/mp4 quando a URL termina em .mp4 — senão o vídeo certo
+ * seria recusado por um cabeçalho errado. Imagem continua decidida só pelo cabeçalho, como antes.
+ */
+export function mimeDoArquivo(contentType: string | null | undefined, url: string): string | null {
+  const ct = String(contentType || "").split(";")[0].trim().toLowerCase();
+  let caminho = "";
+  try { caminho = new URL(url).pathname.toLowerCase(); } catch (_e) { caminho = ""; }
+  const terminaEmMp4 = caminho.endsWith(".mp4");
+  if (ct === "video/mp4") return "video/mp4";
+  if (terminaEmMp4 && (!ct || ct === "application/octet-stream" || ct === "binary/octet-stream")) return "video/mp4";
+  return ct || null;
+}
+
+/**
+ * A URL é pública do NOSSO bucket content-images, dentro da pasta do PRÓPRIO usuário (`mcp/<userId>/`,
+ * onde o preparar_envio_imagem grava)? Só aí o vídeo é reaproveitado sem cópia. Arquivo de outra pasta
+ * é tratado como externo e copiado: se o dono apagar o dele, o post deste usuário não pode quebrar.
+ */
+export function urlDoNossoEnvio(url: string, supabaseUrl: string, userId: string): boolean {
+  try {
+    const u = new URL(url);
+    const base = new URL(supabaseUrl);
+    if (u.origin !== base.origin || !userId) return false;
+    const prefixo = `/storage/v1/object/public/content-images/mcp/${userId}/`;
+    return u.pathname.startsWith(prefixo) && !u.pathname.includes("..") && u.pathname.length > prefixo.length;
+  } catch (_e) {
+    return false;
+  }
 }
 
 /**
@@ -1253,19 +1298,36 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
     case "agendar_arte": {
       // A ferramenta que fecha o caso "criei 16 artes no Claude, joga tudo no calendario".
       // NAO cobra credito: nada foi gerado aqui, so guardado e agendado. Cobrar seria vender
-      // armazenamento como se fosse geracao.
+      // armazenamento como se fosse geracao. Vale igual para video MP4 pronto (2026-10-26).
       const bruta = String(input.imagem || "").trim();
-      if (!bruta) return { ok: false, content: "Faltou a imagem." };
+      if (!bruta) return { ok: false, content: "Faltou a imagem (ou o video MP4)." };
 
-      // 1. Imagem vira bytes
-      let bytes: Uint8Array;
+      // 1. Arquivo vira bytes. Excecao: video MP4 que ja esta na pasta do usuario no nosso bucket
+      // (veio do preparar_envio_imagem) fica onde esta — baixar 20 MB para subir os mesmos 20 MB de
+      // novo so gastaria memoria do isolate e tempo, sem ganho nenhum.
+      let bytes: Uint8Array | null = null;
       let mime = "image/jpeg";
+      let urlPronta: string | null = null;
       try {
         if (/^https?:\/\//i.test(bruta)) {
           const r = await fetch(bruta);
-          if (!r.ok) return { ok: false, content: `Nao consegui baixar a imagem (HTTP ${r.status}). Confira se a URL e publica.` };
-          mime = r.headers.get("content-type")?.split(";")[0] || mime;
-          bytes = new Uint8Array(await r.arrayBuffer());
+          if (!r.ok) return { ok: false, content: `Nao consegui baixar o arquivo (HTTP ${r.status}). Confira se a URL e publica.` };
+          mime = mimeDoArquivo(r.headers.get("content-type"), bruta) || mime;
+          const tamanho = Number(r.headers.get("content-length") || 0);
+          const cancela = async () => { try { await r.body?.cancel(); } catch (_e) { /* ignora */ } };
+          if (mime === "video/mp4" && urlDoNossoEnvio(bruta, ctx.supabaseUrl, ctx.userId)) {
+            await cancela();
+            if (tamanho > LIMITE_VIDEO_NOSSO) {
+              return { ok: false, content: `Video grande demais (${(tamanho / 1048576).toFixed(1)} MB). O limite e ${LIMITE_VIDEO_NOSSO / 1048576} MB.` };
+            }
+            urlPronta = bruta;
+          } else if (mime === "video/mp4" && tamanho > LIMITE_VIDEO_EXTERNO) {
+            // Checa ANTES de baixar: o arrayBuffer de um video enorme derrubaria o isolate.
+            await cancela();
+            return { ok: false, content: `Video grande demais (${(tamanho / 1048576).toFixed(1)} MB). Por URL externa o limite e ${LIMITE_VIDEO_EXTERNO / 1048576} MB; acima disso, suba com preparar_envio_imagem.` };
+          } else {
+            bytes = new Uint8Array(await r.arrayBuffer());
+          }
         } else {
           const m = /^data:([^;]+);base64,(.*)$/s.exec(bruta);
           const b64 = (m ? m[2] : bruta).replace(/\s/g, "");
@@ -1275,14 +1337,24 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
           for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
         }
       } catch (e: any) {
-        return { ok: false, content: `Nao consegui ler a imagem: ${e?.message}. Mande uma URL publica ou base64 valido.` };
+        return { ok: false, content: `Nao consegui ler o arquivo: ${e?.message}. Mande uma URL publica ou base64 valido.` };
       }
 
-      if (!mime.startsWith("image/")) return { ok: false, content: `Isso nao e uma imagem (${mime}).` };
+      const ehVideo = mime === "video/mp4";
+      if (!ehVideo && mime.startsWith("video/")) {
+        return { ok: false, content: `Formato de video nao aceito (${mime}). Mande MP4 (H.264/AAC).` };
+      }
+      if (!ehVideo && !mime.startsWith("image/")) {
+        return { ok: false, content: `Isso nao e uma imagem nem um video MP4 (${mime}).` };
+      }
       // Teto explicito: a geracao ja estourou memoria de isolate antes. Erro claro vence timeout.
       const MAX_BYTES = 8 * 1024 * 1024;
-      if (bytes.length > MAX_BYTES) {
+      if (bytes && !ehVideo && bytes.length > MAX_BYTES) {
         return { ok: false, content: `Imagem grande demais (${(bytes.length / 1048576).toFixed(1)} MB). O limite e 8 MB - reduza antes de mandar.` };
+      }
+      // content-length pode faltar (resposta em chunks): o tamanho real so se sabe depois de baixar.
+      if (bytes && ehVideo && bytes.length > LIMITE_VIDEO_EXTERNO) {
+        return { ok: false, content: `Video grande demais (${(bytes.length / 1048576).toFixed(1)} MB). Por URL externa o limite e ${LIMITE_VIDEO_EXTERNO / 1048576} MB; acima disso, suba com preparar_envio_imagem.` };
       }
 
       // 2. Quando
@@ -1321,15 +1393,21 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         brandIdArte = ctx.defaultBrandId ?? null;
       }
 
-      // 4. Sobe pro bucket
-      const ext = mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
-      const caminho = `mcp/${ctx.userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-      const { error: upErr } = await ctx.userClient.storage
-        .from("content-images").upload(caminho, bytes, { contentType: mime, upsert: false });
-      if (upErr) return { ok: false, content: `Falha ao guardar a imagem: ${upErr.message}` };
-      const { data: pub } = ctx.userClient.storage.from("content-images").getPublicUrl(caminho);
-      const urlPublica = pub?.publicUrl;
-      if (!urlPublica) return { ok: false, content: "Imagem subiu mas nao consegui a URL publica." };
+      // 4. Sobe pro bucket (o video que ja esta na pasta do usuario nao sobe de novo)
+      let caminho: string | null = null;
+      let urlPublica: string | undefined;
+      if (urlPronta) {
+        urlPublica = urlPronta;
+      } else {
+        const ext = ehVideo ? "mp4" : mime.includes("png") ? "png" : mime.includes("webp") ? "webp" : "jpg";
+        caminho = `mcp/${ctx.userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+        const { error: upErr } = await ctx.userClient.storage
+          .from("content-images").upload(caminho, bytes!, { contentType: mime, upsert: false });
+        if (upErr) return { ok: false, content: `Falha ao guardar o arquivo: ${upErr.message}` };
+        const { data: pub } = ctx.userClient.storage.from("content-images").getPublicUrl(caminho);
+        urlPublica = pub?.publicUrl;
+      }
+      if (!urlPublica) return { ok: false, content: "Arquivo subiu mas nao consegui a URL publica." };
 
       // 5. Cria o conteudo
       const legendaArte = String(input.legenda || "").trim();
@@ -1349,11 +1427,14 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         title: tituloArte,
         caption: legendaArte,
         image_urls: [urlPublica],
-        content_type: "post",
+        // Video segue o formato do generate-video: content_type "video", URL do MP4 em image_urls e em
+        // generation_metadata.video_url. E o content_type que faz o publish-postforme mandar como Reel.
+        content_type: ehVideo ? "video" : "post",
         status: quando ? "scheduled" : "draft",
         scheduled_at: quando,
         brand_id: brandIdArte,
       };
+      if (ehVideo) linha.generation_metadata = { video_url: urlPublica, origem: "agendar_arte" };
       if (plataformasArte.length || contasAlvo.length) {
         if (plataformasArte.length) linha.platform = plataformasArte[0];
         // accountIds PREENCHIDO: o scheduler publica exatamente nessas contas. Deixar vazio faria o
@@ -1366,7 +1447,8 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         .from("generated_contents").insert(linha).select("id").single();
       if (insErr) {
         // Imagem orfa no bucket e lixo barato; conteudo sem imagem seria pior.
-        try { await ctx.userClient.storage.from("content-images").remove([caminho]); } catch (_e) { /* ignora */ }
+        // O video reaproveitado (urlPronta) nao e apagado: o arquivo e do usuario, nao desta chamada.
+        if (caminho) { try { await ctx.userClient.storage.from("content-images").remove([caminho]); } catch (_e) { /* ignora */ } }
         return { ok: false, content: `Falha ao criar o conteudo: ${insErr.message}` };
       }
 
@@ -1376,7 +1458,7 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
         content: quando
           ? `Agendado para ${new Date(quando).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}${onde} (horario de Brasilia). Publica sozinho nessa hora - da pra revisar ou remover no calendario ate la. content_id=${criado.id}`
           : `Salvo como rascunho${onde}, sem data. Agende depois com agendar_conteudo. content_id=${criado.id}`,
-        action_result: { contentId: criado.id, imageUrl: urlPublica, scheduledAt: quando },
+        action_result: { contentId: criado.id, imageUrl: urlPublica, scheduledAt: quando, contentType: ehVideo ? "video" : "post" },
       };
     }
 

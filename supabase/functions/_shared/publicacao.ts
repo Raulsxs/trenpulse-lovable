@@ -334,3 +334,49 @@ export function linhaDoRecorrente(r: Recorrente): string {
   const erro = String(r.last_error || "").replace(/\s+/g, " ").trim();
   return `↻ ${r.name || "Sem nome"} — ${quando} às ${hora} em ${onde} · ${r.active === false ? "pausado" : "ativo"} → recorrente=${r.id}${erro ? ` · ATENÇÃO: ${erro}` : ""}`;
 }
+
+// ─────────────────────────── Corpo do post no Post for Me ───────────────────────────
+
+/** Conteúdo que vai ao ar como vídeo. "reels" é legado: nenhuma função grava mais, mas linha antiga pode ter. */
+export const ehConteudoDeVideo = (contentType: string | null | undefined): boolean =>
+  contentType === "video" || contentType === "reels";
+
+/**
+ * `platform_configurations` do POST /v1/social-posts do Post for Me.
+ *
+ * Instagram tem `placement` ∈ "reels" | "stories" | "timeline" (OpenAPI deles, InstagramConfigurationDto,
+ * conferido em 2026-10-26). Regras:
+ *  - story (content_type "story", ou carrossel de stories) → placement "stories", como sempre foi;
+ *  - vídeo no Instagram (content_type "video" ou "reels") → placement "reels". Antes de 2026-10-26 o
+ *    "reels" caía em "stories": o Reel saía como story e sumia em 24 h;
+ *  - o resto (post, carrossel; e vídeo no LinkedIn, que o Post for Me publica como vídeo nativo sem
+ *    configuração) → sem platform_configurations.
+ */
+export function configuracaoDaPlataforma(
+  platform: string, contentType: string | null | undefined, forceStory = false,
+): Record<string, { placement: string }> | undefined {
+  if (forceStory || contentType === "story") return { [platform]: { placement: "stories" } };
+  if (platform === "instagram" && ehConteudoDeVideo(contentType)) return { instagram: { placement: "reels" } };
+  return undefined;
+}
+
+/** Corpo do POST /v1/social-posts. Puro para o teste ver exatamente o que vai ao Post for Me. */
+export function montarPostBody(p: {
+  platform: string;
+  pfmAccountId: string;
+  caption: string;
+  mediaUrls: string[];
+  contentType: string | null | undefined;
+  forceStory?: boolean;
+  scheduledAt?: string | null;
+}): Record<string, unknown> {
+  const corpo: Record<string, unknown> = {
+    caption: p.caption,
+    social_accounts: [p.pfmAccountId],
+    media: p.mediaUrls.map((url) => ({ url })),
+  };
+  const config = configuracaoDaPlataforma(p.platform, p.contentType, p.forceStory === true);
+  if (config) corpo.platform_configurations = config;
+  if (p.scheduledAt) corpo.scheduled_at = p.scheduledAt;
+  return corpo;
+}
