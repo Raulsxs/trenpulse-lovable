@@ -5,7 +5,8 @@
  * Handles: immediate publish, scheduled publish, multi-platform publish
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { bloqueioPorConexao, contaDoPfm, erroComConexaoVencida, estadoAposPublicar, montarPostBody } from "../_shared/publicacao.ts";
+import { bloqueioPorConexao, contaDoPfm, ehConteudoDeVideo, erroComConexaoVencida, estadoAposPublicar, montarPostBody } from "../_shared/publicacao.ts";
+import { EXTENSAO_DO_FORMATO, MIME_DO_FORMATO, midiasSemMetadado } from "../_shared/sem-metadado.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -147,11 +148,43 @@ Deno.serve(async (req) => {
     // Get media URLs
     const imageUrls = (content.image_urls as string[]) || [];
     const slideImages = (content.slides as any[])?.map((s: any) => s.image_url || s.background_image_url).filter(Boolean) || [];
-    const mediaUrls = imageUrls.length > 0 ? imageUrls : slideImages;
+    let mediaUrls: string[] = imageUrls.length > 0 ? imageUrls : slideImages;
 
     if (mediaUrls.length === 0) {
       return new Response(JSON.stringify({ error: "Conteúdo sem imagem. Gere a imagem primeiro." }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Toda imagem vai ao Post for Me SEM o metadado C2PA/XMP/EXIF (30/10/2026, decisão do Raul, inclusive
+    // foto realista). O selo "gerado por IA" do LinkedIn ("CR") e do Instagram ("AI info") vem do manifesto
+    // C2PA que a OpenAI grava no arquivo, e o Post for Me repassa o arquivo intacto. Aqui é o ponto por onde
+    // passa TODA mídia publicada (upload do usuário, URL externa do MCP, gerador, carrossel pronto), por isso
+    // a limpeza fica aqui e não só nos geradores. Os pixels não mudam; a versão limpa sobe para
+    // generated-images/sem-metadado/ e só a URL enviada muda (a peça no banco fica como está).
+    // NÃO mandamos `is_ai_generated` ao Post for Me (mesma decisão). Vídeo segue como está.
+    if (!ehConteudoDeVideo((content as any).content_type)) {
+      const carimbo = Date.now();
+      mediaUrls = await midiasSemMetadado(mediaUrls, {
+        baixar: async (url) => {
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 20_000);
+          try {
+            const r = await fetch(url, { signal: ctrl.signal });
+            if (!r.ok) return null;
+            return new Uint8Array(await r.arrayBuffer());
+          } finally {
+            clearTimeout(timer);
+          }
+        },
+        subir: async (bytes, formato, i) => {
+          const caminho = `sem-metadado/${contentId}/${carimbo}-${i}.${EXTENSAO_DO_FORMATO[formato]}`;
+          const { error } = await svc.storage.from("generated-images")
+            .upload(caminho, bytes, { contentType: MIME_DO_FORMATO[formato], upsert: true });
+          if (error) throw new Error(error.message);
+          return svc.storage.from("generated-images").getPublicUrl(caminho).data.publicUrl;
+        },
+        log: (m) => console.log(`[publish-postforme] ${m}`),
       });
     }
 

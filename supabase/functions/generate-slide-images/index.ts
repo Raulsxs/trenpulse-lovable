@@ -36,6 +36,8 @@ const CUSTO_IMAGEM_USD: Record<string, number> = {
 // O overlayLogo entra por import DINÂMICO lá embaixo, no único ponto onde é usado. Ver o porquê
 // no comentário da chamada.
 import { assinaComLogo, dispensaLogo, instrucaoDoLogo, instrucaoSemLogo, refsComLogo } from "../_shared/logo-integrado.ts";
+import { EXTENSAO_DO_FORMATO, MIME_DO_FORMATO, limparImagem } from "../_shared/sem-metadado.ts";
+import { REGRA_FOTO_REAL } from "../_shared/regra-foto-real.ts";
 
 async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
   try {
@@ -742,6 +744,11 @@ ${brandColorHint}
         promptText += "\n\n" + instrucaoSemLogo();
       }
 
+      // Sem foto realista de pessoa real nem de fato real (30/10, decisão do Raul): a imagem sai sem o
+      // selo C2PA de IA, então não pode parecer registro verdadeiro. Vale para customPrompt, ilustração
+      // e design completo. A regra mantém a pessoa das referências do dono (photo_backgrounds).
+      promptText += "\n\n" + REGRA_FOTO_REAL;
+
       // Exceção de segurança (modo photo_backgrounds do Maikon): foto pessoal de referência + key
       // Gemini própria → pula OpenRouter E Replicate, deixa o fluxo Gemini/inference.sh provado
       // assumir (preserva melhor a pessoa). NÃO QUEBRAR esse caminho.
@@ -1064,7 +1071,8 @@ async function tryGoogleAIDirect(
 // ══════ GENERATE IMAGE (fallback — skips inference.sh, goes to Google AI or Lovable) ══════
 
 async function generateImage(contentParts: any[]): Promise<string | null> {
-  const promptText = contentParts.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n");
+  // REGRA_FOTO_REAL também aqui: é o caminho da galeria de estilos e do fallback (ver _shared/regra-foto-real.ts).
+  const promptText = contentParts.filter((p: any) => p.type === "text").map((p: any) => p.text).join("\n") + "\n\n" + REGRA_FOTO_REAL;
   const refImages = contentParts.filter((p: any) => p.type === "image_url").map((p: any) => p.image_url?.url).filter(Boolean);
 
   // Tier 1: Google AI Studio shared key — uses native image generation API (reliable)
@@ -1547,14 +1555,25 @@ async function uploadBase64ToStorage(
     : base64Data;
 
   const mimeMatch = base64Data.match(/data:([^;]+);/);
-  const mimeType = mimeMatch ? mimeMatch[1] : "image/png";
-  const ext = mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "png";
+  let mimeType = mimeMatch ? mimeMatch[1] : "image/png";
+  let ext = mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "png";
 
   const binaryString = atob(base64Clean);
-  const bytes = new Uint8Array(binaryString.length);
+  const bruto = new Uint8Array(binaryString.length);
   for (let i = 0; i < binaryString.length; i++) {
-    bytes[i] = binaryString.charCodeAt(i);
+    bruto[i] = binaryString.charCodeAt(i);
   }
+
+  // Sem o metadado C2PA/XMP/EXIF (30/10, decisão do Raul): o LinkedIn e o Instagram leem o manifesto
+  // C2PA da OpenAI e põem o selo "gerado por IA". Os pixels não mudam (ver _shared/sem-metadado.ts).
+  // O formato vem dos bytes: o data URL às vezes diz png e o arquivo é jpeg/webp.
+  const limpa = limparImagem(bruto);
+  const bytes = limpa.bytes;
+  if (limpa.formato !== "desconhecido") {
+    mimeType = MIME_DO_FORMATO[limpa.formato];
+    ext = EXTENSAO_DO_FORMATO[limpa.formato];
+  }
+  if (limpa.mudou) console.log(`[generate-slide-images] metadado removido: ${limpa.removidos.join(", ")}`);
 
   const fileName = `ai-slides/${contentId}/slide-${slideIndex}-${Date.now()}.${ext}`;
 
