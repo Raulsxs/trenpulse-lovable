@@ -1,6 +1,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { fetchAI } from "../_shared/ai-gateway.ts";
+import { limparImagem } from "../_shared/sem-metadado.ts";
 
 async function aiGatewayFetch(body: Record<string, unknown>): Promise<Response> {
   try {
@@ -241,10 +242,12 @@ async function generateAndUpload(
       const ext = mimeType.includes("jpeg") || mimeType.includes("jpg") ? "jpg" : "png";
 
       const binaryString = atob(base64Clean);
-      const bytes = new Uint8Array(binaryString.length);
+      const bruto = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+        bruto[i] = binaryString.charCodeAt(i);
       }
+      // Sem o metadado C2PA de IA (30/10, decisão do Raul; ver _shared/sem-metadado.ts). Pixels intactos.
+      const bytes = limparImagem(bruto).bytes;
 
       const fileName = `style-gallery/${styleId}/${format}-${role}-${Date.now()}.${ext}`;
 

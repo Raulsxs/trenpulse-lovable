@@ -1,6 +1,7 @@
 import { temaDeFrase } from "./frase.ts";
 import { avisoDeValidade, instanteSP, legendaAcimaDoLimite, legendaQueSai, linhaDaConexao, linhaDoRecorrente, motivoDaFalha, patchDeLegenda, precisaReconectar, recusaPorContaVencida, redesDaPeca } from "./publicacao.ts";
 import { acharMarca, linhaDaMarca, recusaDeMarca } from "./marca-pedida.ts";
+import { limparImagem } from "./sem-metadado.ts";
 // agent-tools.ts — catálogo de ferramentas do orquestrador agêntico (ai-agent).
 // Cada tool é um WRAPPER sobre uma edge function que JÁ existe (ai-chat via intent_hint,
 // publish-postforme, connect-social, scrape-trends) — o agente COMPÕE, não reimplementa.
@@ -649,10 +650,14 @@ async function guardarArquivoDaArte(
   ctx: ToolCtx, a: { bytes: Uint8Array | null; mime: string; urlPronta: string | null },
 ): Promise<{ ok: true; url: string; caminho: string | null } | { ok: false; erro: string }> {
   if (a.urlPronta) return { ok: true, url: a.urlPronta, caminho: null };
+  // Imagem sem o metadado C2PA/XMP/EXIF (30/10, decisão do Raul): o selo "gerado por IA" das redes vem
+  // dele. Pixels intactos; vídeo passa direto (ver sem-metadado.ts). A urlPronta acima é limpa na hora
+  // de publicar, no publish-postforme.
+  const bytes = a.mime === "video/mp4" ? a.bytes! : limparImagem(a.bytes!).bytes;
   const ext = a.mime === "video/mp4" ? "mp4" : a.mime.includes("png") ? "png" : a.mime.includes("webp") ? "webp" : "jpg";
   const caminho = `mcp/${ctx.userId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
   const { error: upErr } = await ctx.userClient.storage
-    .from("content-images").upload(caminho, a.bytes!, { contentType: a.mime, upsert: false });
+    .from("content-images").upload(caminho, bytes, { contentType: a.mime, upsert: false });
   if (upErr) return { ok: false, erro: `Falha ao guardar o arquivo: ${upErr.message}` };
   const { data: pub } = ctx.userClient.storage.from("content-images").getPublicUrl(caminho);
   if (!pub?.publicUrl) return { ok: false, erro: "Arquivo subiu mas nao consegui a URL publica." };
