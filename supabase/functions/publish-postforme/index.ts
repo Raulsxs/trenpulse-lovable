@@ -5,7 +5,7 @@
  * Handles: immediate publish, scheduled publish, multi-platform publish
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { bloqueioPorConexao, contaDoPfm, ehConteudoDeVideo, erroComConexaoVencida, estadoAposPublicar, montarPostBody } from "../_shared/publicacao.ts";
+import { bloqueioPorConexao, contaDoPfm, ehConteudoDeVideo, estadoAposPublicar, falhaDaPublicacao, montarPostBody, semSegredo } from "../_shared/publicacao.ts";
 import { EXTENSAO_DO_FORMATO, MIME_DO_FORMATO, midiasSemMetadado } from "../_shared/sem-metadado.ts";
 
 const corsHeaders = {
@@ -138,7 +138,8 @@ Deno.serve(async (req) => {
 
     // Determine which platforms to publish to
     const targetPlatforms = platforms || [content.platform || "instagram"];
-    const results: Array<{ platform: string; success: boolean; postId?: string; error?: string }> = [];
+    // permanent = só o usuário resolve (reconectar a conta): o agendador não tenta de novo.
+    const results: Array<{ platform: string; success: boolean; postId?: string; error?: string; permanent?: boolean }> = [];
 
     // Build caption with hashtags
     const platformCaptions = content.platform_captions as Record<string, string> | null;
@@ -245,13 +246,13 @@ Deno.serve(async (req) => {
     const baseContentType = (content as any).content_type || "post";
 
     // Helper: publish one PFM social-post and poll for a concrete verdict.
-    // Returns { success, postId?, error?, pending?, url? }.
+    // Returns { success, postId?, error?, pending?, url?, permanent? }.
     const publishOne = async (
       target: { platform: string; pfm_account_id: string; expires_at?: string | null; renovavel?: boolean },
       mediaList: string[],
       forceStory: boolean,
       slideIdxLog: string,
-    ): Promise<{ success: boolean; postId?: string; error?: string; pending?: boolean; url?: string }> => {
+    ): Promise<{ success: boolean; postId?: string; error?: string; pending?: boolean; url?: string; permanent?: boolean }> => {
       // Acesso vencido SEM como renovar = a plataforma rejeita com 400 genérico ("Request failed with
       // status code 400") e o usuário não entende: detecta ANTES e devolve instrução clara de reconexão.
       // Conta RENOVÁVEL (refresh token válido) passa: o Post for Me renova o acesso na hora de publicar.
@@ -259,7 +260,7 @@ Deno.serve(async (req) => {
       const bloqueio = bloqueioPorConexao(target);
       if (bloqueio) {
         console.warn(`[publish-postforme] ${slideIdxLog}conexão VENCIDA sem renovação p/ ${target.platform} (${target.pfm_account_id}) em ${target.expires_at}`);
-        return { success: false, error: bloqueio };
+        return { success: false, error: bloqueio, permanent: true };
       }
       if (target.expires_at && new Date(target.expires_at).getTime() < Date.now()) {
         console.log(`[publish-postforme] ${slideIdxLog}acesso vencido em ${target.expires_at}, renovável p/ ${target.platform} (${target.pfm_account_id}): o Post for Me renova`);
@@ -294,7 +295,7 @@ Deno.serve(async (req) => {
 
       if (!pfmResp.ok) {
         const errText = await pfmResp.text();
-        console.error(`[publish-postforme] ${slideIdxLog}rejected by PFM status=${pfmResp.status} body=${errText}`);
+        console.error(`[publish-postforme] ${slideIdxLog}rejected by PFM status=${pfmResp.status} body=${semSegredo(errText)}`);
         let friendlyError = `Erro ${pfmResp.status}`;
         try {
           const errJson = JSON.parse(errText);
@@ -303,7 +304,9 @@ Deno.serve(async (req) => {
         } catch {
           if (errText) friendlyError = `${friendlyError}: ${errText.substring(0, 200)}`;
         }
-        return { success: false, error: erroComConexaoVencida(friendlyError, target) };
+        // Sessão invalidada / acesso revogado / vencido sem renovação → instrução de reconectar e permanent.
+        const falha = falhaDaPublicacao(friendlyError, target);
+        return { success: false, error: falha.erro, ...(falha.permanente ? { permanent: true } : {}) };
       }
 
       const pfmData = await pfmResp.json();
@@ -346,8 +349,11 @@ Deno.serve(async (req) => {
             const errMsg = typeof ours.error === "string"
               ? ours.error
               : (ours.error?.message || JSON.stringify(ours.error)?.substring(0, 200) || "Publicação rejeitada pela plataforma");
-            console.error(`[publish-postforme] ${slideIdxLog}platform rejected: ${errMsg}`);
-            return { success: false, error: erroComConexaoVencida(errMsg, target) };
+            // Caso da peça #40 (2026-11-06): a sessão da Meta invalidada chega AQUI, com a conta
+            // `connected` no cache e o acesso no prazo. falhaDaPublicacao reconhece pelo texto.
+            const falha = falhaDaPublicacao(errMsg, target);
+            console.error(`[publish-postforme] ${slideIdxLog}platform rejected${falha.permanente ? " (permanente)" : ""}: ${semSegredo(errMsg)}`);
+            return { success: false, error: falha.erro, ...(falha.permanente ? { permanent: true } : {}) };
           }
         } catch (pollErr: any) {
           console.warn(`[publish-postforme] ${slideIdxLog}poll ${attempt} failed: ${pollErr?.name === "AbortError" ? "timeout" : pollErr?.message}`);
@@ -368,7 +374,7 @@ Deno.serve(async (req) => {
       try {
         if (isStoryCarousel && mediaUrls.length > 1) {
           console.log(`[publish-postforme] Story carousel on ${target.platform}: ${mediaUrls.length} stories sequentially`);
-          const sliceResults: Array<{ success: boolean; postId?: string; error?: string; pending?: boolean }> = [];
+          const sliceResults: Array<{ success: boolean; postId?: string; error?: string; pending?: boolean; permanent?: boolean }> = [];
           for (let i = 0; i < mediaUrls.length; i++) {
             const r = await publishOne(target, [mediaUrls[i]], true, `[story ${i + 1}/${mediaUrls.length}] `);
             sliceResults.push(r);
@@ -404,6 +410,9 @@ Deno.serve(async (req) => {
               error: successes > 0
                 ? `${successes} de ${mediaUrls.length} stories publicados; ${failed.length} falharam: ${failed[0]?.error || ""}`
                 : (failed[0]?.error || "Falha ao publicar stories"),
+              // Não repetir: com algum story já no ar, outra tentativa republicaria a sequência inteira
+              // (duplicando os que saíram); sem nenhum, a recusa de acesso só volta reconectando.
+              ...(successes > 0 || failed[0]?.permanent ? { permanent: true } : {}),
             });
           }
         } else {
