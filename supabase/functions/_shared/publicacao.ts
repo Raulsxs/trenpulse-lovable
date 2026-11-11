@@ -147,21 +147,26 @@ export function erroComConexaoVencida(erro: string, alvo: Alvo, agora = Date.now
 // revisão de segurança, e o Post for Me devolve "Account needs to be reconnected: Error validating access
 // token: The session has been invalidated...". Também a permissão revogada e o refresh recusado. Nenhuma
 // nova tentativa publica: só o dono reconectando. Erro de mídia, legenda ou rede fora do ar não casa.
-const ACESSO_ENCERRADO = /needs to be reconnected|session has been invalidated|error validating access token|has not authorized application|(permission|token|access)s? (has|have|was) been revoked|invalid_grant/i;
+// Mesmo caso com outras palavras: "Invalid OAuth access token" (Meta, código 190) e "The token used in the
+// request has been revoked by the user" (LinkedIn, REVOKED_ACCESS_TOKEN).
+const ACESSO_ENCERRADO = /needs to be reconnected|session has been invalidated|error validating access token|invalid oauth (2\.0 )?access token|has not authorized application|revoked_access_token|\b(token|access|permissions?|authori[sz]ation)\b[^.]{0,40}\b(has|have|was|were) been revoked|invalid_grant/i;
 
 // Trecho com cara de credencial: token da Meta (EAA…), JWT, `access_token=…`, `Bearer …` e sequências
 // longas sem espaço. O erro vai para `publish_error`, para a tela e para os logs: nenhum deles guarda segredo.
 // O separador exige `=` ou JSON (`"token":"…"`): o texto da Meta tem "access token: The session…" e
 // "The" não é segredo.
-const SEGREDO = /\b(access_token|refresh_token|client_secret|token)(=|["']\s*:\s*["'])[^\s"'&,}]+|Bearer\s+[^\s"',}]+|\bEAA[A-Za-z0-9]{10,}|[A-Za-z0-9_\-.]{40,}/gi;
+const SEGREDO = /\b(access_token|refresh_token|client_secret|api_?key|password|token)(=|["']\s*:\s*["'])[^\s"'&,}]+|\b(Bearer)\s+[^\s"',}]+|\bEAA[A-Za-z0-9]{10,}|[A-Za-z0-9_\-.]{40,}/gi;
 
-/** O texto de erro sem credencial nenhuma e numa linha só, curto o bastante para gravar e mostrar. */
-export function semSegredo(texto: string): string {
+/**
+ * O texto de erro sem credencial nenhuma e numa linha só, curto o bastante para gravar e mostrar. `max`
+ * maior serve a quem limpa um texto que já traz a instrução de reconectar na frente (o agendador).
+ */
+export function semSegredo(texto: string, max = 400): string {
   const limpo = String(texto || "")
-    .replace(SEGREDO, (m, chave, sep) => (chave ? `${chave}${sep}[oculto]` : m.startsWith("Bearer") ? "Bearer [oculto]" : "[oculto]"))
+    .replace(SEGREDO, (_m, chave, sep, esquema) => (chave ? `${chave}${sep}[oculto]` : esquema ? `${esquema} [oculto]` : "[oculto]"))
     .replace(/\s+/g, " ")
     .trim();
-  return limpo.length > 400 ? `${limpo.slice(0, 400)}…` : limpo;
+  return limpo.length > max ? `${limpo.slice(0, max)}…` : limpo;
 }
 
 /** Falha de publicação numa conta, já dizendo se uma nova tentativa automática pode dar certo. */
@@ -184,7 +189,7 @@ export function falhaDaPublicacao(erro: string, alvo: Alvo, agora = Date.now()):
   if (ACESSO_ENCERRADO.test(erro)) {
     return {
       permanente: true,
-      erro: `A conexão com o ${nomeDaRede(alvo.platform)} foi encerrada pela rede (sessão invalidada: troca de senha ou verificação de segurança) e precisa ser refeita. Reconecte a conta em Perfil → Conexões e tente publicar de novo. (${detalhe})`,
+      erro: `A conexão com o ${nomeDaRede(alvo.platform)} foi encerrada pela rede antes do prazo (sessão invalidada por troca de senha ou verificação de segurança, ou permissão revogada) e só volta reconectando: nova tentativa automática não resolve. Reconecte a conta em Perfil → Conexões e tente publicar de novo. (${detalhe})`,
     };
   }
   const vencida = erroComConexaoVencida(detalhe, alvo, agora);

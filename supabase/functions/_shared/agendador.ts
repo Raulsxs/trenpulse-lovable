@@ -1,6 +1,12 @@
 // agendador.ts — uma peça vencida, do lock à gravação do resultado. O instagram-scheduler chama isto para
 // cada peça com status="scheduled" e scheduled_at no passado. Sem rede e sem Deno: o banco e o publicador
 // entram por parâmetro, e os testes rodam no `npm test` (src/test/agendador-falha-permanente.test.ts).
+import { semSegredo } from "./publicacao.ts";
+
+// Tudo o que vai para publish_error e para o log passa por aqui: o publicador já limpa o que vem do Post for
+// Me, mas o erro geral dele e o erro de rede ao chamá-lo chegam crus. Limite folgado: o motivo permanente já
+// tem a instrução de reconectar (~300 caracteres) antes do detalhe técnico.
+const limpo = (t: unknown): string => semSegredo(String(t ?? ""), 1200);
 
 /** Máximo de tentativas automáticas por peça. A consulta do agendador só pega `publish_attempts < MAX`. */
 export const MAX_TENTATIVAS = 3;
@@ -55,10 +61,10 @@ export function desfechoDaTentativa(resp: { ok: boolean; data: any }, tentativa:
   if (resp.ok && results.some((r) => r?.pending === true)) return { status: "pending" };
 
   const falhas = results.filter((r) => r && !r.success && r.pending !== true);
-  const erro = String(resp.data?.error || falhas[0]?.error || "Erro desconhecido");
+  const erro = limpo(resp.data?.error || falhas[0]?.error || "Erro desconhecido");
 
   if (resp.ok && falhas.length && falhas.every((r) => r.permanent === true)) {
-    const motivos = [...new Set(falhas.map((r) => String(r.error || "")).filter(Boolean))].join(" · ") || erro;
+    const motivos = [...new Set(falhas.map((r) => limpo(r.error)).filter(Boolean))].join(" · ") || erro;
     return { status: "failed", permanente: true, publish_error: `Falha permanente, sem nova tentativa automática: ${motivos}` };
   }
   if (tentativa >= MAX_TENTATIVAS) {
@@ -120,7 +126,7 @@ export async function publicarPecaVencida(
   } catch (err: any) {
     // Sem resposta legível do publicador: passageiro, como sempre foi.
     const d = desfechoDaTentativa({ ok: false, data: { error: err?.message || "erro ao chamar o publicador" } }, tentativa);
-    log(`${c.id}: erro ao chamar o publicador (tentativa ${tentativa}/${MAX_TENTATIVAS}): ${err?.message}`);
+    log(`${c.id}: erro ao chamar o publicador (tentativa ${tentativa}/${MAX_TENTATIVAS}): ${limpo(err?.message)}`);
     await gravar({ status: d.status, publish_error: d.publish_error });
     return { id: c.id, status: d.status, error: d.publish_error };
   }

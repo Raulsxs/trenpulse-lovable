@@ -289,8 +289,8 @@ Deno.serve(async (req) => {
           body: JSON.stringify(postBody),
         });
       } catch (netErr: any) {
-        console.error(`[publish-postforme] ${slideIdxLog}network error: ${netErr?.message}`);
-        return { success: false, error: netErr?.message || "Erro de rede" };
+        console.error(`[publish-postforme] ${slideIdxLog}network error: ${semSegredo(netErr?.message || "")}`);
+        return { success: false, error: semSegredo(netErr?.message || "") || "Erro de rede" };
       }
 
       if (!pfmResp.ok) {
@@ -421,8 +421,8 @@ Deno.serve(async (req) => {
           results.push({ platform: target.platform, accountId: target.pfm_account_id, ...r } as any);
         }
       } catch (pubErr: any) {
-        console.error(`[publish-postforme] Error on ${target.platform}:`, pubErr?.message);
-        results.push({ platform: target.platform, success: false, error: pubErr?.message });
+        console.error(`[publish-postforme] Error on ${target.platform}:`, semSegredo(pubErr?.message || ""));
+        results.push({ platform: target.platform, success: false, error: semSegredo(pubErr?.message || "") || "Erro ao publicar" });
       }
     }
 
@@ -465,8 +465,9 @@ Deno.serve(async (req) => {
     });
 
   } catch (err: any) {
-    console.error("[publish-postforme] Error:", err);
-    return new Response(JSON.stringify({ error: err.message || "Internal error" }), {
+    // Só a mensagem, limpa: o objeto inteiro do erro pode carregar o header Authorization da chamada.
+    console.error("[publish-postforme] Error:", semSegredo(err?.message || String(err)));
+    return new Response(JSON.stringify({ error: semSegredo(err?.message || "") || "Internal error" }), {
       status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }
