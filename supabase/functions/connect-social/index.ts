@@ -4,6 +4,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { contaDoPfm } from "../_shared/publicacao.ts";
+import { listarContasPfm } from "../_shared/pfm-contas.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -71,23 +72,19 @@ Deno.serve(async (req) => {
         //   2. Devolver lista vazia em caso de ERRO é pior que devolver erro: o usuário lê "nenhuma
         //      conta conectada", acha que perdeu as conexões e vai reconectar tudo à toa. O front
         //      precisa poder distinguir "você não tem contas" de "não consegui verificar agora".
-        let pfmResp: Response | null = null;
+        // 3. A lista é paginada (50 por padrão) e a chave é uma só para todos os usuários: ler só a
+        //    primeira página escondia as contas mais novas quando o total passasse de 50. listarContasPfm
+        //    lê todas as páginas e falha inteira se uma falhar (nunca lista parcial).
+        let lista: Awaited<ReturnType<typeof listarContasPfm>> | null = null;
         for (let attempt = 0; attempt < 3; attempt++) {
           if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 700));
-          try {
-            pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts", {
-              headers: { "Authorization": `Bearer ${pfmApiKey}` },
-            });
-            if (pfmResp.ok) break;
-            console.warn(`[connect-social] PFM HTTP ${pfmResp.status} (tentativa ${attempt + 1}/3)`);
-          } catch (e: any) {
-            console.warn(`[connect-social] PFM rede falhou (tentativa ${attempt + 1}/3): ${e?.message}`);
-            pfmResp = null;
-          }
+          lista = await listarContasPfm(pfmApiKey);
+          if (lista.ok) break;
+          console.warn(`[connect-social] PFM ${lista.motivo} (tentativa ${attempt + 1}/3)`);
         }
 
-        if (!pfmResp || !pfmResp.ok) {
-          console.error(`[connect-social] PFM indisponível após 3 tentativas: ${pfmResp?.status ?? "sem resposta"}`);
+        if (!lista || !lista.ok) {
+          console.error(`[connect-social] PFM indisponível após 3 tentativas: ${lista && !lista.ok ? lista.motivo : "sem resposta"}`);
           return respond({
             connections: [],
             error: "pfm_unavailable",
@@ -95,8 +92,7 @@ Deno.serve(async (req) => {
           });
         }
 
-        const pfmData = await pfmResp.json();
-        const allAccounts = pfmData?.data || [];
+        const allAccounts = lista.contas;
 
         // CRITICAL: filtro STRICT por external_id evita vazamento de contas entre users.
         // Antes: contas sem external_id ficavam visiveis pra todos (bug Maikon -> Raul).

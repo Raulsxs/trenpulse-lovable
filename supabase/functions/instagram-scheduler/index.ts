@@ -7,6 +7,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { alvosDoRecorrente, contaDoPfm, type AlvosDoRecorrente } from "../_shared/publicacao.ts";
+import { listarContasPfm } from "../_shared/pfm-contas.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -169,12 +170,13 @@ Deno.serve(async (req) => {
         const pfmKey = Deno.env.get("POSTFORME_API_KEY");
         if (pfmKey) {
           try {
-            const r = await fetch("https://api.postforme.dev/v1/social-accounts", { headers: { Authorization: `Bearer ${pfmKey}` } });
-            if (r.ok) {
-              const d = await r.json();
-              contasPfm = Array.isArray(d?.data) ? d.data : null;
+            // Todas as páginas (50 por página, contas de todos os usuários): com só a primeira, conta
+            // nova além da 50ª pareceria "não conectada" e o recorrente não teria em quem publicar.
+            const lista = await listarContasPfm(pfmKey);
+            if (lista.ok) {
+              contasPfm = lista.contas;
             } else {
-              console.warn(`[scheduler] recorrentes: Post for Me HTTP ${r.status} — seguindo sem conferir as contas`);
+              console.warn(`[scheduler] recorrentes: Post for Me ${lista.motivo} — seguindo sem conferir as contas`);
             }
           } catch (e: any) {
             console.warn("[scheduler] recorrentes: Post for Me fora do ar —", e?.message);
