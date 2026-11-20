@@ -11,7 +11,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
-import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload, ChevronDown, Palette, Newspaper, Smartphone, MessageSquareQuote, Linkedin, HelpCircle, PlayCircle } from "lucide-react";
+import { Sparkles, Send, Loader2, Paperclip, X, Bot, Wand2, Coins, Square, Plus, Check, AlertTriangle, Image as ImageIcon, LayoutGrid, CalendarClock, ListChecks, FileText, Upload, ChevronDown, Palette, Newspaper, Smartphone, MessageSquareQuote, Linkedin, HelpCircle, PlayCircle, Film } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import ActionCard from "@/components/chat/ActionCard";
 import ConfirmAction from "@/components/chat/ConfirmAction";
@@ -107,6 +107,10 @@ export default function AgentChat() {
   const [brandId, setBrandId] = useState<string>(() => { try { return localStorage.getItem("tp_agent_brand") || ""; } catch { return ""; } });
   const [model, setModel] = useState<string>(() => { try { return localStorage.getItem("tp_agent_model") || "gpt-image-2"; } catch { return "gpt-image-2"; } });
   const [photos, setPhotos] = useState<string[]>([]);
+  // Vídeo MP4 pronto anexado (2026-11-20): não vai como imagem para o modelo (ele não enxerga vídeo),
+  // vai como URL no texto, para o assistente agendar/publicar com agendar_arte. Antes o anexo só aceitava
+  // imagem e documento, e o agente do Maikon que operava a tela concluiu que vídeo não dava.
+  const [videos, setVideos] = useState<{ name: string; url: string }[]>([]);
   const [uploading, setUploading] = useState(false);
   // Documento (PDF/DOCX/TXT/MD) anexado como briefing — injeta o texto na próxima mensagem.
   const [doc, setDoc] = useState<{ name: string; text: string } | null>(null);
@@ -354,18 +358,27 @@ export default function AgentChat() {
   async function handleSend() {
     const text = input.trim();
     // Permite enviar só com documento anexado (sem digitar) — o briefing carrega o pedido.
-    if ((!text && !doc) || sending) return;
+    if ((!text && !doc && !videos.length) || sending) return;
     setInput("");
     const photosNow = [...photos];
     setPhotos([]);
     const docNow = doc;
     setDoc(null);
+    const videosNow = [...videos];
+    setVideos([]);
     // Texto que a IA vê: o digitado + o conteúdo do documento no padrão """...""" (o agente já lê isso).
-    const sendText = docNow
+    let sendText = docNow
       ? `${text || `Use o documento "${docNow.name}" como base para criar o conteúdo.`}\n\nDOCUMENTO "${docNow.name}":\n"""\n${docNow.text}\n"""`
       : text;
+    // Vídeo: o assistente recebe a URL e o caminho certo. Sem data o agendar_arte grava rascunho, e
+    // publicar/agendar_conteudo passam pela confirmação do app (agendar_arte com data não passaria).
+    if (videosNow.length) {
+      const lista = videosNow.map((v) => `- "${v.name}": ${v.url}`).join("\n");
+      sendText = `${sendText || "Quero publicar este vídeo."}\n\nVÍDEO MP4 PRONTO ANEXADO (não gere nada novo):\n${lista}\n[SISTEMA: um vídeo por post. Chame agendar_arte com imagem = a URL do vídeo, a legenda e a marca, SEM data_hora_iso (vira rascunho). Depois use publicar (agora) ou agendar_conteudo (data) com o content_id devolvido. Se faltar legenda, data ou qual conta, pergunte antes. No Instagram o vídeo sai como Reel.]`;
+    }
     // No balão do usuário mostramos o texto digitado + um marcador do anexo (não o texto cru gigante).
-    const bubble = docNow ? `${text}${text ? "\n\n" : ""}📎 ${docNow.name}`.trim() : text;
+    const marcas = [...(docNow ? [`📎 ${docNow.name}`] : []), ...videosNow.map((v) => `🎬 ${v.name}`)];
+    const bubble = marcas.length ? `${text}${text ? "\n\n" : ""}${marcas.join("\n")}`.trim() : text;
     setUiMessages((ms) => [...ms, { id: newId(), role: "user", text: bubble, tools: [] }]);
     const prevConvo = convo.current; // estado canônico ANTES do turno otimista — alvo do rollback se falhar
     convo.current = [...convo.current, { role: "user", content: sendText }];
@@ -434,6 +447,33 @@ export default function AgentChat() {
     }
   }
 
+  // MP4 vai para o mesmo bucket das imagens; o Content-Type video/mp4 gravado no Storage é o que faz o
+  // agendar_arte tratar o arquivo como vídeo (Reel). Teto de 50 MB: o mesmo do agendar_arte por URL.
+  async function uploadVideos(files: File[]) {
+    const grandes = files.filter((f) => f.size > 50 * 1024 * 1024);
+    if (grandes.length) toast.error(`Vídeo acima de 50 MB não vai: ${grandes.map((f) => f.name).join(", ")}`);
+    const ok = files.filter((f) => f.size <= 50 * 1024 * 1024);
+    if (!ok.length) return;
+    setUploading(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Não autenticado");
+      const novos: { name: string; url: string }[] = [];
+      for (const f of ok) {
+        const path = `${user.id}/agent/${Date.now()}-${Math.round(Math.random() * 1e6)}.mp4`;
+        const { error } = await supabase.storage.from("content-images").upload(path, f, { contentType: "video/mp4", upsert: true });
+        if (error) throw error;
+        novos.push({ name: f.name, url: supabase.storage.from("content-images").getPublicUrl(path).data.publicUrl });
+      }
+      setVideos((v) => [...v, ...novos].slice(0, 5));
+      toast.success(novos.length === 1 ? "Vídeo anexado. Diga quando e onde publicar." : `${novos.length} vídeos anexados.`);
+    } catch (err: any) {
+      toast.error("Erro no upload do vídeo: " + (err.message || "tente de novo"));
+    } finally {
+      setUploading(false);
+    }
+  }
+
   async function extractDoc(file: File) {
     setExtractingDoc(true);
     try {
@@ -452,10 +492,14 @@ export default function AgentChat() {
   async function handleFiles(files: File[]) {
     if (!files.length) return;
     const imgs = files.filter((f) => f.type.startsWith("image/"));
+    const mp4s = files.filter((f) => f.type === "video/mp4" || /\.mp4$/i.test(f.name));
+    const outrosVideos = files.filter((f) => f.type.startsWith("video/") && !mp4s.includes(f));
     const docFile = files.find(isSupportedDocument);
     if (imgs.length) await uploadImages(imgs);
+    if (mp4s.length) await uploadVideos(mp4s);
     if (docFile) await extractDoc(docFile);
-    if (!imgs.length && !docFile) toast.error("Formato não suportado. Use imagem, PDF, DOCX, TXT ou MD.");
+    if (outrosVideos.length) toast.error("Vídeo precisa ser MP4.");
+    else if (!imgs.length && !mp4s.length && !docFile) toast.error("Formato não suportado. Use imagem, vídeo MP4, PDF, DOCX, TXT ou MD.");
   }
 
   function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -492,7 +536,7 @@ export default function AgentChat() {
         <div className="absolute inset-0 z-30 flex items-center justify-center bg-primary/5 backdrop-blur-sm border-2 border-dashed border-primary/50 rounded-xl pointer-events-none">
           <div className="flex flex-col items-center gap-2 text-primary">
             <Upload className="w-8 h-8" />
-            <p className="text-sm font-semibold">Solte aqui — imagem, PDF, artigo ou documento</p>
+            <p className="text-sm font-semibold">Solte aqui — imagem, vídeo MP4, PDF ou documento</p>
           </div>
         </div>
       )}
@@ -637,12 +681,19 @@ export default function AgentChat() {
             );
           })}
         </div>
-        {(photos.length > 0 || doc || extractingDoc) && (
+        {(photos.length > 0 || videos.length > 0 || doc || extractingDoc) && (
           <div className="flex gap-2 flex-wrap items-center">
             {photos.map((u, i) => (
               <div key={i} className="relative">
                 <img src={u} alt="" className="w-12 h-12 rounded-md object-cover border border-border" />
                 <button onClick={() => setPhotos(photos.filter((_, j) => j !== i))} className="absolute -top-1.5 -right-1.5 bg-background border border-border rounded-full p-0.5 shadow-sm hover:text-destructive transition-colors"><X className="w-3 h-3" /></button>
+              </div>
+            ))}
+            {videos.map((v, i) => (
+              <div key={v.url} className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-md border border-border bg-card text-xs">
+                <Film className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="max-w-[160px] truncate" title={v.name}>{v.name}</span>
+                <button type="button" aria-label={`Remover ${v.name}`} onClick={() => setVideos(videos.filter((_, j) => j !== i))} className="hover:text-destructive transition-colors"><X className="w-3 h-3" /></button>
               </div>
             ))}
             {extractingDoc && (
@@ -755,14 +806,14 @@ export default function AgentChat() {
             <label className="inline-flex items-center gap-1 h-8 text-xs text-muted-foreground border border-border rounded-md px-2 cursor-pointer hover:border-primary/40 hover:text-foreground transition-colors">
               {uploading || extractingDoc ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Paperclip className="w-3.5 h-3.5" />}
               <span className="hidden sm:inline">Anexar</span>
-              <input type="file" accept="image/*,.pdf,.docx,.txt,.md" multiple className="hidden" onChange={handleUpload} disabled={uploading || extractingDoc} />
+              <input type="file" accept="image/*,video/mp4,.mp4,.pdf,.docx,.txt,.md" multiple className="hidden" onChange={handleUpload} disabled={uploading || extractingDoc} />
             </label>
             {sending ? (
               <Button onClick={handleStop} variant="outline" size="sm" className="ml-auto h-8 gap-1.5"><Square className="w-3.5 h-3.5" /> Parar</Button>
             ) : (
               <div className="ml-auto flex items-center gap-1.5">
                 <Button onClick={handleEnqueue} disabled={!input.trim()} variant="outline" size="sm" className="h-8 gap-1.5" title="Adicionar à fila — gera em segundo plano, um por vez"><ListChecks className="w-4 h-4" /><span className="hidden sm:inline">Fila</span></Button>
-                <Button onClick={handleSend} disabled={!input.trim() && !doc} size="sm" className="h-8 gap-1.5 transition-all hover:shadow-md active:scale-95"><Send className="w-4 h-4" /> Enviar</Button>
+                <Button onClick={handleSend} disabled={!input.trim() && !doc && !videos.length} size="sm" className="h-8 gap-1.5 transition-all hover:shadow-md active:scale-95"><Send className="w-4 h-4" /> Enviar</Button>
               </div>
             )}
           </div>
