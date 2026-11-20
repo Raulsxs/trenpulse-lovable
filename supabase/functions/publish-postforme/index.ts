@@ -6,6 +6,7 @@
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { bloqueioPorConexao, contaDoPfm, ehConteudoDeVideo, erroComConexaoVencida, estadoAposPublicar, montarPostBody } from "../_shared/publicacao.ts";
+import { listarContasPfm } from "../_shared/pfm-contas.ts";
 import { EXTENSAO_DO_FORMATO, MIME_DO_FORMATO, midiasSemMetadado } from "../_shared/sem-metadado.ts";
 
 const corsHeaders = {
@@ -106,14 +107,11 @@ Deno.serve(async (req) => {
     if (dbConnections?.length) {
       connections = dbConnections;
     } else {
-      // DB empty — try PFM API directly
+      // DB empty — try PFM API directly (todas as páginas: a lista vem de 50 em 50 e é de todos os usuários)
       try {
-        const pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts", {
-          headers: { "Authorization": `Bearer ${pfmApiKey}` },
-        });
-        if (pfmResp.ok) {
-          const pfmData = await pfmResp.json();
-          const pfmAccounts = Array.isArray(pfmData?.data) ? pfmData.data : [];
+        const lista = await listarContasPfm(pfmApiKey);
+        if (lista.ok) {
+          const pfmAccounts = lista.contas;
           // STRICT: exige external_id === userId. Antes aceitava unowned (sem external_id),
           // o que vazava contas do Raul pra publicacoes do Maikon (bug 2026-05-09).
           connections = pfmAccounts
@@ -123,7 +121,7 @@ Deno.serve(async (req) => {
             .map((a: any) => contaDoPfm(a, userId as string));
           console.log(`[publish-postforme] Loaded ${connections.length} accounts from PFM API (DB was empty) for user ${userId}`);
         } else {
-          console.warn(`[publish-postforme] PFM fallback HTTP ${pfmResp.status}`);
+          console.warn(`[publish-postforme] PFM fallback ${lista.motivo}`);
         }
       } catch (e: any) {
         console.warn("[publish-postforme] PFM fallback failed:", e?.message);
@@ -201,20 +199,17 @@ Deno.serve(async (req) => {
       const missing = accountIds.filter((id: string) => !pool.find((c: any) => c.pfm_account_id === id));
       if (missing.length) {
         try {
-          const pfmResp = await fetch("https://api.postforme.dev/v1/social-accounts", {
-            headers: { "Authorization": `Bearer ${pfmApiKey}` },
-          });
-          if (pfmResp.ok) {
-            const pfmData = await pfmResp.json();
+          const lista = await listarContasPfm(pfmApiKey);
+          if (lista.ok) {
             const known = new Set(pool.map((c: any) => c.pfm_account_id));
-            const live = (Array.isArray(pfmData?.data) ? pfmData.data : [])
+            const live = lista.contas
               .filter((a: any) => a.status === "connected" && a.external_id === userId)
               .map((a: any) => contaDoPfm(a, userId as string))
               .filter((c: any) => !known.has(c.pfm_account_id));
             if (live.length) pool = [...pool, ...live];
             console.log(`[publish-postforme] resolved ${missing.length} selected id(s) via live PFM; pool now ${pool.length}`);
           } else {
-            console.warn(`[publish-postforme] live PFM resolve HTTP ${pfmResp.status}`);
+            console.warn(`[publish-postforme] live PFM resolve ${lista.motivo}`);
           }
         } catch (e: any) {
           console.warn("[publish-postforme] live PFM resolve failed:", e?.message);
