@@ -47,6 +47,93 @@ export const TOOL_ACOMPANHAR = {
  */
 export const FERRAMENTAS_IMEDIATAS = new Set(["agendar_conteudo", "agendar_arte", "desagendar_conteudo"]);
 
+/* ════════════════════════ Arquivo da conversa do ChatGPT ════════════════════════
+ *
+ * POR QUE EXISTE (2026-11-20): o Maikon usa o agente do ChatGPT. O vídeo pronto estava NA CONVERSA e o
+ * agente respondeu que não tinha como mandá-lo: agendar_arte pedia URL pública, e o caminho do
+ * preparar_envio_imagem exige terminal com internet, que o ChatGPT não tem. O ChatGPT só entrega um
+ * arquivo da conversa a uma ferramenta quando ela declara o campo em `_meta["openai/fileParams"]`; aí ele
+ * manda `{ download_url, file_id, mime_type?, file_name? }`. O download_url é TEMPORÁRIO: o agendar_arte
+ * já baixa URL externa e guarda no nosso bucket, então a peça não depende dele na hora de publicar.
+ * Formato exigido pelo ChatGPT (checado no Scan Tools): os 4 campos declarados, só download_url e
+ * file_id em required. Outros clientes (Claude, Codex) ignoram o _meta e seguem com `imagem`.
+ */
+export const ARQUIVO_OPENAI = {
+  type: "object",
+  properties: {
+    download_url: { type: "string" },
+    file_id: { type: "string" },
+    mime_type: { type: "string" },
+    file_name: { type: "string" },
+  },
+  required: ["download_url", "file_id"],
+  additionalProperties: false,
+} as const;
+
+/** Ferramentas que recebem arquivo da conversa, e em quais campos. */
+const CAMPOS_DE_ARQUIVO: Record<string, string[]> = { agendar_arte: ["arquivo", "arquivos"] };
+
+/** Acrescenta ao schema do agendar_arte os campos de arquivo e o _meta que o ChatGPT lê. Só no MCP. */
+export function comArquivoDaConversa<T extends { name: string; description?: string; inputSchema: any }>(
+  t: T,
+): T & { _meta?: Record<string, unknown> } {
+  const campos = CAMPOS_DE_ARQUIVO[t.name];
+  if (!campos) return t;
+  const base = t.inputSchema || { type: "object", properties: {} };
+  return {
+    ...t,
+    description: `${t.description || ""} NO CHATGPT: o video ou a imagem que esta NA CONVERSA vai em \`arquivo\` (carrossel: \`arquivos\`, na ordem dos slides). Nao precisa de URL nem de upload.`,
+    inputSchema: {
+      ...base,
+      properties: {
+        ...base.properties,
+        arquivo: { $ref: "#/$defs/OpenAIFile", description: "Arquivo da conversa (video MP4 ou imagem). Use no lugar de `imagem`." },
+        arquivos: { type: "array", items: { $ref: "#/$defs/OpenAIFile" }, description: "Carrossel com arquivos da conversa: 2 a 10 imagens, na ordem dos slides. Use no lugar de `imagens`." },
+      },
+      $defs: { ...(base.$defs || {}), OpenAIFile: ARQUIVO_OPENAI },
+    },
+    _meta: { "openai/fileParams": campos },
+  };
+}
+
+const MIME_POR_EXTENSAO: Record<string, string> = {
+  mp4: "video/mp4", png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", webp: "image/webp",
+};
+
+/** O tipo que o ChatGPT disse (mime_type) ou, sem ele, o da extensão do nome. Null quando não dá para saber. */
+export function mimeDoArquivoOpenAI(f: { mime_type?: unknown; file_name?: unknown }): string | null {
+  const m = String(f.mime_type || "").split(";")[0].trim().toLowerCase();
+  if (m && m !== "application/octet-stream") return m;
+  const ext = /\.([a-z0-9]+)$/i.exec(String(f.file_name || ""))?.[1]?.toLowerCase();
+  return (ext && MIME_POR_EXTENSAO[ext]) || null;
+}
+
+const ehArquivoOpenAI = (v: unknown): v is { download_url: string; mime_type?: string; file_name?: string } =>
+  !!v && typeof v === "object" && typeof (v as any).download_url === "string" && /^https?:\/\//i.test((v as any).download_url);
+
+/**
+ * Traduz `arquivo`/`arquivos` do ChatGPT para o que o agendar_arte já entende (`imagem`/`imagens`, URL),
+ * com o tipo como dica (`_mime_imagem`/`_mimes_imagens`): o download_url do ChatGPT não termina em .mp4
+ * nem garante o Content-Type, e sem a dica o vídeo seria recusado como "não é imagem nem MP4".
+ * `imagem`/`imagens` passados explicitamente ganham do arquivo: o agente escolheu a URL.
+ */
+export function normalizarArquivosDaConversa(nome: string, args: Record<string, any>): Record<string, any> {
+  if (!CAMPOS_DE_ARQUIVO[nome] || !args || typeof args !== "object") return args;
+  const { arquivo, arquivos, ...resto } = args;
+  const saida: Record<string, any> = { ...resto };
+  if (ehArquivoOpenAI(arquivo) && !String(resto.imagem || "").trim() && !(Array.isArray(resto.imagens) && resto.imagens.length)) {
+    saida.imagem = arquivo.download_url;
+    const mime = mimeDoArquivoOpenAI(arquivo);
+    if (mime) saida._mime_imagem = mime;
+  }
+  if (Array.isArray(arquivos) && arquivos.length && !(Array.isArray(resto.imagens) && resto.imagens.length) && !saida.imagem) {
+    const validos = arquivos.filter(ehArquivoOpenAI);
+    saida.imagens = validos.map((a) => a.download_url);
+    saida._mimes_imagens = validos.map((a) => mimeDoArquivoOpenAI(a));
+  }
+  return saida;
+}
+
 /**
  * CATÁLOGO EXPOSTO. Deliberadamente um subconjunto das 24 tools do agente.
  *
@@ -286,7 +373,7 @@ export function toolsVisiveis(
   agentTools: Array<{ name: string; description?: string; input_schema?: unknown }>,
   catalogo: Record<string, { escopo: string }>,
   scopes: string[],
-): Array<{ name: string; description?: string; inputSchema: unknown }> {
+): Array<{ name: string; description?: string; inputSchema: unknown; _meta?: Record<string, unknown> }> {
   const lista = agentTools
     .filter((t) => catalogo[t.name] && scopes.includes(catalogo[t.name].escopo))
     .map((t) => {
@@ -297,11 +384,11 @@ export function toolsVisiveis(
       // Só onde o schema aceita brandId: prometer a marca numa ferramenta que a ignora seria mentira.
       if ((t.input_schema as any)?.properties?.brandId) avisos.push("Para sair com a identidade da marca certa, passe brandId (ids em listar_marcas).");
       if (FERRAMENTAS_IMEDIATAS.has(t.name)) avisos.push("AQUI A AÇÃO É IMEDIATA, sem tela de confirmação: confirme com o usuário a data, a hora e o perfil ANTES de chamar.");
-      return {
+      return comArquivoDaConversa({
         name: t.name,
         description: avisos.length ? `${t.description || ""} ${avisos.join(" ")}` : t.description,
         inputSchema: t.input_schema ?? { type: "object", properties: {} },
-      };
+      });
     });
   // Quem lê a conta precisa enxergar as marcas: sem o id, nada do que é gerado sai com identidade.
   if (scopes.includes("read")) lista.push(TOOL_LISTAR_MARCAS);

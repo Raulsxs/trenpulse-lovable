@@ -41,7 +41,7 @@ import {
   FERRAMENTAS_LENTAS, TOOL_ACOMPANHAR, colunasDoJob, ehUuid, promptDoJob, textoDoJob, tituloDoJob, toolsVisiveis,
   TOOL_PREPARAR_ENVIO, caminhoEnvio, extensaoImagem, mimeDaExtensao, ehExtensaoVideo,
   ESCOPOS_OAUTH, cabecalhoWwwAuthenticate, metadadosDoRecurso, urlDoRecurso,
-  TOOL_LISTAR_MARCAS, textoDasMarcas, CATALOGO_MCP,
+  TOOL_LISTAR_MARCAS, textoDasMarcas, CATALOGO_MCP, normalizarArquivosDaConversa,
 } from "../_shared/mcp-core.ts";
 
 const PROTOCOL_VERSION = "2025-06-18";
@@ -323,7 +323,8 @@ Deno.serve(async (req) => {
     };
 
     try {
-      const r = await dispatchTool(ctx, nome, params?.arguments || {});
+      // Arquivo da conversa do ChatGPT (openai/fileParams) vira a URL que o agendar_arte já entende.
+      const r = await dispatchTool(ctx, nome, normalizarArquivosDaConversa(nome, params?.arguments || {}));
       // isError sinaliza falha DA FERRAMENTA (saldo insuficiente, marca inexistente) — o agente lê o
       // texto e se corrige. Erro de protocolo é outra coisa e vai como JSON-RPC error.
       return json({

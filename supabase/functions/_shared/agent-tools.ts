@@ -450,6 +450,21 @@ export const LIMITE_VIDEO_EXTERNO = 50 * 1024 * 1024;
  * bucket S3 mal configurado) conta como video/mp4 quando a URL termina em .mp4 — senão o vídeo certo
  * seria recusado por um cabeçalho errado. Imagem continua decidida só pelo cabeçalho, como antes.
  */
+/**
+ * Tipo pelos primeiros bytes, para quando o cabeçalho não diz (download_url do ChatGPT, CDN que manda
+ * octet-stream). MP4: caixa "ftyp" no byte 4. Só reconhece o que o agendar_arte aceita.
+ */
+export function mimePelosBytes(b: Uint8Array | null): string | null {
+  if (!b || b.length < 12) return null;
+  if (b[4] === 0x66 && b[5] === 0x74 && b[6] === 0x79 && b[7] === 0x70) return "video/mp4";
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) return "image/webp";
+  return null;
+}
+
+const ehMimeAceito = (m: string | null | undefined) => !!m && (m === "video/mp4" || m.startsWith("image/"));
+
 export function mimeDoArquivo(contentType: string | null | undefined, url: string): string | null {
   const ct = String(contentType || "").split(";")[0].trim().toLowerCase();
   let caminho = "";
@@ -577,17 +592,24 @@ export type ArquivoDaArte =
  * imagem. `soImagem`: o carrossel aceita so imagens, e a recusa diz qual item falhou (`rotulo`).
  */
 export async function lerArquivoDaArte(
-  ctx: ToolCtx, bruta: string, opcoes: { soImagem?: boolean; rotulo?: string } = {},
+  ctx: ToolCtx, bruta: string, opcoes: { soImagem?: boolean; rotulo?: string; mimeDica?: string | null } = {},
 ): Promise<ArquivoDaArte> {
   const rotulo = opcoes.rotulo ? `${opcoes.rotulo}: ` : "";
   let bytes: Uint8Array | null = null;
   let mime = "image/jpeg";
   let urlPronta: string | null = null;
+  // Cabeçalho sem tipo útil (vazio ou octet-stream): o tipo sai da dica e, depois de baixar, dos bytes.
+  // Cabeçalho que declara um tipo manda sempre: dica nenhuma transforma PDF em vídeo.
+  let generico = false;
   try {
     if (/^https?:\/\//i.test(bruta)) {
       const r = await fetch(bruta);
       if (!r.ok) return { ok: false, erro: `${rotulo}Nao consegui baixar o arquivo (HTTP ${r.status}). Confira se a URL e publica.` };
       mime = mimeDoArquivo(r.headers.get("content-type"), bruta) || mime;
+      const ctBruto = String(r.headers.get("content-type") || "").split(";")[0].trim().toLowerCase();
+      generico = !ctBruto || ctBruto === "application/octet-stream" || ctBruto === "binary/octet-stream";
+      // Arquivo da conversa do ChatGPT: o link é temporário, não termina em .mp4 e pode vir sem tipo.
+      if (generico && mime !== "video/mp4" && ehMimeAceito(opcoes.mimeDica)) mime = opcoes.mimeDica!;
       const tamanho = Number(r.headers.get("content-length") || 0);
       const cancela = async () => { try { await r.body?.cancel(); } catch (_e) { /* ignora */ } };
       const nosso = urlDoNossoEnvio(bruta, ctx.supabaseUrl, ctx.userId);
@@ -622,6 +644,8 @@ export async function lerArquivoDaArte(
     return { ok: false, erro: `${rotulo}Nao consegui ler o arquivo: ${e?.message}. Mande uma URL publica ou base64 valido.` };
   }
 
+  // Com cabeçalho genérico, o conteúdo baixado diz o que é (ganha da dica e do palpite padrão "jpeg").
+  if (generico) mime = mimePelosBytes(bytes) || mime;
   const ehVideo = mime === "video/mp4";
   if (opcoes.soImagem && !mime.startsWith("image/")) {
     return { ok: false, erro: `${rotulo}Carrossel aceita so imagens (veio ${mime}). Video vai sozinho, em imagem.` };
@@ -1490,7 +1514,11 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
       let ehVideo = false;
       for (let i = 0; i < entradas.length; i++) {
         const rotulo = ehCarrossel ? `Imagem ${i + 1} de ${entradas.length}` : undefined;
-        const lido = await lerArquivoDaArte(ctx, entradas[i], { soImagem: ehCarrossel, rotulo });
+        // Dica de tipo: vem do arquivo da conversa do ChatGPT (normalizarArquivosDaConversa, no MCP).
+        const mimeDica = ehCarrossel
+          ? (Array.isArray(input._mimes_imagens) ? input._mimes_imagens[i] : null)
+          : (typeof input._mime_imagem === "string" ? input._mime_imagem : null);
+        const lido = await lerArquivoDaArte(ctx, entradas[i], { soImagem: ehCarrossel, rotulo, mimeDica });
         if (!lido.ok) { await desfaz(); return { ok: false, content: lido.erro }; }
         ehVideo = lido.mime === "video/mp4";
         const guardado = await guardarArquivoDaArte(ctx, lido);
