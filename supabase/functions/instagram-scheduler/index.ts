@@ -6,7 +6,8 @@
  * calls publish-postforme for each.
  */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { alvosDoRecorrente, contaDoPfm, type AlvosDoRecorrente } from "../_shared/publicacao.ts";
+import { alvosDoRecorrente, contaDoPfm, falhaDaPublicacao, type AlvosDoRecorrente } from "../_shared/publicacao.ts";
+import { MAX_TENTATIVAS, publicarPecaVencida, type PecaVencida } from "../_shared/agendador.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -33,7 +34,7 @@ Deno.serve(async (req) => {
       .select("id, user_id, platform, publish_attempts, scheduled_accounts")
       .eq("status", "scheduled")
       .lte("scheduled_at", now)
-      .lt("publish_attempts", 3)
+      .lt("publish_attempts", MAX_TENTATIVAS)
       .order("scheduled_at", { ascending: true })
       .limit(10);
 
@@ -52,91 +53,20 @@ Deno.serve(async (req) => {
     if (vencidas.length) console.log(`[scheduler] Found ${vencidas.length} contents due for publishing`);
     const results = [];
 
+    // Lock, publicação e gravação do resultado vivem em _shared/agendador.ts (testado). Falha permanente
+    // (ex.: sessão da Meta invalidada) vai direto para failed, sem nova tentativa; o resto tenta até 3 vezes.
+    const publicar = async (corpo: Record<string, unknown>) => {
+      // Chamada interna com service role. apikey = MESMA key do Authorization: o gateway rejeita keys
+      // diferentes ("Conflicting API keys" 401) desde 2026-06-11.
+      const r = await fetch(`${supabaseUrl}/functions/v1/publish-postforme`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${serviceKey}`, "apikey": serviceKey },
+        body: JSON.stringify(corpo),
+      });
+      return { ok: r.ok, data: await r.json() };
+    };
     for (const content of vencidas) {
-      const prevAttempts = (content as any).publish_attempts || 0;
-      const nextAttempts = prevAttempts + 1;
-      try {
-        // CRITICAL FIX: lock the row by flipping status to "publishing" BEFORE calling the
-        // publisher. Even if PFM is slow / pending, the next 5min cron tick will not pick
-        // this row again because the .eq("status", "scheduled") filter excludes it. Without
-        // this lock, a slow / pending publish gets retried every tick and the PFM creates a
-        // brand new post each time — that's exactly what duplicated 12+ posts on Felipe's
-        // LinkedIn on 2026-04-27.
-        const { error: lockErr } = await supabase.from("generated_contents")
-          .update({
-            status: "publishing",
-            publish_attempts: nextAttempts,
-          })
-          .eq("id", content.id)
-          .eq("status", "scheduled"); // optimistic lock — only update if still scheduled
-
-        if (lockErr) {
-          console.error(`[scheduler] Could not lock ${content.id}:`, lockErr.message);
-          results.push({ id: content.id, status: "lock_failed", error: lockErr.message });
-          continue;
-        }
-
-        // Call publish-postforme with service role key (internal call).
-        // apikey = MESMA key do Authorization: o gateway rejeita keys diferentes
-        // ("Conflicting API keys" 401) desde 2026-06-11.
-        const publishResp = await fetch(`${supabaseUrl}/functions/v1/publish-postforme`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${serviceKey}`,
-            "apikey": serviceKey,
-          },
-          // Agendamento multi-plataforma: se o usuário escolheu contas no modal de Agendar, elas ficam
-          // em scheduled_accounts ({platforms, accountIds}). Publica EXATAMENTE nelas. Sem seleção
-          // (agendamentos antigos), cai no legado = só a plataforma de criação.
-          body: JSON.stringify(
-            (content as any).scheduled_accounts?.accountIds?.length
-              ? {
-                  contentId: content.id,
-                  platforms: (content as any).scheduled_accounts.platforms?.length
-                    ? (content as any).scheduled_accounts.platforms
-                    : [content.platform || "instagram"],
-                  accountIds: (content as any).scheduled_accounts.accountIds,
-                }
-              : {
-                  contentId: content.id,
-                  platforms: [content.platform || "instagram"],
-                }
-          ),
-        });
-
-        const publishData = await publishResp.json();
-
-        if (publishResp.ok && publishData.results?.some((r: any) => r.success)) {
-          // publish-postforme already set status=published when confirmed, but re-affirm here
-          // so any race condition is closed.
-          console.log(`[scheduler] Published ${content.id} to ${content.platform}`);
-          results.push({ id: content.id, status: "published" });
-        } else if (publishResp.ok && publishData.results?.some((r: any) => r.pending === true)) {
-          // Pending — PFM accepted but didn't confirm in time. publish-postforme already
-          // set status=processing so we DON'T retry. Just log and move on.
-          console.log(`[scheduler] Pending ${content.id} — left as 'processing', will not retry`);
-          results.push({ id: content.id, status: "pending" });
-        } else {
-          // Real failure (PFM rejected, network error, etc). Mark status=failed if we hit
-          // the max attempts; otherwise keep it as scheduled to allow retry on next tick.
-          const errMsg = publishData.error || publishData.results?.[0]?.error || "Unknown error";
-          console.error(`[scheduler] Failed ${content.id} (attempt ${nextAttempts}/3): ${errMsg}`);
-          const finalStatus = nextAttempts >= 3 ? "failed" : "scheduled";
-          await supabase.from("generated_contents")
-            .update({ status: finalStatus, publish_error: errMsg })
-            .eq("id", content.id);
-          results.push({ id: content.id, status: finalStatus, error: errMsg });
-        }
-      } catch (err: any) {
-        console.error(`[scheduler] Error ${content.id}:`, err?.message);
-        // Roll back to scheduled so we can retry — but only if attempts haven't maxed out.
-        const finalStatus = nextAttempts >= 3 ? "failed" : "scheduled";
-        await supabase.from("generated_contents")
-          .update({ status: finalStatus, publish_error: err?.message || "fetch error" })
-          .eq("id", content.id);
-        results.push({ id: content.id, status: finalStatus, error: err?.message });
-      }
+      results.push(await publicarPecaVencida(supabase, content as PecaVencida, publicar, (m) => console.log(`[scheduler] ${m}`)));
     }
 
     // ── Recurring schedules ──────────────────────────────────────────────
@@ -320,7 +250,12 @@ Deno.serve(async (req) => {
             const ours = items[0];
             if (!ours) { stillPending = true; continue; }
             if (ours.success === true) anySuccess = true;
-            else if (ours.success === false) { anyFail = true; firstErr = typeof ours.error === "string" ? ours.error : (ours.error?.message || "Rejeitado pela plataforma"); }
+            else if (ours.success === false) {
+              anyFail = true;
+              // Mesma leitura do publicador: sessão invalidada vira "reconecte em Perfil → Conexões", sem segredo.
+              const bruto = typeof ours.error === "string" ? ours.error : (ours.error?.message || "Rejeitado pela plataforma");
+              firstErr = falhaDaPublicacao(bruto, { platform: p.platform, pfm_account_id: p.account_id }).erro;
+            }
             else stillPending = true;
           } catch { stillPending = true; }
         }
