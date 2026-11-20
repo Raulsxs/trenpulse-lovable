@@ -151,6 +151,13 @@ export function erroComConexaoVencida(erro: string, alvo: Alvo, agora = Date.now
 // request has been revoked by the user" (LinkedIn, REVOKED_ACCESS_TOKEN).
 const ACESSO_ENCERRADO = /needs to be reconnected|session has been invalidated|error validating access token|invalid oauth (2\.0 )?access token|has not authorized application|revoked_access_token|\b(token|access|permissions?|authori[sz]ation)\b[^.]{0,40}\b(has|have|was|were) been revoked|invalid_grant/i;
 
+// Conta RESTRITA pela própria Meta (checkpoint): o Instagram bloqueia qualquer publicação até o dono entrar
+// no app e concluir o que ele pede (data de nascimento, aviso de segurança). O Post for Me devolve "Account
+// needs to be reconnected: User access is restricted"; a Graph API, o código 2207050 ("…account is inactive,
+// checkpointed, or restricted"). Vem ANTES de ACESSO_ENCERRADO, que também casa pelo prefixo, porque só
+// reconectar não resolve. "age restricted" e "restricted in your region" são de conteúdo e não casam.
+const ACESSO_RESTRITO = /user access is restricted|\baccount is\b[^.]{0,30}\b(checkpointed|restricted)\b|\bcheckpointed\b|#?\b2207050\b/i;
+
 // Trecho com cara de credencial: token da Meta (EAA…), JWT, `access_token=…`, `Bearer …` e sequências
 // longas sem espaço. O erro vai para `publish_error`, para a tela e para os logs: nenhum deles guarda segredo.
 // O separador exige `=` ou JSON (`"token":"…"`): o texto da Meta tem "access token: The session…" e
@@ -186,6 +193,15 @@ export interface FalhaDePublicacao {
  */
 export function falhaDaPublicacao(erro: string, alvo: Alvo, agora = Date.now()): FalhaDePublicacao {
   const detalhe = semSegredo(erro);
+  // Peça #68 da Pulse (2026-11-20): com o texto genérico de "encerrada pela rede", quem lia ia só
+  // reconectar, e a conta continuaria travada no Instagram.
+  if (ACESSO_RESTRITO.test(erro)) {
+    const rede = nomeDaRede(alvo.platform);
+    return {
+      permanente: true,
+      erro: `O ${rede} restringiu o acesso desta conta e bloqueia publicações até o dono resolver: nova tentativa automática não resolve. Entre no app do ${rede} com essa conta e conclua o que ele pedir (verificação de segurança, data de nascimento); depois reconecte a conta em Perfil → Conexões e tente publicar de novo. (${detalhe})`,
+    };
+  }
   if (ACESSO_ENCERRADO.test(erro)) {
     return {
       permanente: true,
