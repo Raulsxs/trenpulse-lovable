@@ -241,7 +241,13 @@ só `caption`. O texto novo aparecia na tela e a rede recebia o antigo.
    `last_used_at` visível, e `publish` fora do escopo padrão. Sem isso, um token no `claude.json` de
    uma máquina compartilhada vira postagem indevida no perfil de um médico.
 2. **O agente agenda em cima de post existente.** Mitigação: `ver_agenda` obrigatório no fluxo, e
-   `agendar_arte` recusa quando já há conteúdo no mesmo horário exato.
+   `agendar_arte` e `agendar_conteudo` recusam quando já há conteúdo agendado no mesmo horário
+   exato **na mesma conta de destino** (`scheduled_accounts.accountIds`). Contas diferentes no mesmo
+   instante passam (o Instagram do Raul e o da Pulse podem sair juntos); basta uma conta em comum
+   para recusar. Agendamento legado, sem `accountIds`, ocupa a rede inteira naquele instante, porque
+   o scheduler publica na primeira conta da rede e não dá para saber qual. Reagendar uma peça para o
+   horário que ela já ocupa não colide consigo mesma. Regra em `_shared/colisao-agenda.ts`
+   (2026-11-21, depois da peça #167 da Pulse ser recusada por uma peça de outra conta).
 3. **Imagem grande estourando a edge function.** A geração já bateu no teto de memória antes (o bug
    do `logo-overlay`). Mitigação: limite de tamanho explícito no upload e erro claro, não timeout.
 4. ~~Maikon tem 0 contas sociais conectadas~~ — **ERRADO, corrigido em 2026-09-08.** Eu tinha
@@ -274,7 +280,7 @@ só `caption`. O texto novo aparecia na tela e a rede recebia o antigo.
       usuário.
 - [x] **4. `agendar_arte`.** Recebe imagem pronta (URL ou base64), sobe pro bucket e cria
       `generated_contents` agendado. Não cobra crédito: nada foi gerado. Travas: data no passado,
-      colisão de horário exato, teto de 8 MB, marca inexistente (lista as que existem).
+      colisão de horário exato na mesma conta de destino, teto de 8 MB, marca inexistente (lista as que existem).
 - [x] **5. Curadoria do catálogo.** 13 das 25 tools expostas, filtradas por escopo do token —
       `tools/list` confirmado em produção. `publicar_agora` fica fora por decisão de produto: o
       usuário pediu para aprovar antes.

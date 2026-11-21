@@ -1,6 +1,7 @@
 import { temaDeFrase } from "./frase.ts";
 import { avisoDeValidade, instanteSP, legendaAcimaDoLimite, legendaQueSai, linhaDaConexao, linhaDoRecorrente, motivoDaFalha, patchDeLegenda, precisaReconectar, recusaPorContaVencida, redesDaPeca } from "./publicacao.ts";
 import { acharMarca, linhaDaMarca, recusaDeMarca } from "./marca-pedida.ts";
+import { destinoDaPeca, destinoDoAgendamento, pecaEmColisao, recusaPorColisao, type Destino, type PecaAgendada } from "./colisao-agenda.ts";
 import { limparImagem } from "./sem-metadado.ts";
 // agent-tools.ts — catálogo de ferramentas do orquestrador agêntico (ai-agent).
 // Cada tool é um WRAPPER sobre uma edge function que JÁ existe (ai-chat via intent_hint,
@@ -261,7 +262,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "detalhes_conteudo",
-    description: "Mostra a MARCA aplicada na peça (marca=... marca_id=..., ou marca=NENHUMA). Para corrigir uma peça com a marca errada ou sem marca: gere de novo com o brandId certo (ids em listar_marcas), agende a nova no mesmo horário com agendar_conteudo e tire a antiga com desagendar_conteudo. Retorna detalhes de um conteúdo gerado: qual MODELO de imagem foi usado, prompt, formato, o estado da publicação (com o motivo, se falhou) e a legenda que vai ao ar. Chame quando o usuário pergunta 'qual modelo foi usado', detalhes da geração ou por que uma peça não foi publicada.",
+    description: "Mostra a MARCA aplicada na peça (marca=... marca_id=..., ou marca=NENHUMA). Para corrigir uma peça com a marca errada ou sem marca: gere de novo com o brandId certo (ids em listar_marcas), tire a antiga com desagendar_conteudo e agende a nova no mesmo horário com agendar_conteudo (nessa ordem: duas peças no mesmo instante e na mesma conta são recusadas). Retorna detalhes de um conteúdo gerado: qual MODELO de imagem foi usado, prompt, formato, o estado da publicação (com o motivo, se falhou) e a legenda que vai ao ar. Chame quando o usuário pergunta 'qual modelo foi usado', detalhes da geração ou por que uma peça não foi publicada.",
     input_schema: {
       type: "object",
       properties: { contentId: { type: "string" } },
@@ -337,7 +338,7 @@ export const AGENT_TOOLS = [
   },
   {
     name: "agendar_arte",
-    description: "Coloca no calendario do TrendPulse uma IMAGEM OU UM VIDEO MP4 QUE VOCE JA TEM PRONTO - arte criada fora da plataforma, foto, print, video editado. Chame quando o usuario diz 'joga essa arte no TrendPulse', 'agenda essas imagens', 'agenda esse video', 'sobe isso pro calendario'. Video MP4 vira conteudo de video e sai como Reel no Instagram (no LinkedIn, video nativo). CARROSSEL PRONTO: passe `imagens` com 2 a 10 URLs na ordem dos slides, no lugar de `imagem` - vira um carrossel so (no Instagram sai como carrossel). NAO gera nada e NAO cobra credito: so guarda o que voce passar e agenda. Para CRIAR arte nova com a identidade da marca, use gerar_post ou gerar_carrossel. Uma chamada por post; para varios posts, chame varias vezes.",
+    description: "Coloca no calendario do TrendPulse uma IMAGEM OU UM VIDEO MP4 QUE VOCE JA TEM PRONTO - arte criada fora da plataforma, foto, print, video editado. Chame quando o usuario diz 'joga essa arte no TrendPulse', 'agenda essas imagens', 'agenda esse video', 'sobe isso pro calendario'. Video MP4 vira conteudo de video e sai como Reel no Instagram (no LinkedIn, video nativo). CARROSSEL PRONTO: passe `imagens` com 2 a 10 URLs na ordem dos slides, no lugar de `imagem` - vira um carrossel so (no Instagram sai como carrossel). NAO gera nada e NAO cobra credito: so guarda o que voce passar e agenda. Para CRIAR arte nova com a identidade da marca, use gerar_post ou gerar_carrossel. Uma chamada por post; para varios posts, chame varias vezes. Recusa se ja houver peca agendada no MESMO instante em alguma das MESMAS contas de destino; contas diferentes no mesmo horario podem.",
     input_schema: {
       type: "object",
       properties: {
@@ -513,13 +514,17 @@ const semLeituraDasContas = (d: any): string | null =>
  * perguntar. Recusar e mais confiavel que torcer pro modelo lembrar de perguntar.
  *
  * Compartilhado por agendar_arte e agendar_conteudo — duas copias divergiriam na primeira mudanca.
+ *
+ * `redeDaConta` (conta → rede, de todas as contas conectadas) serve a trava de colisão de agenda, que
+ * precisa saber a rede das contas para comparar com agendamentos legados (ver colisao-agenda.ts).
+ * Vazio quando não houve consulta (nem rede nem conta pedida).
  */
 export async function resolverContas(
   ctx: ToolCtx,
   plataformas: string[],
   contasPedidas: string[],
-): Promise<{ ok: true; accountIds: string[] } | { ok: false; erro: string }> {
-  if (!plataformas.length && !contasPedidas.length) return { ok: true, accountIds: [] };
+): Promise<{ ok: true; accountIds: string[]; redeDaConta: Record<string, string> } | { ok: false; erro: string }> {
+  if (!plataformas.length && !contasPedidas.length) return { ok: true, accountIds: [], redeDaConta: {} };
 
   const res = await fetch(`${ctx.supabaseUrl}/functions/v1/connect-social`, {
     method: "POST",
@@ -530,6 +535,7 @@ export async function resolverContas(
   const fora = semLeituraDasContas(d);
   if (fora) return { ok: false, erro: fora };
   const conectadas = (d?.connections || []).filter((c: any) => c.pfm_account_id);
+  const redeDaConta: Record<string, string> = Object.fromEntries(conectadas.map((c: any) => [c.pfm_account_id, c.platform]));
   const descreve = (arr: any[]) =>
     arr.map((c: any) => `${c.platform}: ${c.account_name || "(sem nome)"} → conta=${c.pfm_account_id}`).join("; ");
   // Conta que precisa reconectar (acesso vencido e sem como renovar): o publicador recusa na hora de
@@ -548,7 +554,7 @@ export async function resolverContas(
     }
     const recusa = recusaVencidas(contasPedidas);
     if (recusa) return { ok: false, erro: recusa };
-    return { ok: true, accountIds: contasPedidas };
+    return { ok: true, accountIds: contasPedidas, redeDaConta };
   }
 
   const escolhidas: string[] = [];
@@ -570,7 +576,18 @@ export async function resolverContas(
   }
   const recusa = recusaVencidas(escolhidas);
   if (recusa) return { ok: false, erro: recusa };
-  return { ok: true, accountIds: escolhidas };
+  return { ok: true, accountIds: escolhidas, redeDaConta };
+}
+
+/**
+ * A peça agendada no MESMO instante que divide conta de destino com o novo agendamento, ou null.
+ * A regra (e a escolha conservadora para agendamento legado) está em colisao-agenda.ts.
+ * `ignorarId`: a própria peça, ao reagendar, não colide consigo mesma.
+ */
+async function colisaoDeAgenda(ctx: ToolCtx, quando: string, novo: Destino, redeDaConta: Record<string, string>, ignorarId?: string) {
+  const { data } = await ctx.userClient.from("generated_contents")
+    .select("id, title, platform, scheduled_accounts").eq("scheduled_at", quando).eq("status", "scheduled");
+  return pecaEmColisao(novo, (data || []) as PecaAgendada[], redeDaConta, ignorarId);
 }
 
 // ─────────────────────────── Arquivo pronto (agendar_arte) ───────────────────────────
@@ -1466,13 +1483,6 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
           return { ok: false, content: `Essa data ja passou (${d.toLocaleString("pt-BR")}). Agende no futuro.` };
         }
         quando = d.toISOString();
-
-        // Dois posts no MESMO instante quase sempre e o agente repetindo a chamada, nao intencao.
-        const { data: colisao } = await ctx.userClient.from("generated_contents")
-          .select("id, title").eq("scheduled_at", quando).eq("status", "scheduled").limit(1);
-        if (colisao && colisao.length > 0) {
-          return { ok: false, content: `Ja existe conteudo agendado exatamente para esse horario ("${colisao[0].title}"). Escolha outro horario.` };
-        }
       }
 
       // 2. Marca (por id ou por nome)
@@ -1499,6 +1509,16 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
       const resContas = await resolverContas(ctx, plataformasArte, Array.isArray(input.contas) ? input.contas.filter(Boolean).map(String) : []);
       if (!resContas.ok) return { ok: false, content: resContas.erro };
       const contasAlvo = resContas.accountIds;
+
+      // 3b. Colisão: dois posts no MESMO instante na MESMA conta quase sempre e o agente repetindo a
+      // chamada, nao intencao. Fica DEPOIS de resolver as contas (a trava e por conta de destino: o
+      // Instagram do Raul e o da Pulse podem sair juntos) e ANTES dos arquivos (recusa nao deixa orfao).
+      if (quando) {
+        // Sem plataforma, a linha fica com a rede padrao da coluna (instagram), que e onde o legado sai.
+        const novo = destinoDoAgendamento(contasAlvo, plataformasArte, plataformasArte[0], resContas.redeDaConta);
+        const colisao = await colisaoDeAgenda(ctx, quando, novo, resContas.redeDaConta);
+        if (colisao) return { ok: false, content: recusaPorColisao(colisao) };
+      }
 
       // 4. Cada arquivo vira URL publica no nosso bucket, NA ORDEM recebida (e a ordem dos slides).
       // Um por vez: baixar 10 imagens de uma vez no isolate pesaria a memoria sem ganho. O que ja esta
@@ -1602,7 +1622,7 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
       if (!input?.contentId) return { ok: false, content: "Faltou o content_id. NADA foi agendado." };
       const { data: pecaAgd } = await ctx.userClient
         .from("generated_contents")
-        .select("id, title, status, published_at")
+        .select("id, title, status, published_at, platform, scheduled_accounts")
         .eq("id", input.contentId)
         .maybeSingle();
       if (!pecaAgd) {
@@ -1617,6 +1637,14 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
       const contasAgd = Array.isArray(input.contas) ? input.contas.filter(Boolean).map(String) : [];
       const rc = await resolverContas(ctx, platsAgd, contasAgd);
       if (!rc.ok) return { ok: false, content: rc.erro };
+
+      // Mesma trava do agendar_arte, por conta de destino. Sem contas novas, o patch abaixo mantem as
+      // que a peca ja tinha, entao o destino e o dela. A propria peca nao conta (reagendar no mesmo horario).
+      const destinoAgd = rc.accountIds.length
+        ? destinoDoAgendamento(rc.accountIds, platsAgd, platsAgd[0] || pecaAgd.platform, rc.redeDaConta)
+        : destinoDaPeca(pecaAgd as PecaAgendada, rc.redeDaConta);
+      const colisaoAgd = await colisaoDeAgenda(ctx, dAgd.toISOString(), destinoAgd, rc.redeDaConta, pecaAgd.id);
+      if (colisaoAgd) return { ok: false, content: `${recusaPorColisao(colisaoAgd)} NADA foi agendado.` };
 
       const patch: Record<string, unknown> = {
         scheduled_at: dAgd.toISOString(),
