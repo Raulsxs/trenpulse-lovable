@@ -257,12 +257,12 @@ describe("agendar — conta que precisa reconectar é recusada na hora, não às
 
   it("acesso vencido em conta renovável é aceito: o Post for Me renova ao publicar", async () => {
     const { ctx } = contexto([PAGINA, LAPSA]);
-    expect(await resolverContas(ctx, ["linkedin"], ["spc_lapsa"])).toEqual({ ok: true, accountIds: ["spc_lapsa"] });
+    expect(await resolverContas(ctx, ["linkedin"], ["spc_lapsa"])).toEqual({ ok: true, accountIds: ["spc_lapsa"], redeDaConta: { spc_pagina: "linkedin", spc_lapsa: "linkedin" } });
   });
 
   it("conta em dia segue passando", async () => {
     const { ctx } = contexto([PAGINA, VENCIDA]);
-    expect(await resolverContas(ctx, ["linkedin"], ["spc_pagina"])).toEqual({ ok: true, accountIds: ["spc_pagina"] });
+    expect(await resolverContas(ctx, ["linkedin"], ["spc_pagina"])).toEqual({ ok: true, accountIds: ["spc_pagina"], redeDaConta: { spc_pagina: "linkedin", spc_vencida: "instagram" } });
   });
 
   it("agendar_conteudo em conta vencida não grava nada", async () => {
