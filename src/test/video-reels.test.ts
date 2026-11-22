@@ -93,12 +93,12 @@ function clienteFalso() {
 }
 
 /** fetch falso: connect-social devolve as contas; qualquer outra URL devolve o "arquivo". */
-function contexto(arquivo: { contentType: string | null; tamanho: number; contentLength?: number }) {
+function contexto(arquivo: { contentType: string | null; tamanho: number; contentLength?: number }, conexoes: any[] = [INSTA]) {
   const userClient = clienteFalso();
   const baixou = { corpo: false };
   vi.stubGlobal("fetch", vi.fn(async (url: string) => {
     if (String(url).includes("/functions/v1/connect-social")) {
-      return new Response(JSON.stringify({ connections: [INSTA] }), { status: 200 });
+      return new Response(JSON.stringify({ connections: conexoes }), { status: 200 });
     }
     const headers: Record<string, string> = {};
     if (arquivo.contentType) headers["content-type"] = arquivo.contentType;
@@ -184,6 +184,34 @@ describe("agendar_arte — vídeo MP4 pronto", () => {
     expect(userClient.inseridos[0].content_type).toBe("post");
     expect(userClient.inseridos[0]).not.toHaveProperty("generation_metadata");
     expect(r.action_result).toMatchObject({ contentType: "post" });
+  });
+});
+
+describe("agendar_arte com data e sem rede nem conta (2026-11-22)", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const INSTA_2 = { ...INSTA, pfm_account_id: "spc_outro", account_name: "outra_empresa" };
+
+  it("um perfil de Instagram: agenda nele, com o perfil gravado", async () => {
+    const { ctx, userClient } = contexto({ contentType: "image/png", tamanho: 1024 });
+    const r = await dispatchTool(ctx, "agendar_arte", { imagem: "https://cdn.exemplo.com/arte.png", legenda: "Arte", data_hora_iso: QUANDO });
+    expect(r.ok).toBe(true);
+    expect(userClient.inseridos[0].scheduled_accounts).toEqual({ platforms: ["instagram"], accountIds: [INSTA.pfm_account_id] });
+  });
+
+  it("dois perfis de Instagram: recusa e lista, sem gravar nada", async () => {
+    const { ctx, userClient } = contexto({ contentType: "image/png", tamanho: 1024 }, [INSTA, INSTA_2]);
+    const r = await dispatchTool(ctx, "agendar_arte", { imagem: "https://cdn.exemplo.com/arte.png", legenda: "Arte", data_hora_iso: QUANDO });
+    expect(r.ok).toBe(false);
+    expect(r.content).toMatch(/mais de uma conta em instagram/);
+    expect(r.content).toMatch(/conta=spc_outro/);
+    expect(userClient.inseridos).toEqual([]);
+  });
+
+  it("rascunho (sem data) não pede perfil", async () => {
+    const { ctx, userClient } = contexto({ contentType: "image/png", tamanho: 1024 }, [INSTA, INSTA_2]);
+    const r = await dispatchTool(ctx, "agendar_arte", { imagem: "https://cdn.exemplo.com/arte.png", legenda: "Arte" });
+    expect(r.ok).toBe(true);
+    expect(userClient.inseridos[0].status).toBe("draft");
   });
 });
 

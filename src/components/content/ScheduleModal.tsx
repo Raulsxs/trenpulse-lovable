@@ -40,12 +40,12 @@ const ScheduleModal = ({ open, onClose, onSchedule, isScheduling, connectedAccou
     if (open && defaultDate) setSelectedDate(defaultDate);
   }, [open, defaultDate]);
 
-  // Pré-seleção quando abre: usa o que veio, ou todas as contas válidas.
+  // Pré-seleção quando abre: usa o que veio; sem nada, só marca sozinho se houver UMA conta válida.
+  // Antes marcava todas, e o agendamento saía em todos os perfis (2026-11-22: perfil é escolha do usuário).
   useEffect(() => {
     if (!open || !showAccounts) return;
-    const pre = preSelectedAccountIds?.length
-      ? preSelectedAccountIds
-      : validAccounts.map((a) => a.pfm_account_id!).filter(Boolean);
+    const validas = validAccounts.map((a) => a.pfm_account_id!).filter(Boolean);
+    const pre = preSelectedAccountIds?.length ? preSelectedAccountIds : validas.length === 1 ? validas : [];
     setSelectedAccountIds(pre);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);

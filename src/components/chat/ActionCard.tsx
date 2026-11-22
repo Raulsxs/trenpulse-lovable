@@ -676,19 +676,21 @@ export default function ActionCard({
       // Agendar herda o MESMO seletor de contas do Publicar → agenda multi-plataforma.
       // Guarda as contas escolhidas em scheduled_accounts; o instagram-scheduler publica nelas.
       const selectedAccounts = connectedAccounts.filter(a => a.pfm_account_id && selectedAccountIds.includes(a.pfm_account_id));
-      const scheduledAccounts = selectedAccounts.length > 0
-        ? {
-            platforms: [...new Set(selectedAccounts.map(a => a.platform))],
-            accountIds: selectedAccounts.map(a => a.pfm_account_id).filter(Boolean),
-          }
-        : null;
-      await supabase
+      // Agendado sempre leva o perfil (2026-11-22): sem ele o publicador recusa na hora de publicar.
+      if (selectedAccounts.length === 0) {
+        toast.error("Escolha em qual perfil publicar antes de agendar.");
+        return;
+      }
+      const scheduledAccounts = {
+        platforms: [...new Set(selectedAccounts.map(a => a.platform))],
+        accountIds: selectedAccounts.map(a => a.pfm_account_id).filter(Boolean),
+      };
+      const { error } = await supabase
         .from("generated_contents")
-        .update({ scheduled_at: date.toISOString(), status: "scheduled", scheduled_accounts: scheduledAccounts })
+        .update({ scheduled_at: date.toISOString(), status: "scheduled", scheduled_accounts: scheduledAccounts, publish_attempts: 0, publish_error: null })
         .eq("id", contentId);
-      toast.success(scheduledAccounts
-        ? `Agendado em ${scheduledAccounts.accountIds.length} conta${scheduledAccounts.accountIds.length !== 1 ? "s" : ""}!`
-        : "Conteúdo agendado!");
+      if (error) throw error;
+      toast.success(`Agendado em ${scheduledAccounts.accountIds.length} conta${scheduledAccounts.accountIds.length !== 1 ? "s" : ""}!`);
       setScheduleOpen(false);
       setPublishOpen(false);
     } catch {

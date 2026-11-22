@@ -124,8 +124,11 @@ const Calendar = () => {
     if (savedIds.length) {
       setCalSelectedAccountIds(savedIds);
     } else {
+      // Só marca sozinho quando não há o que escolher: UM perfil na rede da peça. Antes marcava TODOS os
+      // perfis da rede (ou todas as contas), e "Publicar agora" saía em todos. Perfil é sempre escolha do
+      // usuário (2026-11-22).
       const match = calValidAccounts.filter((a) => a.platform === selectedContent.platform).map((a) => a.pfm_account_id!);
-      setCalSelectedAccountIds(match.length ? match : validIds);
+      setCalSelectedAccountIds(match.length === 1 ? match : []);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedContent?.id, connectedAccounts]);
@@ -185,9 +188,11 @@ const Calendar = () => {
       newDate.setHours(parseInt(rescheduleHour), parseInt(rescheduleMinute), 0, 0);
       // Grava as contas escolhidas → o scheduler publica nelas (não só na plataforma de criação).
       const chosen = connectedAccounts.filter((a) => a.pfm_account_id && calSelectedAccountIds.includes(a.pfm_account_id));
-      const scheduledAccounts = chosen.length
-        ? { platforms: [...new Set(chosen.map((a) => a.platform))], accountIds: chosen.map((a) => a.pfm_account_id!) }
-        : null;
+      if (!chosen.length) {
+        toast.error("Escolha em qual perfil publicar.");
+        return;
+      }
+      const scheduledAccounts = { platforms: [...new Set(chosen.map((a) => a.platform))], accountIds: chosen.map((a) => a.pfm_account_id!) };
       const { error } = await supabase
         .from("generated_contents")
         .update({ scheduled_at: newDate.toISOString(), status: "scheduled", publish_attempts: 0, publish_error: null, scheduled_accounts: scheduledAccounts })
@@ -410,10 +415,39 @@ const Calendar = () => {
 
   /** Grava o agendamento. Compartilhado pelo drop na semana e pela confirmação do modal. */
   const commitSchedule = async (contentId: string, when: Date) => {
+    // Agendado sempre leva o perfil (2026-11-22). Peça que já tem perfil escolhido mantém o dela. Sem
+    // perfil: com UM perfil na rede, grava esse; com vários (ou nenhum), não agenda e abre a peça para
+    // escolher. Antes o arrastar não gravava conta, e o publicador pegava o primeiro perfil da lista.
+    const peca = contents.find((c) => c.id === contentId);
+    const validIds = calValidAccounts.map((a) => a.pfm_account_id!);
+    const salvos = (peca?.scheduled_accounts?.accountIds || []).filter((id) => validIds.includes(id));
+    let perfil: { platforms: string[]; accountIds: string[] } | null = null;
+    if (!salvos.length) {
+      const rede = peca?.platform || "instagram";
+      const daRede = calValidAccounts.filter((a) => a.platform === rede);
+      if (daRede.length !== 1) {
+        toast.error("Escolha em qual perfil publicar", {
+          description: daRede.length ? `Há ${daRede.length} perfis de ${rede}. Marque um e clique em Reagendar.` : `Nenhum perfil de ${rede} conectado.`,
+        });
+        if (peca) {
+          setPreviewSlideIndex(0);
+          setRescheduleDate(when);
+          setRescheduleHour(when.getHours().toString().padStart(2, "0"));
+          setRescheduleMinute((Math.floor(when.getMinutes() / 15) * 15).toString().padStart(2, "0"));
+          setSelectedContent(peca);
+        }
+        return;
+      }
+      perfil = { platforms: [rede], accountIds: [daRede[0].pfm_account_id!] };
+    }
     try {
       const { error } = await supabase
         .from("generated_contents")
-        .update({ scheduled_at: when.toISOString(), status: "scheduled", publish_attempts: 0, publish_error: null })
+        .update({
+          scheduled_at: when.toISOString(), status: "scheduled", publish_attempts: 0, publish_error: null,
+          ...(perfil ? { scheduled_accounts: perfil } : {}),
+          // scheduled_accounts não está nos tipos gerados do Supabase (mesmo caso do handleReschedule).
+        } as any)
         .eq("id", contentId);
 
       if (error) throw error;
@@ -456,6 +490,10 @@ const Calendar = () => {
   };
 
   const handlePublishNow = async (content: CalendarContent) => {
+    if (!calSelectedAccountIds.length) {
+      toast.error("Escolha em qual perfil publicar.");
+      return;
+    }
     setIsPublishing(true);
     setPublishingContent(content);
     try {
@@ -468,12 +506,9 @@ const Calendar = () => {
 
       // Publica nas contas escolhidas (múltiplas redes); fallback = plataforma de criação.
       const chosen = connectedAccounts.filter((a) => a.pfm_account_id && calSelectedAccountIds.includes(a.pfm_account_id));
-      const publishBody = chosen.length
-        ? { contentId: content.id, platforms: [...new Set(chosen.map((a) => a.platform))], accountIds: chosen.map((a) => a.pfm_account_id!) }
-        : { contentId: content.id, platforms: [content.platform || "instagram"] };
-      const platformName = chosen.length
-        ? `${chosen.length} rede${chosen.length > 1 ? "s" : ""}`
-        : (content.platform === "linkedin" ? "LinkedIn" : "Instagram");
+      if (!chosen.length) throw new Error("Escolha em qual perfil publicar.");
+      const publishBody = { contentId: content.id, platforms: [...new Set(chosen.map((a) => a.platform))], accountIds: chosen.map((a) => a.pfm_account_id!) };
+      const platformName = `${chosen.length} perfi${chosen.length > 1 ? "s" : "l"}`;
 
       toast.info(`Publicando em ${platformName}...`, { duration: 8000 });
       const { data, error } = await supabase.functions.invoke("publish-postforme", {
