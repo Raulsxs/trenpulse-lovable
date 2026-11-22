@@ -196,13 +196,13 @@ describe("alvosDoRecorrente — onde o recorrente publica hoje", () => {
       .toEqual({ publica: true, platforms: ["instagram"], accountIds: ["spc_insta"], aviso: null });
   });
 
-  it("rede com três perfis e nenhum escolhido: mantém o comportamento antigo e AVISA", () => {
+  it("rede com três perfis e nenhum escolhido: NÃO publica e avisa", () => {
+    // Caso real (22/11): o story do Maikon saía "no primeiro da lista", que virou o perfil de outra empresa.
     const a = alvosDoRecorrente({ platforms: ["instagram"] }, [INSTA, INSTA_2, INSTA_3]);
-    expect(a.publica).toBe(true);
-    // sem accountIds o publicador escolhe como sempre fez: trocar o perfil dos posts diários de alguém
-    // sem ele ver seria pior que o defeito
+    expect(a.publica).toBe(false);
     expect(a.accountIds).toEqual([]);
     expect(a.aviso).toMatch(/Há 3 perfis de instagram/);
+    expect(a.aviso).toMatch(/nada foi publicado/);
     expect(a.aviso).toMatch(/Recrie-o escolhendo o perfil/);
   });
 
