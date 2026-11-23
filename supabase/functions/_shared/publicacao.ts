@@ -262,7 +262,7 @@ export interface AlvosDoRecorrente {
   /** false = não há onde publicar: o agendador NÃO cria a cópia (ela falharia três vezes em silêncio). */
   publica: boolean;
   platforms: string[];
-  /** Vazio com `publica: true` = perfil ambíguo num recorrente antigo: o publicador escolhe como sempre fez. */
+  /** Com `publica: true`, sempre traz o(s) perfil(is): nunca deixa o publicador escolher pela ordem da lista. */
   accountIds: string[];
   /** O que o dono precisa saber; vai para `last_error` e aparece na tela e no listar_agenda. */
   aviso: string | null;
@@ -282,8 +282,13 @@ export interface AlvosDoRecorrente {
  * `platforms` NUNCA foram publicadas, e passar a publicá-las agora faria um perfil começar a postar
  * todo dia sem o dono ter visto. Isso fica avisado, não ligado.
  *  - uma conta na rede → grava a conta (deixa de depender da ordem da lista);
- *  - várias → mantém o comportamento antigo e avisa para escolher o perfil;
+ *  - várias → NÃO publica e avisa para escolher o perfil (ver abaixo);
  *  - nenhuma → não publica e avisa.
+ *
+ * VÁRIAS CONTAS NÃO PUBLICA (2026-11-22): antes publicava "no primeiro da lista" do Post for Me. A ordem
+ * da lista muda quando o dono conecta perfis novos, e o story diário da Jornada Brasil-Alemanha do
+ * Maikon, criado para o perfil dele, passou a sair no @gestaoservicosaude (outra empresa) a partir de
+ * 19/11. Postar na conta errada é pior que não postar: fica parado com o aviso até escolherem o perfil.
  */
 export function alvosDoRecorrente(r: Recorrente, contas: ContaConectada[], agora = Date.now()): AlvosDoRecorrente {
   const usaveis = contas.filter((c) => c.pfm_account_id && !precisaReconectar(c, agora));
@@ -315,7 +320,7 @@ export function alvosDoRecorrente(r: Recorrente, contas: ContaConectada[], agora
   if (daRede.length === 1) {
     return { publica: true, platforms: [rede], accountIds: [daRede[0].pfm_account_id], aviso: notaOutras.trim() || null };
   }
-  return { publica: true, platforms: [rede], accountIds: [], aviso: `Há ${daRede.length} perfis de ${rede} conectados e este recorrente não diz qual: está saindo no primeiro da lista. Recrie-o escolhendo o perfil.${notaOutras}` };
+  return { publica: false, platforms: [rede], accountIds: [], aviso: `Há ${daRede.length} perfis de ${rede} conectados e este recorrente não diz qual: nada foi publicado. Recrie-o escolhendo o perfil.${notaOutras}` };
 }
 
 const DIAS_DA_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];

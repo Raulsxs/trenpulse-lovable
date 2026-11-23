@@ -426,11 +426,15 @@ const ContentPreview = () => {
     return () => clearInterval(interval);
   }, [hasActiveJobForContent, fetchContent]);
 
-  // Pré-seleciona as contas de rede da plataforma do conteúdo (ou todas as válidas) pro publicar/agendar.
+  // Pré-seleção do publicar/agendar: o perfil já gravado na peça; sem ele, só quando há UM perfil na rede
+  // da peça. Antes marcava todos os perfis da rede (ou todas as contas) e o post saía em todos. Perfil é
+  // sempre escolha do usuário (2026-11-22).
   useEffect(() => {
     if (!content) return;
+    const validIds = pubValidAccounts.map((a) => a.pfm_account_id!);
+    const salvos = (((content as any).scheduled_accounts?.accountIds || []) as string[]).filter((x) => validIds.includes(x));
     const match = pubValidAccounts.filter((a) => a.platform === content.platform).map((a) => a.pfm_account_id!);
-    setPubSelectedAccountIds(match.length ? match : pubValidAccounts.map((a) => a.pfm_account_id!));
+    setPubSelectedAccountIds(salvos.length ? salvos : match.length === 1 ? match : []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [content?.id, connectedAccounts]);
 
@@ -646,9 +650,12 @@ const ContentPreview = () => {
       // Contas escolhidas no modal → o scheduler publica nelas (multi-rede). Fallback = null (legado).
       const acctIds = selectedAccountIds?.length ? selectedAccountIds : pubSelectedAccountIds;
       const chosen = connectedAccounts.filter((a) => a.pfm_account_id && acctIds.includes(a.pfm_account_id));
-      const scheduledAccounts = chosen.length
-        ? { platforms: [...new Set(chosen.map((a) => a.platform))], accountIds: chosen.map((a) => a.pfm_account_id!) }
-        : null;
+      // Agendado sempre leva o perfil (2026-11-22): sem ele o publicador recusa na hora de publicar.
+      if (!chosen.length) {
+        setScheduleProgress({ open: true, step: "error", message: "Escolha em qual perfil publicar antes de agendar." });
+        return;
+      }
+      const scheduledAccounts = { platforms: [...new Set(chosen.map((a) => a.platform))], accountIds: chosen.map((a) => a.pfm_account_id!) };
 
       const updatePayload: Record<string, any> = {
         scheduled_at: scheduledDate.toISOString(),
@@ -682,6 +689,10 @@ const ContentPreview = () => {
 
   const handlePublishNow = async () => {
     if (!id) return;
+    if (!pubSelectedAccountIds.length) {
+      toast.error("Escolha em qual perfil publicar.");
+      return;
+    }
     setIsPublishing(true);
     try {
       await flushSlidesSave();
@@ -702,12 +713,9 @@ const ContentPreview = () => {
 
       // Publica nas contas escolhidas (multi-rede); fallback = plataforma de criação.
       const chosen = connectedAccounts.filter((a) => a.pfm_account_id && pubSelectedAccountIds.includes(a.pfm_account_id));
-      const publishBody = chosen.length
-        ? { contentId: id, platforms: [...new Set(chosen.map((a) => a.platform))], accountIds: chosen.map((a) => a.pfm_account_id!) }
-        : { contentId: id, platforms: [content?.platform || "instagram"] };
-      const platformName = chosen.length
-        ? `${chosen.length} rede${chosen.length > 1 ? "s" : ""}`
-        : (content?.platform === "linkedin" ? "LinkedIn" : "Instagram");
+      if (!chosen.length) throw new Error("Escolha em qual perfil publicar.");
+      const publishBody = { contentId: id, platforms: [...new Set(chosen.map((a) => a.platform))], accountIds: chosen.map((a) => a.pfm_account_id!) };
+      const platformName = `${chosen.length} perfi${chosen.length > 1 ? "s" : "l"}`;
 
       const { data, error } = await supabase.functions.invoke("publish-postforme", {
         body: publishBody,

@@ -196,13 +196,13 @@ describe("alvosDoRecorrente — onde o recorrente publica hoje", () => {
       .toEqual({ publica: true, platforms: ["instagram"], accountIds: ["spc_insta"], aviso: null });
   });
 
-  it("rede com três perfis e nenhum escolhido: mantém o comportamento antigo e AVISA", () => {
+  it("rede com três perfis e nenhum escolhido: NÃO publica e avisa", () => {
+    // Caso real (22/11): o story do Maikon saía "no primeiro da lista", que virou o perfil de outra empresa.
     const a = alvosDoRecorrente({ platforms: ["instagram"] }, [INSTA, INSTA_2, INSTA_3]);
-    expect(a.publica).toBe(true);
-    // sem accountIds o publicador escolhe como sempre fez: trocar o perfil dos posts diários de alguém
-    // sem ele ver seria pior que o defeito
+    expect(a.publica).toBe(false);
     expect(a.accountIds).toEqual([]);
     expect(a.aviso).toMatch(/Há 3 perfis de instagram/);
+    expect(a.aviso).toMatch(/nada foi publicado/);
     expect(a.aviso).toMatch(/Recrie-o escolhendo o perfil/);
   });
 
@@ -269,5 +269,36 @@ describe("recorrentes no listar_agenda", () => {
     const { ctx } = contexto([INSTA], { generated_contents: [] });
     const r = await dispatchTool(ctx, "listar_agenda", {});
     expect(r.content).toMatch(/^Nada agendado entre \d{2}\/\d{2}\/\d{4} e \d{2}\/\d{2}\/\d{4}\.$/);
+  });
+});
+
+// ── Agendado nunca fica sem perfil (2026-11-22) ──
+// O story diário do Maikon saiu no @gestaoservicosaude porque peça sem perfil escolhido caía no
+// "primeiro da lista" do publicador. Agora agendar sempre grava o perfil, ou recusa e lista as opções.
+describe("agendar_conteudo sem rede nem conta", () => {
+  it("mantém o perfil já gravado na peça", async () => {
+    const peca = { id: ID, title: "Post", status: "draft", published_at: null, platform: "instagram", scheduled_accounts: { platforms: ["instagram"], accountIds: ["spc_insta2"] } };
+    const { ctx, userClient } = contexto([INSTA, INSTA_2, INSTA_3], { generated_contents: [peca] });
+    const r = await dispatchTool(ctx, "agendar_conteudo", { contentId: ID, data_hora_iso: FUTURO });
+    expect(r.ok).toBe(true);
+    expect(userClient.atualizacoes[0].patch.scheduled_accounts).toEqual({ platforms: ["instagram"], accountIds: ["spc_insta2"] });
+  });
+
+  it("peça sem perfil e rede com um perfil: grava esse perfil", async () => {
+    const peca = { id: ID, title: "Post", status: "draft", published_at: null, platform: "x", scheduled_accounts: null };
+    const { ctx, userClient } = contexto([INSTA, INSTA_2, X], { generated_contents: [peca] });
+    const r = await dispatchTool(ctx, "agendar_conteudo", { contentId: ID, data_hora_iso: FUTURO });
+    expect(r.ok).toBe(true);
+    expect(userClient.atualizacoes[0].patch.scheduled_accounts).toEqual({ platforms: ["x"], accountIds: ["spc_x"] });
+  });
+
+  it("peça sem perfil e rede com vários perfis: recusa, lista e NÃO grava", async () => {
+    const peca = { id: ID, title: "Post", status: "draft", published_at: null, platform: "instagram", scheduled_accounts: null };
+    const { ctx, userClient } = contexto([INSTA, INSTA_2, INSTA_3], { generated_contents: [peca] });
+    const r = await dispatchTool(ctx, "agendar_conteudo", { contentId: ID, data_hora_iso: FUTURO });
+    expect(r.ok).toBe(false);
+    expect(r.content).toMatch(/mais de uma conta em instagram/);
+    expect(r.content).toMatch(/conta=spc_insta3/);
+    expect(userClient.atualizacoes).toEqual([]);
   });
 });

@@ -220,10 +220,22 @@ Deno.serve(async (req) => {
         if (conn) publishTargets.push({ platform: conn.platform, pfm_account_id: accId, expires_at: conn.expires_at, renovavel: conn.renovavel });
       }
     } else {
-      // Legacy: match by platform name
+      // Sem perfil escolhido (2026-11-22). Antes pegava a PRIMEIRA conta da rede, e a ordem da lista é
+      // arbitrária: o story diário do Maikon saiu no @gestaoservicosaude, perfil de outra empresa.
+      // Regra: rede com UMA conta usa essa (não há o que escolher); com mais de uma, RECUSA. Mesma regra
+      // do resolverContas (agente/MCP) e do alvosDoRecorrente (recorrente).
+      const ambiguas: string[] = [];
       for (const tp of targetPlatforms) {
-        const conn = connections.find((c: any) => c.platform === tp);
-        if (conn?.pfm_account_id) publishTargets.push({ platform: tp, pfm_account_id: conn.pfm_account_id, expires_at: conn.expires_at, renovavel: conn.renovavel });
+        const daRede = connections.filter((c: any) => c.platform === tp && c.pfm_account_id);
+        if (daRede.length > 1) { ambiguas.push(`${daRede.length} perfis de ${tp}`); continue; }
+        const conn = daRede[0];
+        if (conn) publishTargets.push({ platform: tp, pfm_account_id: conn.pfm_account_id, expires_at: conn.expires_at, renovavel: conn.renovavel });
+      }
+      if (ambiguas.length) {
+        return new Response(JSON.stringify({
+          error: `Há ${ambiguas.join(" e ")} conectados e nenhum foi escolhido: nada foi publicado. Escolha em qual perfil publicar.`,
+          code: "perfil_nao_escolhido",
+        }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
 

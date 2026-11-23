@@ -229,6 +229,18 @@ Deno.serve(async (req) => {
                 recurringResults.push({ id: sched.id, status: "skipped", error: alvo.aviso || "sem conta" });
                 continue;
               }
+            } else {
+              // Post for Me fora do ar: sem a lista não dá para conferir o perfil. Com perfis escolhidos,
+              // segue neles (o publicador confere de novo). Sem perfil escolhido, a cópia cairia no
+              // "primeiro da lista" do publicador, o mesmo defeito de 22/11: não cria e tenta no próximo
+              // ciclo, sem marcar last_run_at.
+              const escolhidos = ((sched as any).account_ids || []).filter(Boolean);
+              if (!escolhidos.length) {
+                console.warn(`[scheduler] recurring ${sched.id}: sem lista de contas e sem perfil escolhido — tenta no próximo ciclo`);
+                recurringResults.push({ id: sched.id, status: "skipped", error: "contas indisponíveis" });
+                continue;
+              }
+              alvo = { publica: true, platforms: (sched as any).platforms || [], accountIds: escolhidos, aviso: null };
             }
 
             // Stagger the actual publish time within jitter_minutes after the configured hour

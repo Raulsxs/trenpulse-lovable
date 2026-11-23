@@ -346,7 +346,7 @@ export const AGENT_TOOLS = [
         legenda: { type: "string", description: "Legenda do post, pronta para publicar. Inclua hashtags aqui se quiser." },
         data_hora_iso: { type: "string", description: "Quando publicar, ISO 8601 COM FUSO - ex.: 2026-09-15T09:00:00-03:00. O fuso importa: sem ele o horario vira UTC e o post sai 3h fora. Omitir salva como rascunho, sem agendar." },
         marca: { type: "string", description: "Nome ou id da marca dona do post. Omitir usa a marca padrao. Quando o usuario tem varias empresas, SEMPRE preencha." },
-        plataformas: { type: "array", items: { type: "string" }, description: "Ex.: ['instagram','linkedin']. Omitir = a plataforma padrao da conta." },
+        plataformas: { type: "array", items: { type: "string" }, description: "Ex.: ['instagram','linkedin']. Omitir com data = instagram (recusa se houver mais de um perfil)." },
         contas: { type: "array", items: { type: "string" }, description: "IDs das contas de destino, vindos de listar_conexoes (campo conta=...). OBRIGATORIO quando o usuario tem mais de uma conta na mesma rede — sem isso o post pode sair no perfil errado. Se ele nao disse em qual perfil, PERGUNTE antes de agendar." },
         titulo: { type: "string", description: "Titulo curto para achar no calendario. Omitir usa o comeco da legenda." },
       },
@@ -1496,7 +1496,11 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
       // 3. Conta de destino. Sem isto o publicador escolheria a primeira conta da rede. Ver resolverContas().
       const legendaArte = String(input.legenda || "").trim();
       const plataformasArte: string[] = Array.isArray(input.plataformas) ? input.plataformas.filter(Boolean) : [];
-      const resContas = await resolverContas(ctx, plataformasArte, Array.isArray(input.contas) ? input.contas.filter(Boolean).map(String) : []);
+      const contasArte: string[] = Array.isArray(input.contas) ? input.contas.filter(Boolean).map(String) : [];
+      // Agendado SEMPRE nasce com o perfil (2026-11-22): sem rede nem conta, vale o Instagram, e o
+      // resolverContas recusa se houver mais de um perfil. Rascunho (sem data) não publica: fica sem conta.
+      if (quando && !plataformasArte.length && !contasArte.length) plataformasArte.push("instagram");
+      const resContas = await resolverContas(ctx, plataformasArte, contasArte);
       if (!resContas.ok) return { ok: false, content: resContas.erro };
       const contasAlvo = resContas.accountIds;
 
@@ -1602,7 +1606,7 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
       if (!input?.contentId) return { ok: false, content: "Faltou o content_id. NADA foi agendado." };
       const { data: pecaAgd } = await ctx.userClient
         .from("generated_contents")
-        .select("id, title, status, published_at")
+        .select("id, title, status, published_at, platform, scheduled_accounts")
         .eq("id", input.contentId)
         .maybeSingle();
       if (!pecaAgd) {
@@ -1615,6 +1619,14 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
 
       const platsAgd: string[] = Array.isArray(input.plataformas) ? input.plataformas.filter(Boolean) : [];
       const contasAgd = Array.isArray(input.contas) ? input.contas.filter(Boolean).map(String) : [];
+      // Sem rede nem conta: mantém o perfil já gravado; se não houver, resolve a rede de criação
+      // (recusa com a lista quando há mais de um perfil). Agendado nunca fica sem perfil (2026-11-22).
+      const jaGravadas: string[] = Array.isArray((pecaAgd as any).scheduled_accounts?.accountIds)
+        ? (pecaAgd as any).scheduled_accounts.accountIds.filter(Boolean) : [];
+      if (!platsAgd.length && !contasAgd.length) {
+        if (jaGravadas.length) contasAgd.push(...jaGravadas);
+        else platsAgd.push((pecaAgd as any).platform || "instagram");
+      }
       const rc = await resolverContas(ctx, platsAgd, contasAgd);
       if (!rc.ok) return { ok: false, content: rc.erro };
 
@@ -1628,7 +1640,8 @@ Responda em português, como uma lista dia a dia clara e enxuta pro usuário apr
       };
       // Mesmo formato que o Calendar do app grava, pra os dois caminhos serem indistinguiveis.
       if (rc.accountIds.length) {
-        patch.scheduled_accounts = { platforms: platsAgd, accountIds: rc.accountIds };
+        const platsGravadas = (pecaAgd as any).scheduled_accounts?.platforms;
+        patch.scheduled_accounts = { platforms: platsAgd.length ? platsAgd : (Array.isArray(platsGravadas) ? platsGravadas : []), accountIds: rc.accountIds };
         if (platsAgd.length) patch.platform = platsAgd[0];
       }
 
