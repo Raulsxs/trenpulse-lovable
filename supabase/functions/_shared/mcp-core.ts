@@ -238,7 +238,8 @@ export const TOOL_PREPARAR_ENVIO = {
     "pública devolvida (vídeo MP4 sai como Reel no Instagram). Use isto em vez de base64 — uma arte real " +
     "tem centenas de milhares de caracteres e não cabe numa chamada. Se o arquivo já está numa URL pública, " +
     "pule esta ferramenta. Uma chamada por arquivo; carrossel pronto: uma por slide, e depois um agendar_arte " +
-    "com imagens = as URLs públicas na ordem dos slides.",
+    "com imagens = as URLs públicas na ordem dos slides. NO CODEX: o terminal pode estar sem internet " +
+    "(sandbox); peça ao usuário para aprovar o comando de upload, não desista do envio.",
   inputSchema: {
     type: "object",
     properties: {

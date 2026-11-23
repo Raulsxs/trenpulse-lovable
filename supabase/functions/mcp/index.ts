@@ -165,6 +165,14 @@ Deno.serve(async (req) => {
           "os recorrentes, que publicam sozinhos todo dia). Agendar aqui é IMEDIATO, sem tela de confirmação: " +
           "confirme com o usuário a data, a hora e o perfil antes de chamar. Só diga que agendou se a " +
           "resposta da ferramenta disser 'Agendado para'; se ela recusar, nada foi agendado. " +
+          // ARTE PRONTA (2026-11-23): o agente do Codex do Maikon tinha 7 PNGs prontos na pasta e respondeu
+          // que "a TrendPulse só mostrou opções para gerar conteúdo". As instruções só falavam de gerar; o
+          // caminho da arte pronta existia (agendar_arte + preparar_envio_imagem) e ele não achou.
+          "ARTE OU VÍDEO JÁ PRONTO (feito fora da TrendPulse): NÃO gere nada, use agendar_arte. Arquivo no " +
+          "computador: chame preparar_envio_imagem para cada arquivo, rode o comando de upload que ela " +
+          "devolve (precisa de internet no terminal; no Codex, aprove o comando) e passe as URLs públicas no " +
+          "agendar_arte. Carrossel pronto: `imagens` com 2 a 10 URLs na ordem dos slides. PUBLICAR AGORA: não " +
+          "há botão de publicar aqui; agende com data_hora_iso daqui a 2 minutos e o post sai em até 5 minutos. " +
           "LEGENDA: as ferramentas de geração escrevem uma legenda nova. Quando o usuário quer um texto " +
           "específico (ex.: manter a legenda original ao refazer a imagem), chame definir_legenda com o " +
           "texto exato depois de gerar; só está gravada se a resposta disser 'Legenda gravada'.",
